@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
+	"speedcubinghungary/internal/config"
 	"speedcubinghungary/internal/types"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -25,38 +25,41 @@ type UserClaims struct {
 	jwt.RegisteredClaims
 }
 
-func AuthMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		cookie, err := r.Cookie("auth")
-		if err != nil {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
-
-		tokenString := cookie.Value
-
-		token, err := jwt.ParseWithClaims(tokenString, &UserClaims{}, func(token *jwt.Token) (interface{}, error) {
-			// KÖTELEZŐ: Ellenőrizzük, hogy az algoritmus HMAC-e!
-			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+// AuthMiddlewareWithConfig validates JWT using config
+func AuthMiddlewareWithConfig(cfg *config.Config) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			cookie, err := r.Cookie("auth")
+			if err != nil {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
 			}
-			return []byte(os.Getenv("JWT_SECRET")), nil
+
+			tokenString := cookie.Value
+
+			token, err := jwt.ParseWithClaims(tokenString, &UserClaims{}, func(token *jwt.Token) (interface{}, error) {
+				// KÖTELEZŐ: Ellenőrizzük, hogy az algoritmus HMAC-e!
+				if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+					return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+				}
+				return []byte(cfg.JWTSecret), nil
+			})
+
+			if err != nil || !token.Valid {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+
+			claims, ok := token.Claims.(*UserClaims)
+			if !ok {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+
+			ctx := context.WithValue(r.Context(), userContextKey, claims)
+			next.ServeHTTP(w, r.WithContext(ctx))
 		})
-
-		if err != nil || !token.Valid {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
-
-		claims, ok := token.Claims.(*UserClaims)
-		if !ok {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
-
-		ctx := context.WithValue(r.Context(), userContextKey, claims)
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
+	}
 }
 
 func GetUserFromContext(r *http.Request) *UserClaims {
@@ -65,6 +68,16 @@ func GetUserFromContext(r *http.Request) *UserClaims {
 		return nil
 	}
 	return user
+}
+
+// AuthMiddleware is deprecated - use AuthMiddlewareWithConfig instead
+// Kept for backward compatibility
+func AuthMiddleware(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.Error(w, "AuthMiddleware deprecated: use AuthMiddlewareWithConfig", http.StatusInternalServerError)
+		})
+	}(next)
 }
 
 // RBACMiddleware ellenőrzi, hogy a user rendelkezik-e a szükséges szereppel

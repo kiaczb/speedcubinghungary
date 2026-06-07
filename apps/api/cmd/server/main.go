@@ -35,8 +35,8 @@ func main() {
 		log.Fatal("Migration run error:", err)
 	}
 
-	// 3. Create router
-	r := router.New(dbConn)
+	// 3. Create router with config
+	r := router.New(dbConn, cfg)
 
 	log.Printf("Server started on :8080 (mode: %s)", cfg.Deployment)
 	log.Fatal(http.ListenAndServe("0.0.0.0:8080", r))
