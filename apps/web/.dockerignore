@@ -1,0 +1,9 @@
+# .dockerignore a web mappában
+node_modules
+.next
+out
+build
+.git
+.env
+.eslintrc.json
+next-env.d.ts

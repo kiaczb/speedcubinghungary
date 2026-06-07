@@ -1,0 +1,10 @@
+# .dockerignore az api mappában
+node_modules
+tmp
+bin
+obj
+.git
+.env
+*.exe
+*.test
+main
