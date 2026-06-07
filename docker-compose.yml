@@ -2,7 +2,7 @@ services:
   db:
     image: postgres:18
     env_file:
-      - ./db/.env.development.local
+      - ./db/.env
     environment:
       POSTGRES_USER: dbuser
       POSTGRES_PASSWORD: Speedcubing-DEV
@@ -21,7 +21,7 @@ services:
     build:
       context: ./apps/api
     env_file:
-      - ./apps/api/.env.development.local
+      - ./apps/api/.env
     depends_on:
       db:
         condition: service_healthy
@@ -37,7 +37,7 @@ services:
         - NEXT_PUBLIC_WCA_CLIENT_ID=${NEXT_PUBLIC_WCA_CLIENT_ID}
         - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
     env_file:
-      - ./apps/web/.env.development.local
+      - ./apps/web/.env
     environment:
       - SERVER_API_URL=http://api:8080
       - NEXT_PUBLIC_API_URL=http://localhost:8080
