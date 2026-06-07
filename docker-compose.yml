@@ -1,0 +1,50 @@
+services:
+  db:
+    image: postgres:18
+    env_file:
+      - ./db/.env 
+    environment:
+      POSTGRES_USER: benekin
+      POSTGRES_PASSWORD: Speedcubing-DEV
+      POSTGRES_DB: speedcubinghungary_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U benekin -d speedcubinghungary_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ./apps/api
+    env_file:
+      - ./apps/api/.env
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./db/migrations:/migrations
+    ports:
+      - "8080:8080"
+
+  web:
+    build:
+      context: ./apps/web
+      args:
+        - NEXT_PUBLIC_WCA_CLIENT_ID=${NEXT_PUBLIC_WCA_CLIENT_ID}
+        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+    env_file:
+      - ./apps/web/.env
+    environment:
+      - SERVER_API_URL=http://api:8080
+      - NEXT_PUBLIC_API_URL=http://localhost:8080
+    depends_on:
+      - api
+    ports:
+      - "3000:3000"
+
+volumes:
+  postgres_data:
