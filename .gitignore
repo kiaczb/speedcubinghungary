@@ -10,15 +10,9 @@ dist/
 # --- Environment & Secrets ---
 # Never commit actual .env files - they contain secrets!
 .env
-.env.local
-.env.*.local
-.env.development.local
-.env.test.local
-.env.production.local
 
 # Allow .env.example files (templates only, no secrets)
 !.env.example
-!.env.*.example
 
 # Docker compose overrides
 docker-compose.override.yml
