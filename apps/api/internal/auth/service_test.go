@@ -32,6 +32,16 @@ func (m *MockRepo) Create(user *User) (*User, error) {
 	return args.Get(0).(*User), args.Error(1)
 }
 
+// 💥 ÚJ: Bekerült az Upsert a mockba!
+func (m *MockRepo) Upsert(user *User) (*User, error) {
+	args := m.Called(user)
+	userRet := args.Get(0)
+	if userRet == nil {
+		return nil, args.Error(1)
+	}
+	return userRet.(*User), args.Error(1)
+}
+
 // 2️⃣ Teszt
 func TestService_LoginCallback(t *testing.T) {
 	// Környezeti változók
@@ -54,10 +64,10 @@ func TestService_LoginCallback(t *testing.T) {
 
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"me": map[string]interface{}{
-				"id":    123,
-				"wca_id":"2019ABCD01",
-				"name":  "John Doe",
-				"email": "john@example.com",
+				"id":     123,
+				"wca_id": "2019ABCD01",
+				"name":   "John Doe",
+				"email":  "john@example.com",
 			},
 		})
 	}))
@@ -71,24 +81,23 @@ func TestService_LoginCallback(t *testing.T) {
 		WCAID: "2019ABCD01",
 		Name:  "John Doe",
 		Email: "john@example.com",
-		Roles: []types.Role{types.ROLE_ADMIN},
+		Roles: []types.Role{types.ROLE_ADMIN}, // Itt szimuláljuk, hogy admin
 	}
 
-	// Példa: user még nem létezik → Create hívódik
-	mockRepo.On("GetByWCAID", "2019ABCD01").Return(nil, assert.AnError)
-	mockRepo.On("Create", mock.AnythingOfType("*auth.User")).Return(existingUser, nil)
+	// 💥 ÚJ: Lecseréltük a GetByWCAID + Create párost az Upsert-re.
+	// Azt mondjuk a mocknak: Ha meghívják az Upsert-et bármilyen User pointerrel,
+	// akkor sikeresen add vissza a meglévő, ROLE_ADMIN joggal rendelkező userünket.
+	mockRepo.On("Upsert", mock.AnythingOfType("*auth.User")).Return(existingUser, nil)
 
-	// 6️⃣ Service létrehozása (ideiglenesen HTTP clientet felülírjuk)
-		svc := &service{
+	// 6️⃣ Service létrehozása
+	svc := &service{
 		repo:       mockRepo,
 		httpClient: &http.Client{},
 		tokenURL:   tokenServer.URL,
 		meURL:      meServer.URL,
 	}
 
-
-	// 7️⃣ Refaktorálni kellene: tokenServer és meServer URL-jét a service-be adni,
-	// de most átírjuk a http.DefaultTransport ideiglenesen.
+	// 7️⃣ Ideiglenes transport felülírás (maradhat, de a mock szerver URL-jei miatt amúgy is működne)
 	origTransport := http.DefaultTransport
 	http.DefaultTransport = &http.Transport{} // dummy
 	defer func() { http.DefaultTransport = origTransport }()
@@ -103,7 +112,10 @@ func TestService_LoginCallback(t *testing.T) {
 		return []byte("testsecret"), nil
 	})
 	assert.NoError(t, err)
+
 	claims := parsedToken.Claims.(*UserClaims)
+
+	// Ellenőrizzük, hogy valóban az a user került-e be, amit a mock visszaadott
 	assert.Equal(t, existingUser.ID, claims.UserID)
 	assert.Contains(t, claims.Roles, types.ROLE_ADMIN)
 

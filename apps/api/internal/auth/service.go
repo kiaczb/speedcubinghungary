@@ -103,17 +103,15 @@ func (s *service) LoginCallback(code string) (string, error) {
 	wcaUser := rsp.Me
 
 	// 3️⃣ DB check / create
-	user, err := s.repo.GetByWCAID(wcaUser.WCAID)
+	// 3️⃣ DB Upsert (Létrehozás vagy frissítés egy lépésben)
+	user, err := s.repo.Upsert(&User{
+		WCAID: wcaUser.WCAID,
+		Name:  wcaUser.Name,
+		Email: wcaUser.Email,
+		Roles: []types.Role{types.ROLE_USER}, // Ez csak új usernél lesz használva
+	})
 	if err != nil {
-		user, err = s.repo.Create(&User{
-			WCAID: wcaUser.WCAID,
-			Name:  wcaUser.Name,
-			Email: wcaUser.Email,
-			Roles: []types.Role{types.ROLE_USER},
-		})
-		if err != nil {
-			return "", err
-		}
+		return "", err
 	}
 
 	// 4️⃣ Saját JWT
