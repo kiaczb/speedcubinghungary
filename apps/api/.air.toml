@@ -8,6 +8,9 @@ tmp_dir = "tmp"
   exclude_dir = ["tmp", "vendor"]
   delay = 500
   stop_on_error = true
+  # Poll the filesystem — inotify events don't cross Windows Docker bind mounts
+  poll = true
+  poll_interval = 1000
 
 [log]
   time = false
