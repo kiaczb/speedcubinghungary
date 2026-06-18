@@ -482,7 +482,7 @@ INSERT INTO users (wca_id, name, competition_count, delegated_count) VALUES
 ('2015HALM01', 'Bajnok Halmi', 1, 0),
 ('2020FARA02', 'Csaba Faragó', 1, 0),
 ('2005KOCZ01', 'István Kocza', 196, 0),
-('2017ZIMA01', 'Zimányi Benedek', 68, 0),
+('2017ZIMA01', 'Benedek Zimányi', 68, 0),
 ('2025GABR06', 'Zoé Laura Gábri', 4, 0),
 ('2015KAMA02', 'Gergő Kamasz', 1, 0),
 ('2024BAGI04', 'Dominik Bagi', 1, 0),
@@ -1250,8 +1250,8 @@ INSERT INTO users (wca_id, name, competition_count, delegated_count) VALUES
 ('2008BARA01', 'Bence Barát', 247, 63),
 ('2008VARG01', 'Dániel Varga', 224, 58),
 ('2016KIAC01', 'Bence Kiácz', 98, 29),
-('2016NOVO01', 'Novotni Gergely', 90, 0),
-('2016SLEZ01', 'Slezák Gábor', 73, 0);
+('2016NOVO01', 'Gergely Novotni', 90, 0),
+('2016SLEZ01', 'Gábor Slezák', 73, 0);
 
 
 

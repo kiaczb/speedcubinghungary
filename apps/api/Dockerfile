@@ -1,16 +1,10 @@
-# 1. stage: Build
-FROM golang:1.25.5-alpine AS builder
+FROM golang:1.25.5-alpine
 WORKDIR /app
+
+RUN go install github.com/air-verse/air@latest
+
 COPY go.mod go.sum ./
 RUN go mod download
-COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o main ./cmd/server
-
-# 2. stage: Runtime
-FROM alpine:latest
-WORKDIR /root/
-COPY --from=builder /app/main .
-# NEM KELL A MIGRÁCIÓ MÁSOLÁSA, MERT A DOCKER-COMPOSE CSATOLJA!
 
 EXPOSE 8080
-CMD ["./main"]
+CMD ["air", "-c", ".air.toml"]
