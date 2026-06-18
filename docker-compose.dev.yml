@@ -37,6 +37,8 @@ services:
     build:
       context: ./apps/web
       dockerfile: Dockerfile.dev
+    # --webpack: Turbopack has no polling fallback; webpack + WATCHPACK_POLLING works on Windows Docker bind mounts
+    command: npm run dev -- --webpack
     env_file:
       - ./apps/web/.env
     environment:
@@ -44,7 +46,6 @@ services:
       - SERVER_API_URL=http://api:8080
       - NEXT_PUBLIC_API_URL=http://localhost:8080
       - HOSTNAME=0.0.0.0
-      # Polling-based file watching — required for hot reload on Windows/WSL bind mounts
       - WATCHPACK_POLLING=true
     depends_on:
       - api

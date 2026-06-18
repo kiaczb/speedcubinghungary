@@ -24,11 +24,11 @@ func (h *Handler) GetPosts(w http.ResponseWriter, r *http.Request) {
 	}
 	json.NewEncoder(w).Encode(posts)
 }
-func (h *Handler) GetLatestPosts(w http.ResponseWriter, r *http.Request){
+func (h *Handler) GetLatestPosts(w http.ResponseWriter, r *http.Request) {
 	posts, err := h.service.GetLatestPosts()
 	if err != nil {
-	  http.Error(w, err.Error(), http.StatusInternalServerError)
-	  return
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 	json.NewEncoder(w).Encode(posts)
 }
@@ -43,18 +43,18 @@ func (h *Handler) GetPostByID(w http.ResponseWriter, r *http.Request) {
 }
 func (h *Handler) CreatePost(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Tag types.PostTag `json:"tag"`
-		Title   string `json:"title"`
-		Content string `json:"content"`
+		Tag     types.PostTag `json:"tag"`
+		Title   string        `json:"title"`
+		Content string        `json:"content"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid json", http.StatusBadRequest)
 		return
 	}
-	err := h.service.CreatePost(req.Tag, req.Title, req.Content);
+	err := h.service.CreatePost(req.Tag, req.Title, req.Content)
 
-	if  err != nil {
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
