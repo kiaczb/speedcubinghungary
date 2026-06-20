@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import CalendarList from "./components/CalendarList";
+import CalendarView from "./components/CalendarView";
 
 export const metadata: Metadata = {
   title: "Versenynaptár | Speedcubing Hungary",
@@ -20,7 +20,7 @@ export default function CalendarPage() {
           </p>
         </header>
 
-        <CalendarList />
+        <CalendarView />
       </div>
     </div>
   );
