@@ -25,26 +25,7 @@ jobs:
           key: ${{ secrets.DEV_SSH_KEY }}
           port: ${{ secrets.DEV_SSH_PORT }}
           # Abort the whole deploy if any command below exits non-zero.
-          script_stop: true
+          #script_stop: true
           script: |
-            set -e
-            cd ${{ secrets.DEV_DEPLOY_PATH }}
-
-            echo "==> Fetching latest code (dev branch)"
-            git fetch --prune origin
-            git checkout dev
-            # Match the server working tree to origin/dev exactly.
-            # Untracked, git-ignored files (.env, postgres volume) are left intact.
-            git reset --hard origin/dev
-
-            echo "==> Rebuilding & restarting APP containers only (db is untouched)"
-            # Only api + web are recreated. The db service keeps running on its
-            # existing container and named volume, so data is never wiped.
-            # Schema migrations run automatically on api startup (golang-migrate).
-            docker compose up -d --build api web
-
-            echo "==> Pruning dangling images"
-            docker image prune -f
-
-            echo "==> Current container status"
-            docker compose ps
+            pwd
+            ls -la
