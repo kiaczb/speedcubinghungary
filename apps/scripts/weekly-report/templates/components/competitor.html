@@ -1,0 +1,8 @@
+<li class="competitor-item">
+    <div class="competitor-name">{{ competitor_data.CompetitorName }}</div>
+    <div class="competitor-events">
+        {% for event, records in competitor_data.Records.items() %}
+            {% include "components/event.html" %}
+        {% endfor %}
+    </div>
+</li>

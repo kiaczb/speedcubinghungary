@@ -1,0 +1,8 @@
+{% if competitions %}
+    {% for comp in competitions %}
+        {% include "components/competition.html" %}
+    {% endfor %}
+{% else %}
+    <h3 class="section-title">Eheti Versenyeredmények</h3>
+    <p style="color: #666;">Nem volt ezen a héten magyar érdekeltségű versenyeredmény.</p>
+{% endif %}

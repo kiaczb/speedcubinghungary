@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        /* Alap beállítások */
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+            background-color: #f4f7f6;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+            line-height: 1.5;
+        }
+        
+        /* Fő konténer, ami egy elegáns e-mail hatását kelti */
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            overflow: hidden;
+        }
+
+        /* Fejléc - Ide jöhet a logó! */
+        .header {
+            background-color: #1f2937;
+            color: #ffffff;
+            padding: 24px 20px;
+            text-align: center;
+            border-bottom: 1px solid #374151;
+        }
+        .header img {
+            max-height: 60px;
+            margin-bottom: 10px;
+        }
+        .header {
+            background-color: #1f2937;
+            color: #ffffff;
+            padding: 24px 20px;
+            text-align: center;
+            border-bottom: 1px solid #374151;
+        }
+
+        /* Tartalom rész */
+        .content {
+            padding: 30px;
+        }
+
+        /* Szekció címek */
+        .section-title {
+            color: #2c3e50;
+            font-size: 20px;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+            margin-top: 0;
+            margin-bottom: 20px;
+        }
+
+        /* Verseny kártyák */
+        .competition-card {
+            background-color: #ffffff;
+            border: 1px solid #e1e4e8;
+            border-radius: 6px;
+            margin-bottom: 25px;
+            overflow: hidden;
+        }
+        .competition-header {
+            background-color: #f8f9fa;
+            padding: 15px 20px;
+            border-bottom: 1px solid #e1e4e8;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .competition-header h4 {
+            margin: 0;
+            color: #0056b3; /* WCA Kék */
+            font-size: 18px;
+        }
+        .competition-date {
+            font-size: 14px;
+            color: #666;
+            font-weight: bold;
+        }
+
+        /* Versenyzők listája */
+        .competitor-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        .competitor-item {
+            padding: 15px 20px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .competitor-item:last-child {
+            border-bottom: none;
+        }
+        .competitor-name {
+            font-size: 16px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        /* Rekordok és Eventek formázása */
+        .event-group {
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .event-name {
+            font-weight: bold;
+            color: #444;
+            background: #eee;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+        
+        /* Plecsnik (Badges) a rekordokhoz */
+        .record-badge {
+            display: inline-flex;
+            align-items: center;
+            font-size: 13px;
+            border-radius: 4px;
+            overflow: hidden;
+            border: 1px solid #ddd;
+        }
+        .record-type {
+            background-color: #f4f4f4;
+            color: #555;
+            padding: 2px 6px;
+            font-weight: bold;
+            border-right: 1px solid #ddd;
+        }
+        .record-result {
+            padding: 2px 8px;
+            background-color: #fff;
+            font-weight: bold;
+            color: #111;
+        }
+        .record-badge-type {
+            background-color: #00e676; /* Alap sárga szín a rekord típusnak */
+            color: #000;
+            padding: 2px 6px;
+            font-weight: bold;
+            border-left: 1px solid #ddd;
+        }
+
+        /* Mérföldkövek formázása */
+       .milestone-container {
+            display: block;
+            margin-top: 30px;
+        }
+        .milestone-section {
+            display: block; 
+            width: 100%; 
+            box-sizing: border-box; 
+            background: #fdfdfd;
+            border: 1px solid #e1e4e8;
+            border-radius: 6px;
+            padding: 20px;
+            margin-bottom: 25px;
+        }
+        .milestone-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        .milestone-item {
+            padding: 10px 0;
+            border-bottom: 1px dashed #ddd;
+        }
+        .milestone-item:last-child {
+            border-bottom: none;
+        }
+        .milestone-name {
+            font-weight: bold;
+            font-size: 15px;
+        }
+        .milestone-count {
+            background: #0056b3;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            float: right;
+        }
+        .milestone-planned { 
+            color: #777; 
+            font-size: 13px;
+            display: block;
+            margin-top: 4px;
+        }
+        .milestone-achieved { 
+            color: #2e7d32; 
+            font-weight: bold; 
+            font-size: 13px;
+            display: block;
+            margin-top: 4px;
+            background: #e8f5e9;
+            padding: 4px 8px;
+            border-radius: 4px;
+            border: 1px solid #c8e6c9;
+        }
+        .raw-text-container {
+            margin-top: 40px;
+            background-color: #f8f9fa;
+            border: 1px dashed #cccccc;
+            border-radius: 6px;
+            padding: 20px;
+        }
+        .raw-text-box {
+            margin: 0;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 14px;
+            color: #333333;
+            white-space: pre-wrap; /* Megtartja az új sorokat és tördel, ha túl hosszú */
+            word-break: break-word;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h2>Heti Rekordok és Mérföldkövek</h2>
+        </div>
+        
+        <div class="content">
+            {% block content %}{% endblock %}
+        </div>
+    </div>
+    <div class="raw-text-container" style="max-width: 800px; margin: 20px auto 0 auto;">
+        <h3 class="section-title" style="font-size: 16px; color: #555; margin-bottom: 10px;">Kimásolható szöveges sablon</h3>
+        <pre class="raw-text-box" style="white-space: pre-wrap; font-family: inherit; font-size: 15px; line-height: 1.6;">
+Az elmúlt hétvégén {% for comp in competitions -%}
+{%- set names = comp.CompetitorWithRecords | map(attribute='CompetitorName') | list -%}
+{%- if names|length > 1 -%}
+{{ names[:-1] | join(', ') }} és {{ names[-1] }} a {{ comp.CompetitionName }} versenyen vettek részt
+{%- else -%}
+{{ names[0] }} a {{ comp.CompetitionName }} versenyen vett részt
+{%- endif -%}
+{%- if not loop.last %}, {% else %}.{% endif %}
+{% endfor %}
+Mindenkinek gratulálunk!</pre>
+    </div>
+</body>
+</html>

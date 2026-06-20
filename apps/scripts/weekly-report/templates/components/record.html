@@ -1,0 +1,12 @@
+<div class="record-badge">
+    <span class="record-type">{{ record_data.Type }}</span>
+    <span class="record-result">{{ convert_result(record_data.Result, event) }}</span>
+    
+    <span class="record-badge-type 
+        {% if record_data.Badge == 'NR' %}badge-nr
+        {% elif record_data.Badge == 'CR' %}badge-cr
+        {% elif record_data.Badge == 'WR' %}badge-wr
+        {% endif %}">
+        {{ record_data.Badge }}
+    </span>
+</div>

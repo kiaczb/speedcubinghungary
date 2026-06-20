@@ -1,0 +1,12 @@
+<div class="competition-card">
+    <div class="competition-header" style="display: block; padding: 15px 20px;">
+        <h4 style="margin: 0 0 6px 0;">{{ comp.CompetitionName }} {{ comp.CountryIso|flag_emoji }}</h4>
+        <div class="competition-date">{{ convert_date(comp.From, comp.To) }}</div>
+    </div>
+    <ul class="competitor-list">
+        {% for competitor in comp.CompetitorWithRecords %}
+            {% set competitor_data = competitor %}
+            {% include "components/competitor.html" %}
+        {% endfor %}
+    </ul>
+</div>

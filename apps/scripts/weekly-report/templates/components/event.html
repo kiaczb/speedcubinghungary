@@ -1,0 +1,7 @@
+<div class="event-group">
+    <span class="event-name">{{ event }}</span>
+    {% for record in records %}
+        {% set record_data = record %}
+        {% include "components/record.html" %}
+    {% endfor %}
+</div>
