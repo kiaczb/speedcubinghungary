@@ -10,6 +10,7 @@ dist/
 # --- Environment & Secrets ---
 # Never commit actual .env files - they contain secrets!
 .env
+env.py
 
 # Allow .env.example files (templates only, no secrets)
 !.env.example
@@ -29,3 +30,6 @@ Thumbs.db
 
 # --- Adatok (ha van perzisztens adatod helyben) ---
 postgres_data/
+
+# --- Python ---
+__pycache__/

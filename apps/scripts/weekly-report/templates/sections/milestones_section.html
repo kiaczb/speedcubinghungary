@@ -1,0 +1,45 @@
+{% if count_competitors or delegate_milestones %}
+<div class="milestone-container">
+  {% if count_competitors %}
+  <div class="milestone-section">
+    <h3 class="section-title" style="border-bottom-color: #0056b3;">Versenyzői Mérföldkövek</h3>
+    <ul class="milestone-list">
+      {% for competitor in count_competitors %}
+        <li class="milestone-item">
+          <span class="milestone-name">{{ competitor.name }}</span>
+          <span class="milestone-count">{{ competitor.competition_count }} verseny</span>
+          
+          {% if competitor.estimated_competition %}
+            <small class="{% if competitor.is_achieved %}milestone-achieved{% else %}milestone-planned{% endif %}">
+              {% if competitor.is_achieved %}
+                ✓ Sikeresen teljesítve: 
+              {% else %}
+                Tervezve: 
+              {% endif %}
+              {{ competitor.estimated_competition }}
+              {% if competitor.estimated_competition_date %}
+                ({{ competitor.estimated_competition_date }})
+              {% endif %}
+            </small>
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %} 
+  
+  {% if delegate_milestones %}
+  <div class="milestone-section">
+    <h3 class="section-title" style="border-bottom-color: #ce2939;">Delegálti Mérföldkövek</h3>
+    <ul class="milestone-list">
+      {% for delegate in delegate_milestones %}
+      <li class="milestone-item">
+        <span class="milestone-name">{{ delegate.name }}</span>
+        <span class="milestone-count" style="background-color: #477050;">{{ delegate.delegated_competitions_count }} verseny</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
