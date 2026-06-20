@@ -1,2 +1,0 @@
-DELETE FROM records;
-DELETE FROM users;
