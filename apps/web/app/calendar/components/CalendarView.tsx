@@ -1,11 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { FaRegCalendarTimes, FaExclamationTriangle } from "react-icons/fa";
+import {
+  FaExclamationTriangle,
+  FaListUl,
+  FaRegCalendarAlt,
+} from "react-icons/fa";
 import { UpcomingCompetition } from "../types";
-import CompetitionCard from "./CompetitionCard";
+import CompetitionList from "./CompetitionList";
+import MonthCalendar from "./MonthCalendar";
+import StateMessage from "./StateMessage";
 
 type Status = "loading" | "error" | "success";
+type ViewMode = "list" | "calendar";
 
 function getApiBaseUrl(): string {
   return process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
@@ -23,27 +30,46 @@ const CardSkeleton = () => (
   </div>
 );
 
-const StateMessage = ({
-  icon,
-  title,
-  description,
+const ViewToggle = ({
+  view,
+  onChange,
 }: {
-  icon: React.ReactNode;
-  title: string;
-  description: string;
-}) => (
-  <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-gray-300 bg-white px-6 py-16 text-center">
-    <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-gray-50 text-gray-400">
-      {icon}
-    </div>
-    <h3 className="text-base font-semibold text-gray-900">{title}</h3>
-    <p className="mt-1 max-w-sm text-sm text-gray-500">{description}</p>
-  </div>
-);
+  view: ViewMode;
+  onChange: (view: ViewMode) => void;
+}) => {
+  const baseClass =
+    "inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors";
+  const activeClass = "bg-gray-900 text-white";
+  const inactiveClass = "text-gray-600 hover:text-gray-900";
 
-const CalendarList = () => {
+  return (
+    <div className="inline-flex rounded-lg border border-gray-200 bg-white p-1">
+      <button
+        type="button"
+        onClick={() => onChange("list")}
+        aria-pressed={view === "list"}
+        className={`${baseClass} ${view === "list" ? activeClass : inactiveClass}`}
+      >
+        <FaListUl className="h-3.5 w-3.5" />
+        Lista
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange("calendar")}
+        aria-pressed={view === "calendar"}
+        className={`${baseClass} ${view === "calendar" ? activeClass : inactiveClass}`}
+      >
+        <FaRegCalendarAlt className="h-3.5 w-3.5" />
+        Naptár
+      </button>
+    </div>
+  );
+};
+
+const CalendarView = () => {
   const [status, setStatus] = useState<Status>("loading");
   const [competitions, setCompetitions] = useState<UpcomingCompetition[]>([]);
+  const [view, setView] = useState<ViewMode>("list");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -73,43 +99,37 @@ const CalendarList = () => {
     return () => controller.abort();
   }, []);
 
+  let content: React.ReactNode;
   if (status === "loading") {
-    return (
+    content = (
       <div className="flex flex-col gap-4">
         {Array.from({ length: 4 }).map((_, i) => (
           <CardSkeleton key={i} />
         ))}
       </div>
     );
-  }
-
-  if (status === "error") {
-    return (
+  } else if (status === "error") {
+    content = (
       <StateMessage
         icon={<FaExclamationTriangle className="h-5 w-5" />}
         title="Nem sikerült betölteni a versenyeket"
         description="Hiba történt az adatok lekérése közben. Kérjük, próbáld újra később."
       />
     );
-  }
-
-  if (competitions.length === 0) {
-    return (
-      <StateMessage
-        icon={<FaRegCalendarTimes className="h-5 w-5" />}
-        title="Nincs közelgő verseny"
-        description="Jelenleg nincs meghirdetett magyar verseny. Nézz vissza később!"
-      />
-    );
+  } else if (view === "list") {
+    content = <CompetitionList competitions={competitions} />;
+  } else {
+    content = <MonthCalendar competitions={competitions} />;
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      {competitions.map((competition) => (
-        <CompetitionCard key={competition.id} competition={competition} />
-      ))}
+    <div className="flex flex-col gap-6">
+      <div className="flex justify-end">
+        <ViewToggle view={view} onChange={setView} />
+      </div>
+      {content}
     </div>
   );
 };
 
-export default CalendarList;
+export default CalendarView;
