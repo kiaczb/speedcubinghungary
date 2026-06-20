@@ -34,6 +34,9 @@ export default function RootLayout({
       >
         <UserProvider>
           <Navbar logoUrl="/speedcubing.png">
+            <Link href="/calendar" className="block">
+              Versenynaptár
+            </Link>
             <Link href="/tools" className="block">
               Tools
             </Link>

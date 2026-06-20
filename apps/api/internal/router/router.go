@@ -4,6 +4,7 @@ package router
 import (
 	"database/sql"
 	"speedcubinghungary/internal/auth"
+	"speedcubinghungary/internal/competition"
 	"speedcubinghungary/internal/config"
 	"speedcubinghungary/internal/middleware"
 	"speedcubinghungary/internal/post"
@@ -38,6 +39,13 @@ func New(db *sql.DB, cfg *config.Config) *chi.Mux {
 		r.Post("/posts", handler.CreatePost)
 		r.Delete("/posts", handler.DeletePosts)
 	})
+
+	// Competition routes (WCA API proxy)
+	competitionRepo := competition.NewWCARepository()
+	competitionService := competition.NewService(competitionRepo)
+	competitionHandler := competition.NewHandler(competitionService)
+
+	r.Get("/competitions/upcoming", competitionHandler.GetUpcoming)
 
 	//Auth feature
 	authRepo := auth.NewPostgresRepository(db)
