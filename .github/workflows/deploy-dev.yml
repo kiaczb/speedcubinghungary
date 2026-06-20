@@ -26,6 +26,8 @@ jobs:
           port: ${{ secrets.DEV_SSH_PORT }}
           # Abort the whole deploy if any command below exits non-zero.
           #script_stop: true
+          debug: true
           script: |
+            echo "TESZT: Elindult a script a szerveren!"
             pwd
             ls -la
