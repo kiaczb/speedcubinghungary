@@ -23,7 +23,10 @@ jobs:
           port: ${{ secrets.DEV_SSH_PORT }}
           # Visszakapcsoljuk a debugot, hogy lássuk az stdout/stderr kimenetet a szerverről!
           debug: true
+          request_pty: true
           script: |
+            set -e
+     
             echo "==> Milyen felhasznalokent jelentkeztunk be?"
             whoami
             
