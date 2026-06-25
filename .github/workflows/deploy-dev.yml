@@ -24,15 +24,25 @@ jobs:
           # Visszakapcsoljuk a debugot, hogy lássuk az stdout/stderr kimenetet a szerverről!
           debug: true
           script: |
-            set -e
-            cd ${{ secrets.DEV_DEPLOY_PATH }}
+            echo "==> Milyen felhasznalokent jelentkeztunk be?"
+            whoami
+            
+            echo "==> Honnan indulunk?"
+            pwd
+            
+            echo "==> Probalunk belepni a mappaba (FIX utvonal teszt)..."
+            # Szandekosan fixen beirva, hogy kizarjuk a Secret formázási hibajat!
+            cd /srv/speedcubinghungary-DEV/speedcubinghungary
+            
+            echo "==> Sikerult belepni? Jelenlegi mappa:"
+            pwd
 
             echo "==> Fetching latest code (dev branch)"
             git fetch --prune origin
             git checkout dev
             git reset --hard origin/dev
 
-            echo "==> Rebuilding & restarting APP containers only (db is untouched)"
+            echo "==> Rebuilding & restarting APP containers"
             docker compose up -d --build api web
 
             echo "==> Pruning dangling images"
