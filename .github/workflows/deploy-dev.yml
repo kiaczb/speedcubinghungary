@@ -26,27 +26,22 @@ jobs:
           request_pty: true
           script: |
             set -e
-     
-            echo "==> Milyen felhasznalokent jelentkeztunk be?"
-            whoami
-            
-            echo "==> Honnan indulunk?"
-            pwd
-            
-            echo "==> Probalunk belepni a mappaba (FIX utvonal teszt)..."
-            # Szandekosan fixen beirva, hogy kizarjuk a Secret formázási hibajat!
-            cd /srv/speedcubinghungary-DEV/speedcubinghungary
-            
-            echo "==> Sikerult belepni? Jelenlegi mappa:"
-            pwd
 
+            echo "==> Belépés a mappába..."
+            cd /srv/speedcubinghungary-DEV/speedcubinghungary
+            pwd
+            
             echo "==> Fetching latest code (dev branch)"
             git fetch --prune origin
             git checkout dev
             git reset --hard origin/dev
 
-            echo "==> Rebuilding & restarting APP containers"
-            docker compose up -d --build api web
+            echo "==> Rebuilding APP containers (építés)..."
+            # Kifejezetten külön építjük a dockert, megakadályozva a terminál blokkolását
+            docker compose build api web
+
+            echo "==> Restarting APP containers (indítás)..."
+            docker compose up -d api web
 
             echo "==> Pruning dangling images"
             docker image prune -f
