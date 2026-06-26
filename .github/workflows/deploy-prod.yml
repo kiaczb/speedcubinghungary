@@ -1,0 +1,53 @@
+name: Deploy PROD
+
+# Auto-deploy to the production server on every push to the `main` branch.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # allow manual re-deploys from the Actions tab
+
+# Never run two production deploys at once; let an in-flight deploy finish.
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to production server
+    runs-on: ubuntu-latest
+    # Uses the `production` GitHub Environment. Add required-reviewer protection
+    # to this environment in repo settings to gate prod deploys behind approval.
+    environment: production
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          script_stop: true
+          script: |
+            set -e
+            cd "${{ vars.DEPLOY_PATH }}"
+
+            BRANCH="${{ github.ref_name }}"
+            COMPOSE_FILE="${{ vars.COMPOSE_FILE }}"
+            COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.yml}"
+
+            echo "==> Deploying branch '$BRANCH' using '$COMPOSE_FILE'"
+            git fetch --prune origin
+            git checkout "$BRANCH"
+            # Match the server working tree to the branch exactly.
+            # Git-ignored files (.env, postgres volume) are left intact.
+            git reset --hard "origin/$BRANCH"
+
+            echo "==> Rebuilding & restarting containers"
+            # `up` never removes named volumes, so the database is never wiped.
+            docker compose -f "$COMPOSE_FILE" up -d --build
+
+            echo "==> Pruning dangling images"
+            docker image prune -f
+
+            echo "==> Current container status"
+            docker compose -f "$COMPOSE_FILE" ps
