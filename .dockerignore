@@ -1,0 +1,18 @@
+# Build context for the API image is the repo root (docker-compose.yml).
+# Keep it lean: the API build only needs apps/api/** and db/migrations/**.
+.git
+.github
+docs
+**/node_modules
+**/.next
+apps/api/tmp
+apps/api/vendor
+apps/web
+apps/scripts
+*.log
+*.md
+# Secrets / env files never belong in an image.
+.env
+.env.*
+!.env.*.example
+postgres_data*/

@@ -1,0 +1,22 @@
+# Staging/test overrides: immutable built images, no bind mounts, no hot reload.
+#   docker compose -f docker-compose.yml -f docker-compose.test.yml --env-file .env.test up -d --build
+#
+# The api/web builds use their production stages (the base file's default target).
+# All values come from .env.test.
+
+services:
+  db:
+    restart: unless-stopped
+
+  api:
+    restart: unless-stopped
+
+  web:
+    build:
+      # NEXT_PUBLIC_* must be baked into the browser bundle at build time.
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        NEXT_PUBLIC_WCA_CLIENT_ID: ${NEXT_PUBLIC_WCA_CLIENT_ID}
+        NEXT_PUBLIC_WCA_REDIRECT_URI: ${NEXT_PUBLIC_WCA_REDIRECT_URI}
+        NEXT_PUBLIC_BACKEND_LOGIN: ${NEXT_PUBLIC_BACKEND_LOGIN}
+    restart: unless-stopped

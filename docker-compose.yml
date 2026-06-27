@@ -1,62 +1,76 @@
+# Base stack shared by every environment.
+# Always combine with exactly one environment override + its env file:
+#
+#   dev  : docker compose -f docker-compose.yml -f docker-compose.dev.yml  --env-file .env.dev  up
+#   test : docker compose -f docker-compose.yml -f docker-compose.test.yml --env-file .env.test up -d --build
+#   prod : docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env.prod up -d --build
+#
+# This base file defines structure only — all values come from the --env-file.
+# With no build target selected it builds the final (production) image stages;
+# docker-compose.dev.yml switches the api/web builds to their `dev` stages.
+
 services:
   db:
     image: postgres:18
-    env_file:
-      - ./db/.env
     environment:
-      POSTGRES_USER: dbuser
-      POSTGRES_PASSWORD: Speedcubing-DEV
-      POSTGRES_DB: speedcubinghungary_dev
-    ports:
-      - "5432:5432"
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     volumes:
-      - postgres_data_dev:/var/lib/postgresql
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U dbuser -d speedcubinghungary_dev"]
-      interval: 5s
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
       timeout: 5s
       retries: 5
+    networks: [appnet]
 
   api:
     build:
-      context: ./apps/api
-      dockerfile: Dockerfile
-    env_file:
-      - ./apps/api/.env
+      context: .
+      dockerfile: apps/api/Dockerfile
     depends_on:
       db:
         condition: service_healthy
-    volumes:
-      - ./apps/api:/app
-      - ./db/migrations:/migrations
-      - go_mod_cache:/go/pkg/mod
+    environment:
+      DEPLOYMENT: ${DEPLOYMENT}
+      NODE_ENV: ${NODE_ENV}
+      FRONTEND_URL: ${FRONTEND_URL}
+      WCA_CLIENT_ID: ${WCA_CLIENT_ID}
+      WCA_CLIENT_SECRET: ${WCA_CLIENT_SECRET}
+      WCA_REDIRECT_URI: ${WCA_REDIRECT_URI}
+      DATABASE_URL: ${DATABASE_URL}
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      JWT_SECRET: ${JWT_SECRET}
+      LOG_LEVEL: ${LOG_LEVEL}
     ports:
-      - "8080:8080"
+      - "${API_PORT:-8080}:8080"
+    networks: [appnet]
 
   web:
     build:
       context: ./apps/web
       dockerfile: Dockerfile
-    # --webpack: Turbopack has no polling fallback; webpack + WATCHPACK_POLLING works on Windows Docker bind mounts
-    command: npm run dev -- --webpack
-    env_file:
-      - ./apps/web/.env
-    environment:
-      - NODE_ENV=development
-      - SERVER_API_URL=http://api:8080
-      - NEXT_PUBLIC_API_URL=http://localhost:8080
-      - HOSTNAME=0.0.0.0
-      - WATCHPACK_POLLING=true
     depends_on:
       - api
-    volumes:
-      - ./apps/web:/app
-      # Named volume keeps node_modules inside the container, avoids host/container OS conflicts
-      - web_node_modules:/app/node_modules
+    environment:
+      NODE_ENV: ${NODE_ENV}
+      SERVER_API_URL: ${SERVER_API_URL}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+      NEXT_PUBLIC_WCA_CLIENT_ID: ${NEXT_PUBLIC_WCA_CLIENT_ID}
+      NEXT_PUBLIC_WCA_REDIRECT_URI: ${NEXT_PUBLIC_WCA_REDIRECT_URI}
+      NEXT_PUBLIC_BACKEND_LOGIN: ${NEXT_PUBLIC_BACKEND_LOGIN}
     ports:
-      - "3000:3000"
+      - "${WEB_PORT:-3000}:3000"
+    networks: [appnet]
+
+networks:
+  appnet:
+    driver: bridge
 
 volumes:
-  postgres_data_dev:
-  go_mod_cache:
-  web_node_modules:
+  postgres_data:
