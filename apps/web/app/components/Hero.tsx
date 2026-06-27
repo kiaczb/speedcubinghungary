@@ -1,10 +1,7 @@
-import Image from "next/image";
 import Link from "next/link";
-import Card from "./Cards/Card";
-import { FaCalendar, FaRegNewspaper, FaUser } from "react-icons/fa";
+import { FaCalendar, FaRegNewspaper } from "react-icons/fa";
 import UpcomingEvent from "./UpcomingCompetition/UpcomingEvent";
 import SpeedcubingFullAnimatedSVG from "./svgs/SpeedcubingFullAnimatedSVG";
-import SpeedcubingFullSVGugi from "./svgs/SpeedcubingFullSVGugi";
 
 const Hero = () => {
   return (

@@ -1,5 +1,3 @@
-import { FaGlobe } from "react-icons/fa";
-import Card from "../components/Cards/Card";
 import UnofficialSection from "./components/sections/UnofficialSection";
 import OtherSection from "./components/sections/OtherSection";
 

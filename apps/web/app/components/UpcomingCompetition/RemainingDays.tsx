@@ -1,20 +1,10 @@
-"use client";
-import React, { useEffect, useState } from "react";
 import { RiTimeFill } from "react-icons/ri";
 
 type Props = {
-  startDate: string;
+  days: number;
 };
 
-const RemainingDays = ({ startDate }: Props) => {
-  const [days, setDays] = useState<number | null>(null);
-
-  useEffect(() => {
-    const now = new Date();
-    const competitionDate = new Date(startDate);
-    const diff = competitionDate.getTime() - now.getTime();
-    setDays(Math.ceil(diff / (1000 * 60 * 60 * 24)));
-  }, [startDate]);
+const RemainingDays = ({ days }: Props) => {
   return (
     <div className="mt-8 flex items-center justify-center gap-4 p-4 rounded-xl bg-linear-to-br from-gray-900/50 to-black/50 border border-white/10 backdrop-blur-sm">
       <RiTimeFill className="text-3xl text-gray-300" />

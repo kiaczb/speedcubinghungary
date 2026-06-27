@@ -1,6 +1,4 @@
-import CreatePostButton from "./components/CreatePostButton";
 import PostsList from "./components/PostList";
-import PostsListItem from "./components/PostsListItem";
 import { PostsItem } from "./types";
 
 // Server oldali fetch
