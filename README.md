@@ -17,15 +17,16 @@ The runtime environment is **not** chosen by the current branch — it is select
 by which Compose override + env file you pass. The same code runs in any
 environment; only the override file and `--env-file` change.
 
-| Environment | Compose files                                   | Env file    |
-| ----------- | ----------------------------------------------- | ----------- |
-| Development | `docker-compose.yml` + `docker-compose.dev.yml` | `.env.dev`  |
-| Staging     | `docker-compose.yml` + `docker-compose.test.yml`| `.env.test` |
-| Production  | `docker-compose.yml` + `docker-compose.prod.yml`| `.env.prod` |
+| Environment | Compose files                                              | Env file    |
+| ----------- | ---------------------------------------------------------- | ----------- |
+| Development | `infra/docker-compose.yml` + `infra/docker-compose.dev.yml` | `.env.dev`  |
+| Staging     | `infra/docker-compose.yml` + `infra/docker-compose.test.yml`| `.env.test` |
+| Production  | `infra/docker-compose.yml` + `infra/docker-compose.prod.yml`| `.env.prod` |
 
-- `docker-compose.yml` — everything shared (services, env mapping, network, db volume/healthcheck). Builds production image stages by default.
-- `docker-compose.dev.yml` — dev only: bind mounts, hot reload (`dev` build target), exposed DB port.
-- `docker-compose.test.yml` / `docker-compose.prod.yml` — immutable built images, no bind mounts.
+- `infra/docker-compose.yml` — everything shared (services, env mapping, network, db volume/healthcheck). Builds production image stages by default.
+- `infra/docker-compose.dev.yml` — dev only: bind mounts, hot reload (`dev` build target), exposed DB port.
+- `infra/docker-compose.test.yml` / `infra/docker-compose.prod.yml` — immutable built images, no bind mounts.
+- `infra/docker/api/Dockerfile` / `infra/docker/web/Dockerfile` — multi-stage Dockerfiles for each service.
 
 No values are hardcoded in the compose files — they all come from the `--env-file`.
 
@@ -36,8 +37,8 @@ No values are hardcoded in the compose files — they all come from the `--env-f
 ```bash
 cp .env.dev.example .env.dev   # first time only (a working .env.dev is provided)
 docker compose \
-  -f docker-compose.yml \
-  -f docker-compose.dev.yml \
+  -f infra/docker-compose.yml \
+  -f infra/docker-compose.dev.yml \
   --env-file .env.dev up
 ```
 
@@ -54,8 +55,8 @@ Source is bind-mounted, so:
 ```bash
 cp .env.test.example .env.test   # fill in real values
 docker compose \
-  -f docker-compose.yml \
-  -f docker-compose.test.yml \
+  -f infra/docker-compose.yml \
+  -f infra/docker-compose.test.yml \
   --env-file .env.test up -d --build
 ```
 
@@ -64,8 +65,8 @@ docker compose \
 ```bash
 cp .env.prod.example .env.prod   # fill in real values
 docker compose \
-  -f docker-compose.yml \
-  -f docker-compose.prod.yml \
+  -f infra/docker-compose.yml \
+  -f infra/docker-compose.prod.yml \
   --env-file .env.prod up -d --build
 ```
 
@@ -110,7 +111,7 @@ Each deploy Environment needs secrets `SSH_HOST`, `SSH_USER`, `SSH_KEY`,
 git clone -b test <repo-url> /srv/speedcubinghungary    # or -b main on production
 cd /srv/speedcubinghungary
 cp .env.test.example .env.test                          # or .env.prod, then fill in secrets
-docker compose -f docker-compose.yml -f docker-compose.test.yml --env-file .env.test up -d --build
+docker compose -f infra/docker-compose.yml -f infra/docker-compose.test.yml --env-file .env.test up -d --build
 ```
 
 Schema migrations run automatically on API startup (golang-migrate). The

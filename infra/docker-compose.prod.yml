@@ -1,5 +1,5 @@
 # Production overrides: immutable built images, no bind mounts, no hot reload.
-#   docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env.prod up -d --build
+#   docker compose -f infra/docker-compose.yml -f infra/docker-compose.prod.yml --env-file .env.prod up -d --build
 #
 # Structurally identical to the test override (same immutable-image deployment);
 # the differences between staging and production live entirely in the env files

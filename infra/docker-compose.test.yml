@@ -1,5 +1,5 @@
 # Staging/test overrides: immutable built images, no bind mounts, no hot reload.
-#   docker compose -f docker-compose.yml -f docker-compose.test.yml --env-file .env.test up -d --build
+#   docker compose -f infra/docker-compose.yml -f infra/docker-compose.test.yml --env-file .env.test up -d --build
 #
 # The api/web builds use their production stages (the base file's default target).
 # All values come from .env.test.

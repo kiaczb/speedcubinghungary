@@ -1,9 +1,9 @@
 # Base stack shared by every environment.
 # Always combine with exactly one environment override + its env file:
 #
-#   dev  : docker compose -f docker-compose.yml -f docker-compose.dev.yml  --env-file .env.dev  up
-#   test : docker compose -f docker-compose.yml -f docker-compose.test.yml --env-file .env.test up -d --build
-#   prod : docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env.prod up -d --build
+#   dev  : docker compose -f infra/docker-compose.yml -f infra/docker-compose.dev.yml  --env-file .env.dev  up
+#   test : docker compose -f infra/docker-compose.yml -f infra/docker-compose.test.yml --env-file .env.test up -d --build
+#   prod : docker compose -f infra/docker-compose.yml -f infra/docker-compose.prod.yml --env-file .env.prod up -d --build
 #
 # This base file defines structure only — all values come from the --env-file.
 # With no build target selected it builds the final (production) image stages;
@@ -27,8 +27,8 @@ services:
 
   api:
     build:
-      context: .
-      dockerfile: apps/api/Dockerfile
+      context: ..
+      dockerfile: infra/docker/api/Dockerfile
     depends_on:
       db:
         condition: service_healthy
@@ -53,8 +53,8 @@ services:
 
   web:
     build:
-      context: ./apps/web
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: infra/docker/web/Dockerfile
     depends_on:
       - api
     environment:

@@ -40,10 +40,10 @@ jobs:
 
             echo "==> Building & starting production stack"
             # `up` never removes named volumes, so the database is never wiped.
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env.prod up -d --build
+            docker compose -f infra/docker-compose.yml -f infra/docker-compose.prod.yml --env-file .env.prod up -d --build
 
             echo "==> Pruning dangling images"
             docker image prune -f
 
             echo "==> Status"
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env.prod ps
+            docker compose -f infra/docker-compose.yml -f infra/docker-compose.prod.yml --env-file .env.prod ps

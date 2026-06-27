@@ -1,0 +1,18 @@
+# Per-Dockerfile ignore for the API build (context: repo root).
+# Excludes everything the API image doesn't need, keeping the build context lean.
+.git
+.github
+docs
+infra
+apps/web
+apps/scripts
+**/node_modules
+**/.next
+apps/api/tmp
+apps/api/vendor
+*.log
+*.md
+.env
+.env.*
+!.env.*.example
+postgres_data*/
