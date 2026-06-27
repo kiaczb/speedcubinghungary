@@ -33,7 +33,7 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen flex flex-col`}
       >
         <UserProvider>
-          <Navbar logoUrl="/speedcubing.png">
+          <Navbar>
             <Link href="/calendar" className="block">
               Versenynaptár
             </Link>
