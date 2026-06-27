@@ -1,14 +1,14 @@
-# Build context for the API image is the repo root (docker-compose.yml).
-# Keep it lean: the API build only needs apps/api/** and db/migrations/**.
+# Fallback .dockerignore for the repo-root build context.
+# Both api and web images use per-Dockerfile ignores (infra/docker/{api,web}/Dockerfile.dockerignore)
+# which take precedence in BuildKit builds. This file applies only when those are not picked up.
 .git
 .github
 docs
+infra
 **/node_modules
 **/.next
 apps/api/tmp
 apps/api/vendor
-apps/web
-apps/scripts
 *.log
 *.md
 # Secrets / env files never belong in an image.
