@@ -1,5 +1,3 @@
-import SpeedcubingLogoSVG from "../components/svgs/SpeedcubingLogoSVG";
-
 export default function About() {
   return (
     <div className="p-4">

@@ -2,7 +2,6 @@
 import Hero from "./components/Hero";
 import AboutSection from "./components/Sections/Main/AboutSection";
 import CompetitionsSection from "./components/Sections/Main/CompetitionsSection";
-import EventsSection from "./components/Sections/Main/EventsSection";
 import NewsSection from "./components/Sections/Main/NewsSection";
 import QuickToolsSection from "./components/Sections/Main/QuickToolsSection";
 

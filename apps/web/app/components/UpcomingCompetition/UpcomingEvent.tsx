@@ -1,7 +1,6 @@
 import { Competition } from "@/app/types";
 import Card from "../Cards/Card";
-import { FaCalendar, FaCalendarAlt } from "react-icons/fa";
-import { RiTimeFill } from "react-icons/ri";
+import { FaCalendarAlt } from "react-icons/fa";
 import RemainingDays from "./RemainingDays";
 
 async function getPosts(): Promise<Competition[]> {
@@ -13,7 +12,7 @@ async function getPosts(): Promise<Competition[]> {
 }
 
 const UpcomingEvent = async () => {
-  var competitions = await getPosts();
+  const competitions = await getPosts();
 
   if (!competitions || competitions.length === 0) {
     return (
@@ -73,7 +72,7 @@ const UpcomingEvent = async () => {
             </div>
           </div>
         </div>
-        <RemainingDays startDate={nextCompetition.start_date} />
+        <RemainingDays days={Math.ceil((new Date(nextCompetition.start_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24))} />
       </Card>
     </div>
   );

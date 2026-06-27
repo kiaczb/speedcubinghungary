@@ -43,7 +43,7 @@ export interface Person {
   delegate_status: string | null;
   email: string;
   class: string;
-  teams: any[]; // lehetőség van itt pontosítani, ha tudjuk a struktúrát
+  teams: unknown[]; // lehetőség van itt pontosítani, ha tudjuk a struktúrát
   avatar: Avatar;
 }
 

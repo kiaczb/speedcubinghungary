@@ -1,14 +1,12 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import React, { useEffect, useState } from "react";
-import SpeedcubingFullSVG from "./svgs/SpeedcubingFullSVG";
 import SpeedcubingFullAnimatedSVG from "./svgs/SpeedcubingFullAnimatedSVG";
 
-type NavbarProps = { logoUrl?: string; children?: React.ReactNode };
+type NavbarProps = { children?: React.ReactNode };
 
-const Navbar = ({ logoUrl, children }: NavbarProps) => {
+const Navbar = ({ children }: NavbarProps) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   useEffect(() => {
@@ -110,7 +108,7 @@ const Navbar = ({ logoUrl, children }: NavbarProps) => {
             if (!React.isValidElement(child)) return child;
 
             // Csak mobilon adjuk az onClick-et
-            const props: any = {
+            const props: { className: string; onClick?: () => void } = {
               className:
                 "block px-3 py-2 text-base font-medium text-gray-700 dark:text-gray-200 hover:text-gray-900 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-md",
             };

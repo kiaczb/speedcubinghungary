@@ -3,7 +3,6 @@ import Card from "./Card";
 import Link from "next/link";
 import Badge from "../Badge";
 import Image from "next/image";
-import { FaArrowRight } from "react-icons/fa";
 import { badgeMap, PostsItem, TagTypes } from "@/app/posts/types";
 
 // Dictionary a típusokhoz

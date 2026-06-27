@@ -21,7 +21,7 @@ const UnofficialSection = () => {
             <p>
               Ezen az oldalon érhetőek el a Special végződésű versenyek
               eredményei. A versenyeken az összes versenyszám idejének összege
-              található emberenként"
+              található emberenként
             </p>
           </div>
         </ToolCard>
