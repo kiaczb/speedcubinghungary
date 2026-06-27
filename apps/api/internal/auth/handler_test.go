@@ -41,7 +41,7 @@ func TestHandler_LoginCallback(t *testing.T) {
 	defer resp.Body.Close()
 
 	assert.Equal(t, http.StatusFound, resp.StatusCode)
-	assert.Equal(t, "http://localhost:3000", resp.Header.Get("Location"))
+	assert.Equal(t, "http://localhost:3000/", resp.Header.Get("Location"))
 
 	cookies := resp.Cookies()
 	assert.Len(t, cookies, 1)

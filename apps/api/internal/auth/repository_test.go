@@ -24,16 +24,18 @@ func TestPostgresRepository_GetByWCAID(t *testing.T) {
 	name := "John Doe"
 	email := "john@example.com"
 	rolesJSON := `["user","admin"]`
+	competitionCount := 5
+	delegatedCount := 2
 	createdAt := time.Now()
 	updatedAt := time.Now()
 
 	// 3. Mock elvárás: SELECT
 	mock.ExpectQuery(regexp.QuoteMeta(
-		"SELECT id, wca_id, name, email, roles, created_at, updated_at FROM users WHERE wca_id=$1",
+		"SELECT id, wca_id, name, email, roles, competition_count, delegated_count, created_at, updated_at FROM users WHERE wca_id=$1",
 	)).
 		WithArgs(wcaID).
-		WillReturnRows(sqlmock.NewRows([]string{"id","wca_id","name","email","roles","created_at","updated_at"}).
-			AddRow(userID, wcaID, name, email, rolesJSON, createdAt, updatedAt))
+		WillReturnRows(sqlmock.NewRows([]string{"id","wca_id","name","email","roles","competition_count","delegated_count","created_at","updated_at"}).
+			AddRow(userID, wcaID, name, email, rolesJSON, competitionCount, delegatedCount, createdAt, updatedAt))
 
 	// 4. Hívás
 	user, err := repo.GetByWCAID(wcaID)
@@ -44,6 +46,8 @@ func TestPostgresRepository_GetByWCAID(t *testing.T) {
 	assert.Equal(t, wcaID, user.WCAID)
 	assert.Equal(t, name, user.Name)
 	assert.Equal(t, email, user.Email)
+	assert.Equal(t, competitionCount, user.CompetitionCount)
+	assert.Equal(t, delegatedCount, user.DelegatedCount)
 	assert.ElementsMatch(t, []types.Role{"user","admin"}, user.Roles)
 
 	// 6. Mock ellenőrzés
