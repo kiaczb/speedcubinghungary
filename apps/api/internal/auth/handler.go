@@ -41,7 +41,7 @@ func (h *Handler) LoginCallback(w http.ResponseWriter, r *http.Request) {
 		Name:     "auth",
 		Value:    jwtToken,
 		HttpOnly: true,
-		Secure:   os.Getenv("DEPLOYMENT") == "production",
+		Secure:   os.Getenv("DEPLOYMENT") != "development",
 		SameSite: http.SameSiteStrictMode,
 		Path:     "/",
 		MaxAge:   3600,
@@ -80,7 +80,7 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 		Name:     "auth",
 		Value:    "",
 		HttpOnly: true,
-		Secure:   os.Getenv("DEPLOYMENT") == "production",
+		Secure:   os.Getenv("DEPLOYMENT") != "development",
 		SameSite: http.SameSiteStrictMode,
 		Path:     "/",
 		MaxAge:   -1, // azonnali törlés

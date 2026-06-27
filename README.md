@@ -23,10 +23,11 @@ environment; only the override file and `--env-file` change.
 | Staging     | `infra/docker-compose.yml` + `infra/docker-compose.test.yml`| `.env.test` |
 | Production  | `infra/docker-compose.yml` + `infra/docker-compose.prod.yml`| `.env.prod` |
 
-- `infra/docker-compose.yml` — everything shared (services, env mapping, network, db volume/healthcheck). Builds production image stages by default.
-- `infra/docker-compose.dev.yml` — dev only: bind mounts, hot reload (`dev` build target), exposed DB port.
+- `infra/docker-compose.yml` — everything shared (services, env mapping, network, db volume/healthcheck). Builds production image stages by default. Includes a Caddy reverse-proxy service gated behind the `proxy` compose profile.
+- `infra/docker-compose.dev.yml` — dev only: bind mounts, hot reload (`dev` build target), exposed DB port, and host ports for web/api (no Caddy in dev — use `http://localhost`).
 - `infra/docker-compose.test.yml` / `infra/docker-compose.prod.yml` — immutable built images, no bind mounts.
 - `infra/docker/api/Dockerfile` / `infra/docker/web/Dockerfile` — multi-stage Dockerfiles for each service.
+- `infra/caddy/Caddyfile` — reverse proxy with automatic HTTPS (Let's Encrypt). In test/prod, web/api are **not** published to the host; only Caddy (80/443) is public and proxies `WEB_DOMAIN` → web and `API_DOMAIN` → api. Enabled by `COMPOSE_PROFILES=proxy` in the env file.
 
 No values are hardcoded in the compose files — they all come from the `--env-file`.
 

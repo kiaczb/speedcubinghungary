@@ -47,8 +47,8 @@ services:
       DB_NAME: ${DB_NAME}
       JWT_SECRET: ${JWT_SECRET}
       LOG_LEVEL: ${LOG_LEVEL}
-    ports:
-      - "${API_PORT:-8080}:8080"
+    # No host port published here: in test/prod only Caddy reaches the api over
+    # the internal network. The dev override re-publishes it for localhost work.
     networks: [appnet]
 
   web:
@@ -64,8 +64,31 @@ services:
       NEXT_PUBLIC_WCA_CLIENT_ID: ${NEXT_PUBLIC_WCA_CLIENT_ID}
       NEXT_PUBLIC_WCA_REDIRECT_URI: ${NEXT_PUBLIC_WCA_REDIRECT_URI}
       NEXT_PUBLIC_BACKEND_LOGIN: ${NEXT_PUBLIC_BACKEND_LOGIN}
+    # No host port published here either; Caddy fronts it in test/prod and the
+    # dev override re-publishes it for localhost work.
+    networks: [appnet]
+
+  # Reverse proxy / automatic HTTPS (Let's Encrypt). Only runs where the
+  # `proxy` profile is enabled (test/prod set COMPOSE_PROFILES=proxy in their
+  # env file); dev never activates it and keeps using plain http://localhost.
+  caddy:
+    image: caddy:2-alpine
+    profiles: [proxy]
+    depends_on:
+      - web
+      - api
+    environment:
+      # Defaults keep dev quiet (Caddy isn't started there); test/prod set these.
+      WEB_DOMAIN: ${WEB_DOMAIN:-}
+      API_DOMAIN: ${API_DOMAIN:-}
+      ACME_EMAIL: ${ACME_EMAIL:-}
     ports:
-      - "${WEB_PORT:-3000}:3000"
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
     networks: [appnet]
 
 networks:
@@ -74,3 +97,5 @@ networks:
 
 volumes:
   postgres_data:
+  caddy_data:
+  caddy_config:

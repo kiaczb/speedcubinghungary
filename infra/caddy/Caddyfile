@@ -1,0 +1,20 @@
+# Reverse proxy with automatic HTTPS (Let's Encrypt).
+# Domains and ACME contact come from the environment (.env.test / .env.prod):
+#   WEB_DOMAIN  -> the frontend (web service)
+#   API_DOMAIN  -> the backend  (api service)
+#   ACME_EMAIL  -> contact address for Let's Encrypt / expiry notices
+#
+# Caddy provisions and renews a trusted cert per named site automatically,
+# as long as the domains' public DNS points at this server and 80/443 are open.
+
+{
+	email {$ACME_EMAIL}
+}
+
+{$WEB_DOMAIN} {
+	reverse_proxy web:3000
+}
+
+{$API_DOMAIN} {
+	reverse_proxy api:8080
+}

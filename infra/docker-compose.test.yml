@@ -20,3 +20,6 @@ services:
         NEXT_PUBLIC_WCA_REDIRECT_URI: ${NEXT_PUBLIC_WCA_REDIRECT_URI}
         NEXT_PUBLIC_BACKEND_LOGIN: ${NEXT_PUBLIC_BACKEND_LOGIN}
     restart: unless-stopped
+
+  caddy:
+    restart: unless-stopped
