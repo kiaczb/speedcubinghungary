@@ -9,11 +9,14 @@ dist/
 
 # --- Environment & Secrets ---
 # Never commit actual .env files - they contain secrets!
+# Ignores .env, .env.dev, .env.test, .env.prod, .env.local, etc...
 .env
+.env.*
 env.py
 
-# Allow .env.example files (templates only, no secrets)
+# ...but keep the committed templates (.env.example, .env.dev.example, ...)
 !.env.example
+!.env.*.example
 
 # Docker compose overrides
 docker-compose.override.yml

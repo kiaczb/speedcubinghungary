@@ -1,0 +1,23 @@
+# Production overrides: immutable built images, no bind mounts, no hot reload.
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env.prod up -d --build
+#
+# Structurally identical to the test override (same immutable-image deployment);
+# the differences between staging and production live entirely in the env files
+# (.env.test vs .env.prod): domains, secrets, ports, COMPOSE_PROJECT_NAME.
+
+services:
+  db:
+    restart: always
+
+  api:
+    restart: always
+
+  web:
+    build:
+      # NEXT_PUBLIC_* must be baked into the browser bundle at build time.
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        NEXT_PUBLIC_WCA_CLIENT_ID: ${NEXT_PUBLIC_WCA_CLIENT_ID}
+        NEXT_PUBLIC_WCA_REDIRECT_URI: ${NEXT_PUBLIC_WCA_REDIRECT_URI}
+        NEXT_PUBLIC_BACKEND_LOGIN: ${NEXT_PUBLIC_BACKEND_LOGIN}
+    restart: always

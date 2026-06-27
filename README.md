@@ -1,0 +1,117 @@
+# Speedcubing Hungary
+
+Monorepo:
+
+| Path            | Service  | Stack                         |
+| --------------- | -------- | ----------------------------- |
+| `apps/web`      | frontend | Next.js 16 / React 19         |
+| `apps/api`      | backend  | Go (chi, golang-migrate)      |
+| `apps/scripts`  | jobs     | Python weekly report          |
+| `db/migrations` | schema   | SQL migrations (schema only)  |
+
+The runtime stack runs on Docker Compose (services: `web`, `api`, `db`).
+
+## Environments are decoupled from Git branches
+
+The runtime environment is **not** chosen by the current branch — it is selected
+by which Compose override + env file you pass. The same code runs in any
+environment; only the override file and `--env-file` change.
+
+| Environment | Compose files                                   | Env file    |
+| ----------- | ----------------------------------------------- | ----------- |
+| Development | `docker-compose.yml` + `docker-compose.dev.yml` | `.env.dev`  |
+| Staging     | `docker-compose.yml` + `docker-compose.test.yml`| `.env.test` |
+| Production  | `docker-compose.yml` + `docker-compose.prod.yml`| `.env.prod` |
+
+- `docker-compose.yml` — everything shared (services, env mapping, network, db volume/healthcheck). Builds production image stages by default.
+- `docker-compose.dev.yml` — dev only: bind mounts, hot reload (`dev` build target), exposed DB port.
+- `docker-compose.test.yml` / `docker-compose.prod.yml` — immutable built images, no bind mounts.
+
+No values are hardcoded in the compose files — they all come from the `--env-file`.
+
+## Running
+
+### Local development (hot reload)
+
+```bash
+cp .env.dev.example .env.dev   # first time only (a working .env.dev is provided)
+docker compose \
+  -f docker-compose.yml \
+  -f docker-compose.dev.yml \
+  --env-file .env.dev up
+```
+
+Frontend: http://localhost:3000 · API: http://localhost:8080
+
+Source is bind-mounted, so:
+
+- editing a **frontend** file triggers a Next.js hot reload (`next dev --webpack`, polling enabled for Windows/WSL);
+- editing a **backend** file triggers an `air` rebuild/restart;
+- no `docker compose build` is needed during normal development.
+
+### Staging / test
+
+```bash
+cp .env.test.example .env.test   # fill in real values
+docker compose \
+  -f docker-compose.yml \
+  -f docker-compose.test.yml \
+  --env-file .env.test up -d --build
+```
+
+### Production
+
+```bash
+cp .env.prod.example .env.prod   # fill in real values
+docker compose \
+  -f docker-compose.yml \
+  -f docker-compose.prod.yml \
+  --env-file .env.prod up -d --build
+```
+
+Each environment uses a distinct `COMPOSE_PROJECT_NAME` (in its env file), so
+their containers, networks and volumes are isolated even on the same host.
+
+## Branch strategy
+
+| Branch       | Role                | CI / CD                                  |
+| ------------ | ------------------- | ---------------------------------------- |
+| `main`       | Production           | push → CI, then deploy to production     |
+| `test`       | Staging/test server | push → CI, then deploy to staging        |
+| `develop`    | Integration / local | push → CI (build, lint, test). No deploy. |
+| `feature/*`  | Feature work        | CI on push / PR. No deploy.              |
+| `hotfix/*`   | Emergency fixes      | CI on push / PR. No deploy.              |
+
+`main` is the default branch. Promotion is linear and fast-forward:
+
+```bash
+# develop -> staging
+git switch test && git merge --ff-only develop && git push origin test
+# staging -> production
+git switch main && git merge --ff-only test   && git push origin main
+git switch develop
+```
+
+## CI/CD
+
+Workflows in `.github/workflows/`:
+
+- `ci.yml` — build + lint + test (Go and Next.js). Runs on `develop`/`feature/*`/`hotfix/*` and PRs, and is reused by the deploy workflows.
+- `deploy-test.yml` — on push to `test`: run CI, then SSH-deploy with the `test` Compose files. Uses the `test` GitHub Environment.
+- `deploy-prod.yml` — on push to `main`: run CI, then SSH-deploy with the `prod` Compose files. Uses the `production` GitHub Environment.
+
+Each deploy Environment needs secrets `SSH_HOST`, `SSH_USER`, `SSH_KEY`,
+`SSH_PORT` and variables `DEPLOY_PATH`. Add **Required reviewers** to the
+`production` environment to gate prod deploys behind manual approval.
+
+## Server setup (one-time, per server)
+
+```bash
+git clone -b test <repo-url> /srv/speedcubinghungary    # or -b main on production
+cd /srv/speedcubinghungary
+cp .env.test.example .env.test                          # or .env.prod, then fill in secrets
+docker compose -f docker-compose.yml -f docker-compose.test.yml --env-file .env.test up -d --build
+```
+
+Schema migrations run automatically on API startup (golang-migrate). The
+database starts empty — migrations are schema-only and contain no seed data.
