@@ -3,7 +3,7 @@ import logging
 import psycopg
 from psycopg.rows import dict_row
 
-from env import (
+from config import (
     DATABASE_URL,
     DB_HOST,
     DB_NAME,

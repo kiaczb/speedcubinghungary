@@ -1,6 +1,6 @@
 from CompetitionModels.Record import Record
 from CompetitionModels.CompetitorWithRecords import CompetitorWithRecords
-from env import excludedCompetitorWcaIds, badges
+from config import excludedCompetitorWcaIds, badges
 from recordsManager import localNationalRecords
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
