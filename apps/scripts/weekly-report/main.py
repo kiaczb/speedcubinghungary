@@ -2,6 +2,7 @@ import logging
 import time
 from datetime import datetime, timedelta
 
+import config
 from database.db import check_connection
 from competition import GetCompetitionsWithHungarians
 from emailSender import WriteEmail
@@ -15,6 +16,9 @@ logger = logging.getLogger("weekly-report")
 
 
 def main():
+    # Fail fast if required env vars are missing (see config.py).
+    config.validate()
+
     # Read-only preflight: confirm the shared backend DB is reachable and the
     # required tables exist. Raises (and aborts the job) if not.
     check_connection()

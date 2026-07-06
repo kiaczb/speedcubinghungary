@@ -36,7 +36,7 @@ No values are hardcoded in the compose files — they all come from the `--env-f
 ### Local development (hot reload)
 
 ```bash
-cp .env.dev.example .env.dev   # first time only (a working .env.dev is provided)
+cp .env.dev.example .env.dev   # first time only, then fill in real values
 docker compose \
   -f infra/docker-compose.yml \
   -f infra/docker-compose.dev.yml \
@@ -117,3 +117,42 @@ docker compose -f infra/docker-compose.yml -f infra/docker-compose.test.yml --en
 
 Schema migrations run automatically on API startup (golang-migrate). The
 database starts empty — migrations are schema-only and contain no seed data.
+
+## Secrets & configuration
+
+All configuration is environment-driven. **No secrets or environment-specific
+values are committed** — only the `.env*.example` templates are tracked; every
+real `.env` file (root `.env.dev`/`.env.test`/`.env.prod` and the Python job's
+`apps/scripts/weekly-report/.env`) is git-ignored.
+
+- **Development:** copy `.env.dev.example` → `.env.dev` locally.
+- **Test / Production:** by design, the real `.env.test` / `.env.prod` live
+  **on the deploy server**, created once during server setup and filled with the
+  real secrets. They are git-ignored, so `git reset --hard` during a deploy never
+  touches them. CI/CD (see `.github/workflows/`) only needs the SSH secrets to
+  reach the server; the app secrets are held on the host, not in the workflow.
+  (Trade-off accepted deliberately: simplicity over centralizing secrets in the
+  CI/CD platform.)
+
+Rules: never hardcode a secret, password, API key, or environment URL in code,
+Dockerfiles, or the compose files. Add new variables to the `.env.*.example`
+templates and map them in `infra/docker-compose.yml`.
+
+## Weekly report job (`apps/scripts/weekly-report`)
+
+A standalone Python cron job (not part of the Docker stack). It reads the shared
+Postgres and emails a weekly report over SMTP.
+
+```bash
+cd apps/scripts/weekly-report
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env     # git-ignored; fill in real values, never commit it
+```
+
+`config.py` loads `.env` (via `python-dotenv`) and validates required variables
+fail-fast — mirroring `apps/api/internal/config/config.go`. All sensitive values
+(`EMAIL_FROM`, `EMAIL_TO`, `EMAIL_APP_PASSWORD`, `DATABASE_URL` / `DB_*`) come
+from `.env`, never from hardcoded literals. In a test/staging context, point
+`EMAIL_TO` at a fixed test inbox so real recipients are never emailed. If a real
+credential was ever pasted into a tracked file, rotate it.

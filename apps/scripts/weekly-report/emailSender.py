@@ -5,7 +5,7 @@ from jinja2 import Environment, FileSystemLoader
 from competitionCount import GetImportantCompetitors
 from delegatesCount import GetImportantDelegates
 from utils import ConvertResult, ConvertDate, FlagEmoji
-from env import emailFrom, emailTo, emailSubject, emailCode, SCRIPT_DIR
+from config import emailFrom, emailTo, emailSubject, emailCode, SCRIPT_DIR
 
 templates_path = os.path.join(SCRIPT_DIR, 'templates')
 environment = Environment(loader=FileSystemLoader(templates_path))
