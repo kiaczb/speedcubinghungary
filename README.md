@@ -27,7 +27,7 @@ environment; only the override file and `--env-file` change.
 - `infra/docker-compose.dev.yml` — dev only: bind mounts, hot reload (`dev` build target), exposed DB port, and host ports for web/api (no Caddy in dev — use `http://localhost`).
 - `infra/docker-compose.test.yml` / `infra/docker-compose.prod.yml` — immutable built images, no bind mounts.
 - `infra/docker/api/Dockerfile` / `infra/docker/web/Dockerfile` — multi-stage Dockerfiles for each service.
-- `infra/caddy/Caddyfile` — reverse proxy with automatic HTTPS (Let's Encrypt). In test/prod, web/api are **not** published to the host; only Caddy (80/443) is public and proxies `WEB_DOMAIN` → web and `API_DOMAIN` → api. Enabled by `COMPOSE_PROFILES=proxy` in the env file.
+- `infra/caddy/Caddyfile` — reverse proxy with automatic HTTPS (Let's Encrypt). In test/prod, web/api are **not** published to the host; only Caddy (80/443) is public. A single domain (`WEB_DOMAIN`) serves everything: `WEB_DOMAIN/api/*` → api (prefix stripped), everything else → web. One origin means the auth cookie is first-party and there's no CORS. Enabled by `COMPOSE_PROFILES=proxy` in the env file.
 
 No values are hardcoded in the compose files — they all come from the `--env-file`.
 
@@ -140,19 +140,46 @@ templates and map them in `infra/docker-compose.yml`.
 
 ## Weekly report job (`apps/scripts/weekly-report`)
 
-A standalone Python cron job (not part of the Docker stack). It reads the shared
-Postgres and emails a weekly report over SMTP.
+A Python job that reads the shared Postgres and emails a weekly report over SMTP.
+It is **not** part of the always-on stack — it runs on demand. There are two ways
+to run it; both read the same env vars, and neither is scheduled yet (wire up a
+host cron / systemd timer when you want it to run automatically).
+
+### Containerized (recommended on the servers)
+
+The job has a `Dockerfile` and a compose service behind the `jobs` profile, so a
+normal `up` never starts it. Run it against the shared DB using the same
+`--env-file` model as the rest of the stack:
+
+```bash
+# staging (reads .env.test, sends to its EMAIL_TO — point that at a test inbox)
+docker compose \
+  -f infra/docker-compose.yml \
+  -f infra/docker-compose.test.yml \
+  --env-file .env.test \
+  --profile jobs run --rm weekly-report
+```
+
+The `EMAIL_FROM` / `EMAIL_TO` / `EMAIL_APP_PASSWORD` vars live in the same
+`.env.test` / `.env.prod` as the rest of the stack (see the templates); the DB
+config is shared. Inside compose the job reaches the DB over the internal network
+(`DB_HOST=db`).
+
+### Standalone (local, no Docker)
 
 ```bash
 cd apps/scripts/weekly-report
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env     # git-ignored; fill in real values, never commit it
+python main.py
 ```
 
-`config.py` loads `.env` (via `python-dotenv`) and validates required variables
-fail-fast — mirroring `apps/api/internal/config/config.go`. All sensitive values
-(`EMAIL_FROM`, `EMAIL_TO`, `EMAIL_APP_PASSWORD`, `DATABASE_URL` / `DB_*`) come
-from `.env`, never from hardcoded literals. In a test/staging context, point
-`EMAIL_TO` at a fixed test inbox so real recipients are never emailed. If a real
-credential was ever pasted into a tracked file, rotate it.
+`config.py` loads a local `.env` (via `python-dotenv`) when present and validates
+required variables fail-fast — mirroring `apps/api/internal/config/config.go`. In
+the container no `.env` is baked in (see `.dockerignore`); the values arrive from
+the environment instead. All sensitive values (`EMAIL_FROM`, `EMAIL_TO`,
+`EMAIL_APP_PASSWORD`, `DATABASE_URL` / `DB_*`) come from the environment, never
+from hardcoded literals. In a test/staging context, point `EMAIL_TO` at a fixed
+test inbox so real recipients are never emailed. If a real credential was ever
+pasted into a tracked file, rotate it.
