@@ -68,6 +68,38 @@ services:
     # dev override re-publishes it for localhost work.
     networks: [appnet]
 
+  # Weekly-report email job. Not part of the always-on stack — it lives behind
+  # the `jobs` profile so a normal `up` never starts it. Run it on demand with
+  # the same --env-file model as the other services:
+  #
+  #   docker compose -f infra/docker-compose.yml -f infra/docker-compose.test.yml \
+  #     --env-file .env.test --profile jobs run --rm weekly-report
+  #
+  # It reads the SHARED db over the internal network (DB_HOST=db) and sends mail
+  # to EMAIL_TO — point that at a fixed test inbox outside production. The EMAIL_*
+  # vars default to empty so the main stack stays warning-free; the job validates
+  # them fail-fast at runtime (config.py) when actually invoked.
+  weekly-report:
+    build:
+      context: ../apps/scripts/weekly-report
+      dockerfile: Dockerfile
+    profiles: [jobs]
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      EMAIL_FROM: ${EMAIL_FROM:-}
+      EMAIL_TO: ${EMAIL_TO:-}
+      EMAIL_APP_PASSWORD: ${EMAIL_APP_PASSWORD:-}
+    restart: "no"
+    networks: [appnet]
+
   # Reverse proxy / automatic HTTPS (Let's Encrypt). Only runs where the
   # `proxy` profile is enabled (test/prod set COMPOSE_PROFILES=proxy in their
   # env file); dev never activates it and keeps using plain http://localhost.
@@ -79,8 +111,8 @@ services:
       - api
     environment:
       # Defaults keep dev quiet (Caddy isn't started there); test/prod set these.
+      # Single domain: the API is path-routed under WEB_DOMAIN/api (see Caddyfile).
       WEB_DOMAIN: ${WEB_DOMAIN:-}
-      API_DOMAIN: ${API_DOMAIN:-}
       ACME_EMAIL: ${ACME_EMAIL:-}
     ports:
       - "80:80"

@@ -24,7 +24,7 @@ by Docker Compose:
 Browser ──HTTP──▶ web (Next.js SSR + client) ──HTTP──▶ api (Go/chi) ──▶ Postgres
                                                           │
                                                           └──▶ WCA API (OAuth + competitions)
-Caddy (test/prod only) terminates HTTPS and proxies WEB_DOMAIN→web, API_DOMAIN→api.
+Caddy (test/prod only) terminates HTTPS on a single domain: WEB_DOMAIN/api→api (prefix stripped), everything else→web.
 scripts (Python) runs out-of-band, reads the same Postgres, calls WCA, sends email.
 ```
 
@@ -339,16 +339,25 @@ Other important vars:
   `NEXT_PUBLIC_BACKEND_LOGIN`. **`NEXT_PUBLIC_*` are baked into the browser bundle
   at build time** (Docker build args), so changing them requires a web rebuild.
 - Compose: `COMPOSE_PROJECT_NAME`, `COMPOSE_PROFILES=proxy` (test/prod),
-  `WEB_DOMAIN`/`API_DOMAIN`/`ACME_EMAIL` (Caddy), `WEB_PORT`/`API_PORT`/
-  `DB_PORT_HOST` (dev host ports).
+  `WEB_DOMAIN`/`ACME_EMAIL` (Caddy — single domain, API path-routed under
+  `WEB_DOMAIN/api`), `WEB_PORT`/`API_PORT`/
+  `DB_PORT_HOST` (dev host ports). The `weekly-report` service sits behind the
+  `jobs` profile (run it with `--profile jobs run --rm weekly-report`); its
+  `EMAIL_FROM`/`EMAIL_TO`/`EMAIL_APP_PASSWORD` now live in the root
+  `.env.<env>` templates too (defaulted to empty in the base compose so the main
+  stack stays warning-free) — the job validates them fail-fast at runtime.
 - Weekly-report job (Python): configured via `apps/scripts/weekly-report/.env`
   (git-ignored; template `.env.example`), loaded by `config.py` via
   `python-dotenv` with fail-fast validation mirroring
-  `apps/api/internal/config/config.go`. It is **not** loaded by Docker Compose
-  — it's a standalone cron. All secrets (`EMAIL_FROM`, `EMAIL_TO`,
-  `EMAIL_APP_PASSWORD`, `DATABASE_URL`/`DB_*`) come from `.env`; **never
-  hardcode them in `config.py` or any tracked file**. Point `EMAIL_TO` at a
-  fixed test inbox in test/staging.
+  `apps/api/internal/config/config.go`. It can run **either** standalone (venv +
+  local `.env`) **or** as a compose service behind the `jobs` profile (see below).
+  In the container no `.env` is baked in (`.dockerignore`); `load_dotenv` no-ops
+  and the `EMAIL_*` / `DB_*` values come from the compose `--env-file` instead.
+  All secrets (`EMAIL_FROM`, `EMAIL_TO`, `EMAIL_APP_PASSWORD`,
+  `DATABASE_URL`/`DB_*`) come from the environment; **never hardcode them in
+  `config.py` or any tracked file**. Point `EMAIL_TO` at a fixed test inbox in
+  test/staging. Neither run path is scheduled yet — add a host cron / systemd
+  timer when automatic weekly runs are wanted.
 
 **Secret-delivery model (deliberate choice):** test/prod deploys use a
 server-local `.env.test`/`.env.prod` placed once during server setup (git-ignored,
