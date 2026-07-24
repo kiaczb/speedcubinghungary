@@ -2,6 +2,9 @@ import React from "react";
 import { PostsItem } from "../types";
 import { notFound } from "next/dist/client/components/navigation";
 import { postImageUrl } from "../lib/postImage";
+import PostContent from "../components/PostContent";
+import WeeklyReportView from "../components/WeeklyReportView";
+import { parseWeeklyReport } from "../lib/report";
 
 type PageProps = {
   params: Promise<{
@@ -29,6 +32,11 @@ export default async function PostPage({ params }: PageProps) {
 
   const imageUrl = postImageUrl(post.image_path);
 
+  // A riport posztok tartalma strukturált JSON — dedikált komponens rendereli.
+  // Minden más poszt markdown (PostContent). Törött/régi JSON esetén a report a
+  // markdown-renderelőre esik vissza, hogy sose dőljön el az oldal.
+  const report = post.tag === "report" ? parseWeeklyReport(post.content) : null;
+
   return (
     <article className="max-w-3xl mx-auto py-10">
       <h1 className="text-3xl font-bold mb-4">{post.title}</h1>
@@ -42,7 +50,11 @@ export default async function PostPage({ params }: PageProps) {
           className="mb-6 w-full rounded-lg object-cover"
         />
       )}
-      <div className="prose">{post.content}</div>
+      {report ? (
+        <WeeklyReportView report={report} />
+      ) : (
+        <PostContent content={post.content} />
+      )}
     </article>
   );
 }

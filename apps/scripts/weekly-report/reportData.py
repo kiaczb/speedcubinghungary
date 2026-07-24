@@ -14,34 +14,16 @@ logger = logging.getLogger(__name__)
 
 
 def BuildReportData(competitionsWithHungarians):
-    """A sablonoknak átadható adathalmaz (a kulcsok a sablonváltozók nevei)."""
+    """A riport adathalmaza az e-mail és a weboldali Post számára.
+
+    MINDEN magyar érdekeltségű versenyző bekerül — nem csak a rekordot elértek.
+    A `competitors.py` (`GetCompetitionsParallel`) már csak azokat a versenyeket
+    adja vissza, amiknek van eredménnyel rendelkező magyar versenyzőjük, és minden
+    ilyen versenyzőt tartalmaz (a `Records` üres, ha az illetőnek nincs rekordja).
+    Ezért itt már nincs külön szűrés.
+    """
     return {
-        "competitions": FilterCompetitions(competitionsWithHungarians),
+        "competitions": competitionsWithHungarians,
         "count_competitors": GetImportantCompetitors(),
         "delegate_milestones": GetImportantDelegates(),
     }
-
-
-def FilterCompetitions(competitionsWithHungarians):
-    """Csak a megjelenítendő versenyeket tartja meg.
-
-    A nem magyar versenyek mind bekerülnek; a magyar versenyek viszont csak
-    akkor, ha van rekordot elért versenyzőjük (és ilyenkor a versenyzőlistát is
-    a rekordosokra szűkítjük). Korábban ez a logika a HTML renderelőben ült.
-    """
-    filtered = []
-
-    for comp in competitionsWithHungarians:
-        if not comp.isHungarian:
-            filtered.append(comp)
-            continue
-
-        recorders = [
-            person for person in comp.CompetitorWithRecords if person.Records
-        ]
-        comp.CompetitorWithRecords = recorders
-
-        if recorders:
-            filtered.append(comp)
-
-    return filtered

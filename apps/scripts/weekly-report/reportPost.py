@@ -9,13 +9,13 @@ NOTHING — ugyanarra a hétre másodszor futtatva NEM jön létre újabb poszt.
 azért is fontos, mert a cron újrapróbálkozhat vagy kézzel is indítható.
 """
 
+import json
 import logging
 from datetime import date, timedelta
 from uuid import uuid4
 
 from database.db import insert_weekly_report_post
-from templating import text_environment
-from utils import ConvertDate, ConvertResult
+from reportPayload import BuildReportPayload
 
 logger = logging.getLogger(__name__)
 
@@ -48,13 +48,10 @@ def BuildTitle(period_start, period_end):
 
 
 def RenderPostContent(report_data):
-    """A riport sima szöveges változata (a frontend a content-et szövegként rendereli)."""
-    template = text_environment.get_template("post.txt")
-    return template.render(
-        convert_date=ConvertDate,
-        convert_result=ConvertResult,
-        **report_data,
-    )
+    """A riport tartalma JSON stringként — a frontend WeeklyReportView komponense
+    rendereli (lásd reportPayload.py). ensure_ascii=False: a magyar ékezetek
+    olvashatóan (UTF-8) kerüljenek a DB-be, ne \\u-escape-elve."""
+    return json.dumps(BuildReportPayload(report_data), ensure_ascii=False)
 
 
 def PublishWeeklyReportPost(report_data, period_start, period_end, replace=False):

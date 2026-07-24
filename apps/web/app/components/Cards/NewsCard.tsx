@@ -3,6 +3,8 @@ import Card from "./Card";
 import Link from "next/link";
 import Badge from "../Badge";
 import { badgeMap, PostsItem, TagTypes } from "@/app/posts/types";
+import { postPreview } from "@/app/posts/lib/postPreview";
+import { reportSummary } from "@/app/posts/lib/report";
 
 // Dictionary a típusokhoz
 
@@ -14,6 +16,10 @@ type NewsCardProps = {
 
 const NewsCard: React.FC<NewsCardProps> = ({ type, imageUrl, post }) => {
   const badge = badgeMap[type];
+  const preview =
+    post.tag === "report"
+      ? reportSummary(post.content)
+      : postPreview(post.content, 120);
   return (
     <Card className="max-w-86 flex flex-col justify-between bg-white p-0 overflow-hidden hover:shadow-2xl transition-all duration-300 hover:-translate-y-1">
       {/* Header rész az új dizájnnal */}
@@ -61,7 +67,7 @@ const NewsCard: React.FC<NewsCardProps> = ({ type, imageUrl, post }) => {
       {/* Tartalom rész */}
       <div className="px-6 pb-6 flex flex-1 flex-col">
         <div className="text-md text-gray-700 mb-6">
-          <p className="leading-relaxed">{post.content}</p>
+          <p className="leading-relaxed">{preview}</p>
         </div>
 
         {/* Link rész - modernizálva */}

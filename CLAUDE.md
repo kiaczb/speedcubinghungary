@@ -220,21 +220,41 @@ Other Go conventions observed:
   context calling `/me` and `/logout` with `credentials: "include"`. Use
   `useUser()` to read `{ user, isLoading, logout }`.
 - Styling is Tailwind v4 utility classes inline in JSX. UI copy is largely Hungarian.
+- **Post content is Markdown.** The detail page renders it with
+  `app/posts/components/PostContent.tsx` (`react-markdown` + `remark-gfm`),
+  styled per-element via the `components` map (no `@tailwindcss/typography`
+  plugin). ⚠️ Security: there is **no `rehype-raw`**, so raw HTML in admin content
+  is escaped, not rendered — keep it that way. Lists/cards must **not** render
+  Markdown — they show a stripped plain-text teaser via
+  `app/posts/lib/postPreview.ts`.
+- **`tag === "report"` posts are the exception: their `content` is JSON, not
+  Markdown.** The detail page (`app/posts/[id]/page.tsx`) branches on the tag:
+  `parseWeeklyReport()` (`app/posts/lib/report.ts`) → `WeeklyReportView.tsx`
+  (a styled, structured renderer — competition cards, result chips, milestones);
+  everything else → `PostContent`. Parse failure falls back to `PostContent` so
+  the page never crashes. Lists/cards show `reportSummary()` for report posts, not
+  `postPreview`. The payload shape is `WeeklyReport*` in `types.ts` — keep it in
+  sync with `apps/scripts/weekly-report/reportPayload.py`.
 
 ### Python (weekly-report)
 - **The weekly report is published into the existing `posts` table**, not a
   separate content store — so it reuses the normal listing/detail UI. Flow in
   `main.py`: `BuildReportData()` (`reportData.py`) builds the dataset **once**,
   then `WriteEmail()` renders it as HTML for email and
-  `PublishWeeklyReportPost()` (`reportPost.py`) renders the **same** data as
-  plain text (`templates/post.txt`) and inserts it with tag `report`.
-  Don't recompute the milestones separately — they hit the DB *and* the WCA API.
-- The post content must stay **plain text**: the frontend renders `post.content`
-  as text (`{post.content}`), so HTML would show up escaped. That's why there are
-  two Jinja environments in `templating.py` (`html_environment` for the email,
-  `text_environment` with `trim_blocks`/`lstrip_blocks` for the post). Note
-  `lstrip_blocks` strips indentation before `{% %}` tags — use inline
-  `{{ ... if ... else ... }}` expressions where indentation matters.
+  `PublishWeeklyReportPost()` (`reportPost.py`) serialises the **same** data as
+  **JSON** (`reportPayload.py` → `BuildReportPayload`) and inserts it with tag
+  `report`. Don't recompute the milestones separately — they hit the DB *and* the
+  WCA API.
+- The report post `content` is **JSON**, rendered by the frontend's
+  `WeeklyReportView` (see the Frontend section) — *not* Markdown and *not* the
+  email HTML. The email still renders from Jinja (`templating.py` /
+  `html_environment` / `templates/competitions.html`); only the website post uses
+  the JSON payload. Keep `reportPayload.py` and `types.ts` (`WeeklyReport*`) in sync.
+- **All Hungarian-interest competitors are included, not just record-setters**
+  (`BuildReportData` no longer filters). `competitors.py` already returns every
+  Hungarian competitor who had a result; those without a record get an empty
+  `results` list (shown as a name with a "résztvevő" marker). This also affects
+  the email, which shares the data.
 - The reported period is a **rolling 7-day window** (run time − 1 week … run
   time), *not* a calendar week — `competition.py` queries the WCA API with that
   range. The post title must show that actual window; only the idempotency key
