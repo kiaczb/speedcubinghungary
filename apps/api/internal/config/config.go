@@ -15,6 +15,10 @@ type Config struct {
 	WCAClientSecret  string
 	WCARedirectURI   string
 	LogLevel         string
+	// UploadDir a feltöltött képek könyvtára a konténerben. Ide egy named volume
+	// van csatolva (lásd infra/docker-compose.yml), hogy a fájlok túléljék a
+	// konténer újraépítését. Nem kötelező env — az alapértelmezés a szokásos út.
+	UploadDir        string
 }
 
 // Load loads and validates environment variables
@@ -28,6 +32,7 @@ func Load() (*Config, error) {
 		WCAClientSecret: getEnv("WCA_CLIENT_SECRET", ""),
 		WCARedirectURI:  getEnv("WCA_REDIRECT_URI", ""),
 		LogLevel:        getEnv("LOG_LEVEL", "info"),
+		UploadDir:       getEnv("UPLOAD_DIR", "/data/uploads"),
 	}
 
 	// Validate required variables

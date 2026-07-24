@@ -3,6 +3,7 @@ import Card from "@/app/components/Cards/Card";
 import Link from "next/link";
 import { badgeMap, PostsItem } from "../types";
 import Badge from "@/app/components/Badge";
+import { postImageUrl } from "../lib/postImage";
 
 type Props = {
   postsItem: PostsItem;
@@ -12,6 +13,7 @@ type Props = {
 
 const PostsListItem = ({ postsItem, checked, onToggle }: Props) => {
   const badge = badgeMap[postsItem.tag];
+  const imageUrl = postImageUrl(postsItem.image_path);
   return (
     <div>
       <Card className="p-5 rounded-lg">
@@ -30,6 +32,16 @@ const PostsListItem = ({ postsItem, checked, onToggle }: Props) => {
           {checked && <span className="text-white text-xl">✔</span>}
         </div>
         <Link href={`/posts/${postsItem.id}`} className="block">
+          {imageUrl && (
+            /* next/image helyett sima img: a kép a saját API-nkról jön, aminek a
+               domainje környezetenként más — így nem kell remotePatterns config. */
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img
+              src={imageUrl}
+              alt={postsItem.title}
+              className="mb-3 max-h-64 w-full rounded-md object-cover"
+            />
+          )}
           <Badge color={badge.color} label={badge.label} />
           <h3 className="font-display text-lg font-semibold mb-2">
             {postsItem.title}
