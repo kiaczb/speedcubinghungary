@@ -13,6 +13,10 @@ export const badgeMap = {
   event: { label: "Esemény", color: "bg-green-500" },
   competition: { label: "Verseny", color: "bg-red-500" },
   announcement: { label: "Közlemény", color: "bg-yellow-500" },
+  // A weekly-report job által generált heti riport (post_tag 'report').
+  // Kötelező bejegyzés: a badge-et a tag alapján keressük ki, enélkül a
+  // riport posztok renderelése elszállna.
+  report: { label: "Heti riport", color: "bg-purple-500" },
 } as const;
 
 export type TagTypes = keyof typeof badgeMap;

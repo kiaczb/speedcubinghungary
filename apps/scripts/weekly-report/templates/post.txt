@@ -1,0 +1,40 @@
+{# A weboldalra kerülő Post tartalma. SIMA SZÖVEG: a frontend a post.content-et
+   szövegként rendereli (nem HTML-ként), ezért itt nincs markup.
+   Ugyanabból az adathalmazból dolgozik, mint az e-mail (lásd reportData.py). #}
+EHETI VERSENYEREDMÉNYEK
+
+{% if competitions %}
+{% for comp in competitions %}
+{{ comp.CompetitionName }} {{ comp.CountryIso|flag_emoji }} — {{ convert_date(comp.From, comp.To) }}
+{% for competitor in comp.CompetitorWithRecords %}
+  {{ competitor.CompetitorName }}
+{% for event, records in competitor.Records.items() %}
+    {{ event }}: {% for record in records %}{{ record.Type }} {{ convert_result(record.Result, event) }} [{{ record.Badge }}]{{ ", " if not loop.last else "" }}{% endfor %}
+
+{% endfor %}
+{% endfor %}
+
+{% endfor %}
+{% else %}
+Ezen a héten nem volt magyar érdekeltségű versenyeredmény.
+
+{% endif %}
+{% if count_competitors %}
+VERSENYZŐI MÉRFÖLDKÖVEK
+
+{% for competitor in count_competitors %}
+  {{ competitor.name }} — {{ competitor.competition_count }} verseny
+{% if competitor.estimated_competition %}
+{# Inline kifejezés, nem {% if %} blokk: az lstrip_blocks levágná a behúzást. #}
+    {{ "Sikeresen teljesítve" if competitor.is_achieved else "Tervezve" }}: {{ competitor.estimated_competition }}{{ " (" ~ competitor.estimated_competition_date ~ ")" if competitor.estimated_competition_date else "" }}
+{% endif %}
+{% endfor %}
+
+{% endif %}
+{% if delegate_milestones %}
+DELEGÁLTI MÉRFÖLDKÖVEK
+
+{% for delegate in delegate_milestones %}
+  {{ delegate.name }} — {{ delegate.delegated_competitions_count }} verseny
+{% endfor %}
+{% endif %}

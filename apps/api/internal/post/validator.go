@@ -15,7 +15,8 @@ var (
 // isValidTag: a post_tag DB enum megengedett értékei.
 func isValidTag(t types.PostTag) bool {
 	switch t {
-	case types.TAG_EVENT, types.TAG_COMPETITION, types.TAG_NEWS, types.TAG_ANNOUNCEMENT:
+	case types.TAG_EVENT, types.TAG_COMPETITION, types.TAG_NEWS,
+		types.TAG_ANNOUNCEMENT, types.TAG_REPORT:
 		return true
 	}
 	return false

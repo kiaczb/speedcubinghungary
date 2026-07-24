@@ -222,6 +222,35 @@ Other Go conventions observed:
 - Styling is Tailwind v4 utility classes inline in JSX. UI copy is largely Hungarian.
 
 ### Python (weekly-report)
+- **The weekly report is published into the existing `posts` table**, not a
+  separate content store — so it reuses the normal listing/detail UI. Flow in
+  `main.py`: `BuildReportData()` (`reportData.py`) builds the dataset **once**,
+  then `WriteEmail()` renders it as HTML for email and
+  `PublishWeeklyReportPost()` (`reportPost.py`) renders the **same** data as
+  plain text (`templates/post.txt`) and inserts it with tag `report`.
+  Don't recompute the milestones separately — they hit the DB *and* the WCA API.
+- The post content must stay **plain text**: the frontend renders `post.content`
+  as text (`{post.content}`), so HTML would show up escaped. That's why there are
+  two Jinja environments in `templating.py` (`html_environment` for the email,
+  `text_environment` with `trim_blocks`/`lstrip_blocks` for the post). Note
+  `lstrip_blocks` strips indentation before `{% %}` tags — use inline
+  `{{ ... if ... else ... }}` expressions where indentation matters.
+- The reported period is a **rolling 7-day window** (run time − 1 week … run
+  time), *not* a calendar week — `competition.py` queries the WCA API with that
+  range. The post title must show that actual window; only the idempotency key
+  (`WeekStart`) is the calendar-week Monday. Don't conflate the two.
+- Idempotency lives in the DB: `posts.report_week` is UNIQUE and the insert uses
+  `ON CONFLICT (report_week) DO NOTHING`, so a second run in the same week is a
+  no-op. `main.py --force` switches it to `DO UPDATE` (overwrite in place) and
+  `--skip-email` bypasses SMTP — both are manual/test aids, never used by cron.
+  `insert_weekly_report_post` deliberately **raises** (unlike the other upserts,
+  which swallow) so a failed publish aborts the job loudly.
+- Order in `main.py` matters: the post + records are written **before** the
+  e-mail, so an SMTP failure (which now logs and re-raises → exit 1) cannot lose
+  the week's report.
+- Scheduling: no in-app scheduler — host cron calls
+  `infra/cron/weekly-report.sh` (`ENV=test|prod`), which runs the containerized
+  job via the `jobs` compose profile.
 - Package-per-concern under `apps/scripts/weekly-report/`
   (`CompetitionModels/`, `database/`, `templates/`), orchestrated by `main.py`.
   Uses `logging`, exits non-zero on failure. Reads the shared Postgres read-only
@@ -231,16 +260,20 @@ Other Go conventions observed:
 
 ## 7. Database schema & data flow
 
-Migrations: `000001_init_schema` and `000002_add_post_image` (adds the nullable
-`posts.image_path`). Applied
+Migrations: `000001_init_schema`, `000002_add_post_image` (nullable
+`posts.image_path`) and `000003_add_weekly_report_post` (adds the `'report'`
+`post_tag` enum value + the nullable `posts.report_week DATE UNIQUE`). Applied
 automatically on API startup via `migrate.New("file:///migrations", cfg.DatabaseURL)`
 (the prod image bakes `db/migrations` to `/migrations`).
 
 ```sql
-post_tag ENUM ('event','competition','news','announcement')
+post_tag ENUM ('event','competition','news','announcement','report')
 
 posts(id UUID PK, title TEXT, tag post_tag, content TEXT,
       image_path TEXT NULL,   -- 000002: '/uploads/<uuid>.<ext>' vagy NULL
+      report_week DATE NULL UNIQUE,  -- 000003: heti riport idempotencia-kulcsa
+                                     -- (a hét hétfője); normál posztnál NULL,
+                                     -- és a Postgres a NULL-okat külön veszi
       created_at TIMESTAMP default now(), updated_at TIMESTAMP default now())
 
 users(id SERIAL PK, wca_id VARCHAR(50) UNIQUE, name, email,
