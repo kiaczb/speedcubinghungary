@@ -51,7 +51,7 @@ def main(force=False, skip_email=False):
     # hetet) — a WCA lekérdezés is ezt az ablakot használja, és a poszt címe is
     # ezt a két dátumot mutatja.
     period_end = datetime.now()
-    period_start = period_end - timedelta(weeks=1.5)
+    period_start = period_end - timedelta(weeks=1)
 
     competitions_with_hungarians = GetCompetitionsWithHungarians(period_start)
 
