@@ -3,31 +3,19 @@ import Link from "next/link";
 import Section from "./Section";
 import { FaArrowRight } from "react-icons/fa";
 import { PostsItem } from "@/app/posts/types";
-
-export const mockPosts: PostsItem[] = [
-  {
-    id: "1",
-    tag: "news",
-    title: "Új verseny bejelentve",
-    content: "Részletek hamarosan...",
-    created_at: "2026-06-04T10:00:00Z",
-  },
-  {
-    id: "2",
-    tag: "event",
-    title: "Edzés hétvége",
-    content: "Közös gyakorlás szombaton.",
-    created_at: "2026-06-03T12:00:00Z",
-  },
-];
+import { postImageUrl } from "@/app/posts/lib/postImage";
 
 async function getLatestPosts(): Promise<PostsItem[]> {
-  return mockPosts;
   const baseUrl = process.env.SERVER_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
-  
-  const res = await fetch(`${baseUrl}/posts/latest`, { cache: 'no-store' });
-  if (!res.ok) throw new Error("Hírek lekérése sikertelen");
-  return res.json();
+
+  try {
+    const res = await fetch(`${baseUrl}/posts/latest`, { cache: 'no-store' });
+    if (!res.ok) return [];
+    return res.json();
+  } catch (error) {
+    console.error("Nem sikerült elérni a backendet:", error);
+    return [];
+  }
 }
 
 export default async function NewsSection() {
@@ -61,12 +49,9 @@ export default async function NewsSection() {
                 key={post.id}
                 type={post.tag}
                 post={post}
-                imageUrl="/wanna_start_cubing.jpg"
+                imageUrl={postImageUrl(post.image_path) ?? "/wanna_start_cubing.jpg"}
               />
             ))}
-            {/* <NewsCard type="news" imageUrl="/wanna_start_cubing.jpg" />
-            <NewsCard type="event" imageUrl="/wanna_start_cubing.jpg" />
-            <NewsCard type="competition" imageUrl="/wanna_start_cubing.jpg" /> */}
           </div>
 
           {/* Gomb */}
