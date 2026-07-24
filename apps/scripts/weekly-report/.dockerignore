@@ -6,3 +6,7 @@ venv/
 __pycache__/
 *.pyc
 *.pyo
+# Tesztek és teszteszközök nem kellenek a futtató image-be.
+test_*.py
+requirements-dev.txt
+.pytest_cache/
