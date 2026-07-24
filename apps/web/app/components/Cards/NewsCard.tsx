@@ -2,7 +2,6 @@ import React from "react";
 import Card from "./Card";
 import Link from "next/link";
 import Badge from "../Badge";
-import Image from "next/image";
 import { badgeMap, PostsItem, TagTypes } from "@/app/posts/types";
 
 // Dictionary a típusokhoz
@@ -27,7 +26,16 @@ const NewsCard: React.FC<NewsCardProps> = ({ type, imageUrl, post }) => {
           />
 
           {imageUrl && (
-            <Image src={imageUrl} alt="image" width={350} height={100} />
+            /* next/image helyett sima img: a kép lehet a saját API-nkról (posztkép,
+               környezetenként más domain) vagy a public mappából — mindkettőt
+               remotePatterns nélkül ki kell tudni szolgálni. */
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img
+              src={imageUrl}
+              alt={post.title}width={350}
+    height={100}
+    className="max-w-full object-cover"
+            />
           )}
         </div>
       </div>
