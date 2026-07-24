@@ -3,6 +3,7 @@ package router
 
 import (
 	"database/sql"
+	"net/http"
 	"speedcubinghungary/internal/auth"
 	"speedcubinghungary/internal/competition"
 	"speedcubinghungary/internal/config"
@@ -27,11 +28,23 @@ func New(db *sql.DB, cfg *config.Config) *chi.Mux {
 	// Post routes
 	repo := post.NewPostgresRepository(db)
 	service := post.NewService(repo)
-	handler := post.NewHandler(service)
+	handler := post.NewHandler(service, cfg.UploadDir)
 
 	r.Get("/posts", handler.GetPosts)
 	r.Get("/posts/{id}", handler.GetPostByID)
 	r.Get("/posts/latest", handler.GetLatestPosts)
+
+	// Feltöltött posztképek kiszolgálása a volume-ról (publikus, csak olvasás).
+	// A globális middleware.JSON minden válaszra application/json-t állít, és a Go
+	// ServeContent NEM írja felül a már beállított Content-Type-ot — ezért itt
+	// töröljük, hogy a fájlszerver a valódi képtípust tudja beállítani.
+	fileServer := http.FileServer(http.Dir(cfg.UploadDir))
+	r.Handle("/uploads/*", http.StripPrefix("/uploads/", http.HandlerFunc(
+		func(w http.ResponseWriter, req *http.Request) {
+			w.Header().Del("Content-Type")
+			fileServer.ServeHTTP(w, req)
+		},
+	)))
 
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.AuthMiddlewareWithConfig(cfg))

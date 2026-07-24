@@ -231,7 +231,8 @@ Other Go conventions observed:
 
 ## 7. Database schema & data flow
 
-Single migration so far: `db/migrations/000001_init_schema.{up,down}.sql`. Applied
+Migrations: `000001_init_schema` and `000002_add_post_image` (adds the nullable
+`posts.image_path`). Applied
 automatically on API startup via `migrate.New("file:///migrations", cfg.DatabaseURL)`
 (the prod image bakes `db/migrations` to `/migrations`).
 
@@ -239,6 +240,7 @@ automatically on API startup via `migrate.New("file:///migrations", cfg.Database
 post_tag ENUM ('event','competition','news','announcement')
 
 posts(id UUID PK, title TEXT, tag post_tag, content TEXT,
+      image_path TEXT NULL,   -- 000002: '/uploads/<uuid>.<ext>' vagy NULL
       created_at TIMESTAMP default now(), updated_at TIMESTAMP default now())
 
 users(id SERIAL PK, wca_id VARCHAR(50) UNIQUE, name, email,
@@ -276,7 +278,8 @@ chi router in `internal/router/router.go`. Global middleware: `middleware.JSON`
 | GET  | `/posts` | public | `post.GetPosts` |
 | GET  | `/posts/{id}` | public | `post.GetPostByID` |
 | GET  | `/posts/latest` | public | `post.GetLatestPosts` (limit 3) |
-| POST | `/posts` | JWT + `admin` | `post.CreatePost` |
+| POST | `/posts` | JWT + `admin` | `post.CreatePost` (accepts **multipart/form-data** with an optional `image` file, or the legacy JSON body) |
+| GET  | `/uploads/*` | public | static file server over `cfg.UploadDir` (post images) |
 | DELETE | `/posts` | JWT + `admin` | `post.DeletePosts` (body `{ids:[]}`) |
 | GET  | `/competitions/upcoming` | public | `competition.GetUpcoming` (HU only) |
 | GET  | `/login/callback` | public | `auth.LoginCallback` (WCA OAuth redirect target) |
@@ -334,6 +337,10 @@ Other important vars:
   `DB_PASSWORD`, `DB_NAME` (separate from `DATABASE_URL`, which migrate uses).
 - `DEPLOYMENT` (`development`/`test`/`production`) — controls cookie `Secure` +
   helpers. `LOG_LEVEL`. `NODE_ENV`.
+- `UPLOAD_DIR` — where post images are written (default `/data/uploads`). Not
+  required in any env file; the base compose mounts the `uploads_data` named
+  volume there. Deliberately **not** under `/app`, because the dev override
+  bind-mounts the source tree over `/app` and would shadow it.
 - Web: `SERVER_API_URL` (server→api, Docker service name), `NEXT_PUBLIC_API_URL`
   (browser→api), `NEXT_PUBLIC_WCA_CLIENT_ID`, `NEXT_PUBLIC_WCA_REDIRECT_URI`,
   `NEXT_PUBLIC_BACKEND_LOGIN`. **`NEXT_PUBLIC_*` are baked into the browser bundle
@@ -497,6 +504,15 @@ links in `app/layout.tsx` if needed. **Read the Next 16 docs first** (§3 warnin
 - JSON field casing: DB models/`post` use `snake_case`; the `competition` API DTO
   intentionally uses `camelCase` to match the web client. Match the neighboring
   file, don't unify blindly.
+- ⚠️ The global `middleware.JSON` sets `Content-Type: application/json` on **every**
+  response, and Go's `ServeContent` does **not** override an already-set
+  Content-Type. Any non-JSON route must therefore `w.Header().Del("Content-Type")`
+  before serving (see the `/uploads/*` file server in `router.New`), otherwise
+  images/files go out mislabeled as JSON.
+- Uploaded images: the MIME type is detected from the file **contents**
+  (`http.DetectContentType`), never from the client's Content-Type header, and the
+  stored filename is a generated UUID — the client's filename is discarded to
+  prevent path traversal. Limit is 5 MiB (`post.MaxImageSize`).
 - Constructor naming is inconsistent across packages (`NewPostgresRepository` vs
   `postgresRepository`, `Service` interface in `auth` vs concrete struct in `post`).
   When editing a package, match **that package's** existing style.

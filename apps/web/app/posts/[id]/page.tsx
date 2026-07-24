@@ -1,6 +1,7 @@
 import React from "react";
 import { PostsItem } from "../types";
 import { notFound } from "next/dist/client/components/navigation";
+import { postImageUrl } from "../lib/postImage";
 
 type PageProps = {
   params: Promise<{
@@ -26,9 +27,21 @@ export default async function PostPage({ params }: PageProps) {
     notFound(); // 404 oldal
   }
 
+  const imageUrl = postImageUrl(post.image_path);
+
   return (
     <article className="max-w-3xl mx-auto py-10">
       <h1 className="text-3xl font-bold mb-4">{post.title}</h1>
+      {imageUrl && (
+        /* next/image helyett sima img: a kép a saját API-nkról jön, aminek a
+           domainje környezetenként más — így nem kell remotePatterns config. */
+        /* eslint-disable-next-line @next/next/no-img-element */
+        <img
+          src={imageUrl}
+          alt={post.title}
+          className="mb-6 w-full rounded-lg object-cover"
+        />
+      )}
       <div className="prose">{post.content}</div>
     </article>
   );
