@@ -198,10 +198,11 @@ export default function CreatePostModal({ onClose }: Props) {
               value={content}
               onChange={(e) => setContent(e.target.value)}
               rows={7}
-              placeholder="A poszt tartalma..."
-              className="w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800"
+              placeholder={"A poszt tartalma...\n\n## Alcím\n**félkövér**, *dőlt*, [link](https://...)\n\n- felsorolás"}
+              className="w-full rounded-md border border-gray-300 px-3 py-2 font-mono text-sm focus:border-blue-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800"
             />
             <p className="mt-1 text-xs text-gray-500">
+              Markdown támogatott (címek, listák, táblázatok, **félkövér**…).{" "}
               {content.trim().length} / {MIN_CONTENT_LENGTH} karakter minimum
             </p>
           </div>

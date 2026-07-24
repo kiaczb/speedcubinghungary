@@ -10,12 +10,13 @@ sablonrenderelés tiszta függvények (a tényleges INSERT-et a Postgres UNIQUE
 megszorítása védi, lásd db/migrations/000003).
 """
 
+import json
 from datetime import date, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
 
-from reportData import FilterCompetitions
+from reportData import BuildReportData
 from reportPost import BuildTitle, RenderPostContent, WeekStart
 
 
@@ -71,7 +72,7 @@ def test_build_title_does_not_claim_the_calendar_week():
     assert "2026. 07. 20." not in title  # a naptári hét hétfője sem
 
 
-# --- Sablonrenderelés ---------------------------------------------------------
+# --- JSON payload renderelés --------------------------------------------------
 
 def _competition(name="Miskolc Open 2026", iso="HU", is_hungarian=True, competitors=None):
     return SimpleNamespace(
@@ -92,27 +93,18 @@ def _competitor(name="Teszt Elek", records=None):
     )
 
 
-def test_render_content_without_results():
+def test_render_content_is_valid_json():
+    """A riport content JSON (a frontend WeeklyReportView komponense rendereli)."""
     content = RenderPostContent(
         {"competitions": [], "count_competitors": [], "delegate_milestones": []}
     )
 
-    assert "Ezen a héten nem volt magyar érdekeltségű versenyeredmény." in content
-
-
-def test_render_content_is_plain_text_not_html():
-    """A frontend a post.content-et SZÖVEGKÉNT rendereli, ezért markup nem kerülhet bele."""
-    content = RenderPostContent({
-        "competitions": [
-            _competition(competitors=[
-                _competitor(records={"333": [SimpleNamespace(Type="single", Result=642, Badge="NR")]})
-            ])
-        ],
-        "count_competitors": [],
-        "delegate_milestones": [],
-    })
-
-    assert "<" not in content and ">" not in content
+    payload = json.loads(content)  # nem dobhat
+    assert payload == {
+        "competitions": [],
+        "competitorMilestones": [],
+        "delegateMilestones": [],
+    }
 
 
 def test_render_content_includes_results_and_milestones():
@@ -136,38 +128,61 @@ def test_render_content_includes_results_and_milestones():
         ],
     })
 
-    assert "Miskolc Open 2026" in content
-    assert "Teszt Elek" in content
-    assert "6.42" in content  # ConvertResult: 642 -> "6.42"
-    assert "NR" in content
-    assert "Nagy Anna" in content
-    assert "Budapest Open 2026" in content
-    assert "Kiss Péter" in content
+    payload = json.loads(content)
+
+    comp = payload["competitions"][0]
+    assert comp["name"] == "Miskolc Open 2026"
+    assert comp["from"] == "2026-07-18"
+    result = comp["competitors"][0]["results"][0]
+    assert result == {"event": "333", "type": "single", "result": "6.42", "badge": "NR"}
+
+    assert payload["competitorMilestones"][0]["name"] == "Nagy Anna"
+    assert payload["competitorMilestones"][0]["estimated"] == "Budapest Open 2026"
+    assert payload["delegateMilestones"][0] == {"name": "Kiss Péter", "count": 49}
 
 
-# --- Versenyszűrés (az e-mail és a poszt is ezt használja) --------------------
+def test_every_competitor_included_even_without_records():
+    """A user kérése: MINDEN versenyző jelenjen meg, ne csak a rekordosok. A
+    rekord nélküli versenyző neve is bekerül, üres results-szal."""
+    content = RenderPostContent({
+        "competitions": [
+            _competition(competitors=[
+                _competitor(name="Rekorder", records={"333": [SimpleNamespace(Type="single", Result=642, Badge="NR")]}),
+                _competitor(name="Nincs rekordja", records={}),
+            ])
+        ],
+        "count_competitors": [],
+        "delegate_milestones": [],
+    })
 
-def test_filter_keeps_non_hungarian_competitions_as_is():
-    without_records = _competitor(records={})
-    comp = _competition(is_hungarian=False, competitors=[without_records])
+    competitors = json.loads(content)["competitions"][0]["competitors"]
+    names = [c["name"] for c in competitors]
 
-    assert FilterCompetitions([comp]) == [comp]
-
-
-def test_filter_drops_hungarian_competition_without_record_holders():
-    comp = _competition(is_hungarian=True, competitors=[_competitor(records={})])
-
-    assert FilterCompetitions([comp]) == []
+    assert names == ["Rekorder", "Nincs rekordja"]
+    assert competitors[0]["results"]  # a rekordosnak van eredménye
+    assert competitors[1]["results"] == []  # a rekord nélkülinek üres, de ott a neve
 
 
-def test_filter_narrows_hungarian_competition_to_record_holders():
-    with_records = _competitor(
-        name="Rekorder", records={"333": [SimpleNamespace(Type="single", Result=642, Badge="NR")]}
-    )
-    without_records = _competitor(name="Nincs rekordja", records={})
-    comp = _competition(is_hungarian=True, competitors=[with_records, without_records])
+# --- BuildReportData: nincs szűrés, minden versenyző marad --------------------
 
-    result = FilterCompetitions([comp])
+def test_build_report_data_keeps_all_competitors(monkeypatch):
+    """A BuildReportData ne szűrjön rekordra — a rekord nélküli versenyzők is
+    maradjanak (a mérföldkő-lekérdezéseket kimockoljuk, hogy ne hívjanak DB-t)."""
+    import reportData
 
-    assert result == [comp]
-    assert comp.CompetitorWithRecords == [with_records]
+    monkeypatch.setattr(reportData, "GetImportantCompetitors", lambda: [])
+    monkeypatch.setattr(reportData, "GetImportantDelegates", lambda: [])
+
+    comp = _competition(is_hungarian=True, competitors=[
+        _competitor(name="Rekorder", records={"333": [SimpleNamespace(Type="single", Result=642, Badge="NR")]}),
+        _competitor(name="Nincs rekordja", records={}),
+    ])
+
+    data = BuildReportData([comp])
+
+    assert data["competitions"] == [comp]
+    # A versenyzőlista érintetlen — semmit nem szűrtünk ki.
+    assert [c.CompetitorName for c in data["competitions"][0].CompetitorWithRecords] == [
+        "Rekorder",
+        "Nincs rekordja",
+    ]

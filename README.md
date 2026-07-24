@@ -150,6 +150,13 @@ Step 3 deliberately reuses the existing Post system rather than adding a paralle
 content store, so the report inherits the normal listing (`/posts`), the detail
 page (`/posts/<id>`) and the badge rendering with no extra UI.
 
+The report post stores its data as **JSON** (`reportPayload.py`) and the site
+renders it with a dedicated, styled component (`WeeklyReportView`) — competition
+cards, result chips, milestones. Normal (admin) posts are Markdown; only the
+report uses the structured payload, selected by `tag === "report"`. **Every**
+Hungarian-interest competitor is listed, not just record-setters (those without a
+record show as a name only).
+
 **Reported period:** the job queries a **rolling 7-day window** (run time − 1 week
 … run time), not a calendar week. The post title shows exactly that window.
 
