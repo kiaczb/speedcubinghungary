@@ -67,7 +67,7 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 		"user_id": user.UserID,
 		"wca_id":  user.WCAID,
 		"name":    user.Name,
-		//"avatarURL": user.AvatarURL,
+		"avatarURL": user.AvatarURL,
 		"roles": user.Roles,
 	}
 

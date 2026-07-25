@@ -36,8 +36,18 @@ const LoginButton = () => {
       <div>
         <button
           onClick={logout}
-          className="p-3 bg-green-500 rounded-md text-white text-center flex items-center justify-between hover:bg-green-600 transition"
+          className="p-3 bg-green-500 rounded-md text-white text-center flex items-center justify-center gap-2 hover:bg-green-600 transition"
         >
+          {user.avatarURL && (
+            /* next/image helyett sima img: a kép a WCA-ról jön (külső domain),
+               remotePatterns config nélkül így szolgálható ki. */
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img
+              src={user.avatarURL}
+              alt=""
+              className="h-6 w-6 rounded-full object-cover"
+            />
+          )}
           <span>Kijelentkezés ({user.name})</span>
         </button>
       </div>

@@ -10,7 +10,7 @@ type User struct {
 	WCAID string `db:"wca_id"`
 	Name  string `db:"name"`
 	Email string `db:"email"`
-	//AvatarURL string	`db:"avatar_url"`
+	AvatarURL string `db:"avatar_url"` // WCA profilkép URL-je (nullable a DB-ben)
 	Roles            []types.Role `db:"roles"` // JSONB vagy TEXT[]
 	CompetitionCount int          `db:"competition_count"`
 	DelegatedCount   int          `db:"delegated_count"`

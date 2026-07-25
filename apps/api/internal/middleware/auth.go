@@ -20,7 +20,7 @@ type UserClaims struct {
 	UserID int    `json:"user_id"`
 	WCAID  string `json:"wca_id"`
 	Name   string `json:"name"`
-	//AvatarURL string   `json:"avatarURL"`
+	AvatarURL string `json:"avatarURL"`
 	Roles []types.Role `json:"roles"` // RBAC miatt string
 	jwt.RegisteredClaims
 }
