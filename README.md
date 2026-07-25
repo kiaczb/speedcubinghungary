@@ -120,10 +120,11 @@ database starts empty — migrations are schema-only and contain no seed data.
 
 ## Secrets & configuration
 
-All configuration is environment-driven. **No secrets or environment-specific
-values are committed** — only the `.env*.example` templates are tracked; every
-real `.env` file (root `.env.dev`/`.env.test`/`.env.prod` and the Python job's
-`apps/scripts/weekly-report/.env`) is git-ignored.
+All configuration is environment-driven. **One env file per environment, shared by
+the whole stack** — there are no per-app `.env` files. Only the `.env*.example`
+templates are tracked; the real root `.env.dev`/`.env.test`/`.env.prod` are
+git-ignored, and the Python weekly-report job reads the same root file (not a
+separate one).
 
 - **Development:** copy `.env.dev.example` → `.env.dev` locally.
 - **Test / Production:** by design, the real `.env.test` / `.env.prod` live
@@ -205,12 +206,18 @@ config is shared. Inside compose the job reaches the DB over the internal networ
 
 ### Standalone (local, no Docker)
 
+Uses the **same root `.env.dev`** as the rest of the stack — no per-app `.env`.
+`config.py` detects it isn't in a container and connects to the DB on
+`localhost:5432` (which the dev compose exposes), so start the DB first.
+
 ```bash
+docker compose -f infra/docker-compose.yml -f infra/docker-compose.dev.yml \
+  --env-file .env.dev up -d db          # DB reachable on localhost:5432
+
 cd apps/scripts/weekly-report
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env     # git-ignored; fill in real values, never commit it
-python main.py
+python main.py                          # ENV defaults to dev; ENV=test for .env.test
 ```
 
 ### Scheduling (cron)
@@ -242,17 +249,20 @@ pip install -r requirements-dev.txt
 python -m pytest
 ```
 
-Covered: the weekly idempotency key, the plain-text rendering (including that it
-stays markup-free), and the competition filtering shared by the email and the post.
-CI runs these on every push (`Scripts (weekly-report tests)` job).
+Covered: the weekly idempotency key, the title showing the actual queried window,
+and the JSON payload (valid JSON, results + milestones, and that every competitor
+is included — not just record-setters). CI runs these on every push
+(`Scripts (weekly-report tests)` job).
 
 ### Configuration
 
-`config.py` loads a local `.env` (via `python-dotenv`) when present and validates
-required variables fail-fast — mirroring `apps/api/internal/config/config.go`. In
-the container no `.env` is baked in (see `.dockerignore`); the values arrive from
-the environment instead. All sensitive values (`EMAIL_FROM`, `EMAIL_TO`,
-`EMAIL_APP_PASSWORD`, `DATABASE_URL` / `DB_*`) come from the environment, never
-from hardcoded literals. In a test/staging context, point `EMAIL_TO` at a fixed
-test inbox so real recipients are never emailed. If a real credential was ever
-pasted into a tracked file, rotate it.
+`config.py` reads the shared root `.env.<ENV>` (`ENV` selects it, default `dev`)
+via `python-dotenv` and validates required variables fail-fast — mirroring
+`apps/api/internal/config/config.go`. It detects whether it runs in a container
+(`/.dockerenv`): in a container it uses the root file's `DB_HOST=db` /
+`DATABASE_URL`; on the host it ignores `DATABASE_URL` and connects to
+`localhost:5432` instead (the container-internal `db` host isn't reachable there).
+In the container the root file isn't copied in, so `python-dotenv` no-ops and the
+values arrive from the compose `--env-file`. All sensitive values come from the
+environment, never from hardcoded literals. In a test/staging context, point
+`EMAIL_TO` at a fixed test inbox so real recipients are never emailed.
