@@ -10,6 +10,7 @@ var (
 	ErrInvalidTag	= errors.New("invalid tag")
 	ErrEmptyTitle   = errors.New("title cannot be empty")
 	ErrShortContent = errors.New("content must be at least 20 characters")
+	ErrPostNotFound = errors.New("post not found")
 )
 
 // isValidTag: a post_tag DB enum megengedett értékei.

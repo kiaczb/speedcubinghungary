@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { badgeMap, TagTypes } from "../types";
+import { badgeMap, PostsItem, TagTypes } from "../types";
+import { postImageUrl } from "../lib/postImage";
 
 // A backend korlátaival egyezzenek, hogy a hibát ne csak a szerver jelezze:
 // lásd apps/api/internal/post/upload.go és validator.go
@@ -11,17 +12,26 @@ const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gi
 
 type Props = {
   onClose: () => void;
+  // Ha meg van adva, a modal SZERKESZTÉS módban indul (PUT /posts/{id}),
+  // különben új posztot hoz létre (POST /posts).
+  post?: PostsItem;
 };
 
-export default function CreatePostModal({ onClose }: Props) {
+export default function CreatePostModal({ onClose, post }: Props) {
   const router = useRouter();
   const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 
-  const [title, setTitle] = useState("");
-  const [tag, setTag] = useState<TagTypes>("news");
-  const [content, setContent] = useState("");
+  const isEdit = Boolean(post);
+  const existingImageUrl = postImageUrl(post?.image_path);
+
+  const [title, setTitle] = useState(post?.title ?? "");
+  const [tag, setTag] = useState<TagTypes>(post?.tag ?? "news");
+  const [content, setContent] = useState(post?.content ?? "");
   const [image, setImage] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  // Szerkesztéskor: igaz, ha a felhasználó a MEGLÉVŐ képet törölni akarja
+  // (új kép feltöltése nélkül). Ilyenkor remove_image=true megy a backendnek.
+  const [removeExisting, setRemoveExisting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -29,6 +39,10 @@ export default function CreatePostModal({ onClose }: Props) {
   // Az aktuális preview objectURL-je. Ref-ben tartjuk, hogy csere/unmount esetén
   // fel tudjuk szabadítani anélkül, hogy effectben hívnánk setState-et.
   const objectUrlRef = useRef<string | null>(null);
+
+  // Az előnézetben megjelenő kép: az újonnan választott fájl elsőbbséget élvez,
+  // különben a meglévő kép (ha van és nem törölték).
+  const shownImage = previewUrl ?? (removeExisting ? null : existingImageUrl);
 
   // Escape-re zárjon
   useEffect(() => {
@@ -78,11 +92,16 @@ export default function CreatePostModal({ onClose }: Props) {
       applyImage(null);
       return;
     }
+    // Új kép esetén a "meglévő törlése" jelző már lényegtelen (a feltöltés úgyis
+    // felülírja), állítsuk vissza, hogy a submit logika egyértelmű legyen.
+    setRemoveExisting(false);
     applyImage(file);
   };
 
   const clearImage = () => {
     applyImage(null);
+    // Szerkesztéskor a meglévő képet is töröljük (remove_image=true a submitben).
+    if (isEdit) setRemoveExisting(true);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -105,19 +124,29 @@ export default function CreatePostModal({ onClose }: Props) {
     formData.append("title", title.trim());
     formData.append("tag", tag);
     formData.append("content", content.trim());
-    if (image) formData.append("image", image);
+    if (image) {
+      formData.append("image", image);
+    } else if (isEdit && removeExisting) {
+      // Nincs új kép, de a meglévőt törölni kell.
+      formData.append("remove_image", "true");
+    }
 
     setSubmitting(true);
     try {
-      const res = await fetch(`${API_URL}/posts`, {
-        method: "POST",
-        body: formData,
-        credentials: "include", // JWT cookie küldése
-      });
+      const res = await fetch(
+        isEdit ? `${API_URL}/posts/${post!.id}` : `${API_URL}/posts`,
+        {
+          method: isEdit ? "PUT" : "POST",
+          body: formData,
+          credentials: "include", // JWT cookie küldése
+        },
+      );
 
       if (!res.ok) {
         const message = await res.text();
-        throw new Error(message || "Hiba a poszt létrehozásakor");
+        throw new Error(
+          message || (isEdit ? "Hiba a poszt mentésekor" : "Hiba a poszt létrehozásakor"),
+        );
       }
 
       router.refresh();
@@ -144,7 +173,7 @@ export default function CreatePostModal({ onClose }: Props) {
       >
         <div className="mb-5 flex items-start justify-between">
           <h2 id="create-post-title" className="text-2xl font-bold">
-            Új poszt létrehozása
+            {isEdit ? "Poszt szerkesztése" : "Új poszt létrehozása"}
           </h2>
           <button
             type="button"
@@ -219,13 +248,13 @@ export default function CreatePostModal({ onClose }: Props) {
               onChange={handleImageChange}
               className="w-full text-sm file:mr-3 file:rounded-md file:border-0 file:bg-blue-500 file:px-4 file:py-2 file:text-white hover:file:bg-blue-600"
             />
-            {previewUrl && (
+            {shownImage && (
               <div className="mt-3">
                 {/* next/image helyett sima img: a kép a saját API-nkról jön, aminek
                     a domainje környezetenként más — így nem kell remotePatterns. */}
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={previewUrl}
+                  src={shownImage}
                   alt="Előnézet"
                   className="max-h-56 w-auto rounded-md border border-gray-200 dark:border-gray-700"
                 />
@@ -260,7 +289,13 @@ export default function CreatePostModal({ onClose }: Props) {
               disabled={submitting}
               className="rounded-md bg-blue-500 px-4 py-2 text-white hover:bg-blue-600 disabled:opacity-50"
             >
-              {submitting ? "Létrehozás..." : "Létrehozás"}
+              {submitting
+                ? isEdit
+                  ? "Mentés..."
+                  : "Létrehozás..."
+                : isEdit
+                  ? "Mentés"
+                  : "Létrehozás"}
             </button>
           </div>
         </form>

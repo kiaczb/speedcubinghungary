@@ -41,6 +41,7 @@ export default function PostsListClient({ posts }: Props) {
             postsItem={post}
             checked={selectedIds.includes(post.id)}
             onToggle={() => toggle(post.id)}
+            isAdmin={isAdmin}
           />
         ))}
       </div>
