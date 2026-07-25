@@ -13,7 +13,6 @@ type Repository interface {
 	Create(post Post) error
 	Update(post Post) error
 	Delete(ids []string) error
-
 }
 
 
@@ -112,11 +111,26 @@ func (r *PostgresRepository) Delete(ids []string) error {
 }
 
 func (r *PostgresRepository) Update(p Post) error {
-	_, err := r.db.Exec(`
+	// A report_week-et szándékosan nem írjuk felül: az a heti riport idempotencia-
+	// kulcsa, a szerkesztés csak a megjelenített mezőket érinti.
+	res, err := r.db.Exec(`
 		UPDATE posts
 		SET tag = $2, title = $3, content = $4, image_path = NULLIF($5, ''), updated_at = now()
 		WHERE id = $1
 	`, p.ID, p.Tag, p.Title, p.Content, p.ImagePath)
+	if err != nil {
+		return err
+	}
 
-	return err
+	// Ha nincs ilyen id, 0 sor módosul — ezt 404-ként akarjuk jelezni, nem néma
+	// sikerként (a handler az ErrPostNotFound-ot fordítja HTTP státuszra).
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return ErrPostNotFound
+	}
+
+	return nil
 }

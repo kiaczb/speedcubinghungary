@@ -50,6 +50,7 @@ func New(db *sql.DB, cfg *config.Config) *chi.Mux {
 		r.Use(middleware.AuthMiddlewareWithConfig(cfg))
 		r.Use(middleware.RBACMiddleware(types.ROLE_ADMIN))
 		r.Post("/posts", handler.CreatePost)
+		r.Put("/posts/{id}", handler.UpdatePost)
 		r.Delete("/posts", handler.DeletePosts)
 	})
 

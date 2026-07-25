@@ -41,10 +41,10 @@ func (s *Service) DeletePosts(ids []string) error {
 }
 func (s *Service) UpdatePost(id string, tag types.PostTag, title, content, imagePath string) error {
 	post := Post{
-		ID:      id,
-		Tag: tag,
-		Title:   title,
-		Content: content,
+		ID:        id,
+		Tag:       tag,
+		Title:     title,
+		Content:   content,
 		ImagePath: imagePath,
 	}
 	if err := ValidatePost(post); err != nil {
