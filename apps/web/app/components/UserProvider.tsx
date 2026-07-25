@@ -6,6 +6,7 @@ export interface MeResponse {
   user_id: number;
   wca_id: string;
   name: string;
+  avatarURL?: string;
   roles: string[];
 }
 
