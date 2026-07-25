@@ -281,10 +281,12 @@ Other Go conventions observed:
 ## 7. Database schema & data flow
 
 Migrations: `000001_init_schema`, `000002_add_post_image` (nullable
-`posts.image_path`) and `000003_add_weekly_report_post` (adds the `'report'`
-`post_tag` enum value + the nullable `posts.report_week DATE UNIQUE`). Applied
-automatically on API startup via `migrate.New("file:///migrations", cfg.DatabaseURL)`
-(the prod image bakes `db/migrations` to `/migrations`).
+`posts.image_path`), `000003_add_weekly_report_post` (adds the `'report'`
+`post_tag` enum value + the nullable `posts.report_week DATE UNIQUE`) and
+`000004_add_user_avatar` (nullable `users.avatar_url TEXT` — the WCA profile
+picture URL). Applied automatically on API startup via
+`migrate.New("file:///migrations", cfg.DatabaseURL)` (the prod image bakes
+`db/migrations` to `/migrations`).
 
 ```sql
 post_tag ENUM ('event','competition','news','announcement','report')
@@ -297,6 +299,7 @@ posts(id UUID PK, title TEXT, tag post_tag, content TEXT,
       created_at TIMESTAMP default now(), updated_at TIMESTAMP default now())
 
 users(id SERIAL PK, wca_id VARCHAR(50) UNIQUE, name, email,
+      avatar_url TEXT NULL,   -- 000004: WCA profilkép URL-je (nullable)
       roles JSONB default '[]', competition_count INT, delegated_count INT,
       created_at, updated_at)
 
@@ -332,6 +335,7 @@ chi router in `internal/router/router.go`. Global middleware: `middleware.JSON`
 | GET  | `/posts/{id}` | public | `post.GetPostByID` |
 | GET  | `/posts/latest` | public | `post.GetLatestPosts` (limit 3) |
 | POST | `/posts` | JWT + `admin` | `post.CreatePost` (accepts **multipart/form-data** with an optional `image` file, or the legacy JSON body) |
+| PUT  | `/posts/{id}` | JWT + `admin` | `post.UpdatePost` (multipart or JSON; keeps the current image unless a new `image` is sent or `remove_image=true`; 404 if the id doesn't exist) |
 | GET  | `/uploads/*` | public | static file server over `cfg.UploadDir` (post images) |
 | DELETE | `/posts` | JWT + `admin` | `post.DeletePosts` (body `{ids:[]}`) |
 | GET  | `/competitions/upcoming` | public | `competition.GetUpcoming` (HU only) |
@@ -352,8 +356,12 @@ Flow:
    `redirect_uri`, `scope=public email manage_competitions`, and `state=<pathname>`.
 2. WCA redirects back to the **API** `/login/callback?code=...&state=...`.
 3. `auth.LoginCallback` exchanges the code for a WCA access token, calls WCA `/me`,
-   **upserts** the user, mints an HS256 JWT (`UserClaims`: user_id, wca_id, name,
-   roles; 1-hour expiry), and sets it as cookie `auth`.
+   **upserts** the user (including the WCA `avatar.url` → `users.avatar_url`), mints
+   an HS256 JWT (`UserClaims`: user_id, wca_id, name, avatarURL, roles; 1-hour
+   expiry), and sets it as cookie `auth`. ⚠️ The JWT is minted with
+   `auth.UserClaims` but **parsed back** with `middleware.UserClaims` — both structs
+   must carry the same `json` tags or a field silently drops on round-trip (that's
+   why `avatarURL` exists in both). `/me` echoes the claim's `avatarURL`.
 4. Cookie is `HttpOnly`, `SameSite=Strict`, `Path=/`, `MaxAge=3600`,
    `Secure` unless `DEPLOYMENT=development`. Then redirects to
    `FRONTEND_URL + state` (state is sanitized: must start with a single `/`).
@@ -406,18 +414,22 @@ Other important vars:
   `EMAIL_FROM`/`EMAIL_TO`/`EMAIL_APP_PASSWORD` now live in the root
   `.env.<env>` templates too (defaulted to empty in the base compose so the main
   stack stays warning-free) — the job validates them fail-fast at runtime.
-- Weekly-report job (Python): configured via `apps/scripts/weekly-report/.env`
-  (git-ignored; template `.env.example`), loaded by `config.py` via
-  `python-dotenv` with fail-fast validation mirroring
-  `apps/api/internal/config/config.go`. It can run **either** standalone (venv +
-  local `.env`) **or** as a compose service behind the `jobs` profile (see below).
-  In the container no `.env` is baked in (`.dockerignore`); `load_dotenv` no-ops
-  and the `EMAIL_*` / `DB_*` values come from the compose `--env-file` instead.
-  All secrets (`EMAIL_FROM`, `EMAIL_TO`, `EMAIL_APP_PASSWORD`,
-  `DATABASE_URL`/`DB_*`) come from the environment; **never hardcode them in
+- Weekly-report job (Python): **uses the same root `.env.<ENV>` file as the rest
+  of the stack — no per-app `.env`.** `config.py` reads `ENV` (default `dev`) and
+  `load_dotenv`s the repo-root `.env.<ENV>`, with fail-fast validation mirroring
+  `apps/api/internal/config/config.go`. It runs **either** standalone (venv on the
+  host) **or** as a compose service behind the `jobs` profile. ⚠️ DB host caveat:
+  the root file targets the Docker network (`DB_HOST=db`, `DATABASE_URL=...@db`),
+  which only resolves inside a container. `config.py` detects whether it runs in a
+  container (`/.dockerenv`): in a container it uses the root file's `DB_HOST`/
+  `DATABASE_URL` as-is; **on the host it ignores `DATABASE_URL` and connects to
+  `localhost`** (the dev compose exposes the DB there). In the container no env
+  file is copied in (`.dockerignore` + build context is the job dir, not the repo
+  root), so `load_dotenv` no-ops and the values arrive from the compose
+  `--env-file`. All secrets come from the environment; **never hardcode them in
   `config.py` or any tracked file**. Point `EMAIL_TO` at a fixed test inbox in
-  test/staging. Neither run path is scheduled yet — add a host cron / systemd
-  timer when automatic weekly runs are wanted.
+  test/staging. Not scheduled by default — host cron runs
+  `infra/cron/weekly-report.sh` (`ENV=test|prod`).
 
 **Secret-delivery model (deliberate choice):** test/prod deploys use a
 server-local `.env.test`/`.env.prod` placed once during server setup (git-ignored,
@@ -458,13 +470,10 @@ links in `app/layout.tsx` if needed. **Read the Next 16 docs first** (§3 warnin
   untracked/added in git status — the project is mid-setup; commit history is thin.
 - `apps/web/app/layout.tsx` still has the default `create-next-app` `<title>` /
   metadata — likely should be updated.
-- The navbar links to `/blog`, but the posts route is `/posts` (no `/blog` page
-  exists) — likely a naming mismatch to reconcile.
+- The navbar/footer "Blog" link now points to `/posts` (there is no `/blog`
+  route); the user-facing label stayed "Blog".
 - `auth/service.go` / `auth/handler.go` bypass the `config` struct and read env
-  directly (§9). Some `AvatarURL` fields are commented out across auth structs —
-  avatar support is stubbed, not implemented.
-- `post` has `Update`/`UpdatePost` in service+repository but **no route** exposes
-  it yet.
+  directly (§9).
 - `competition_count` / `delegated_count` / `records` are defined but not populated
   by the Go API.
 - No structured logging/observability beyond stdlib `log` + `LOG_LEVEL` (the latter
@@ -476,13 +485,16 @@ links in `app/layout.tsx` if needed. **Read the Next 16 docs first** (§3 warnin
   internal Docker network (never published in test/prod). Make it configurable if
   the DB is ever exposed.
 - The weekly-report job previously hardcoded the Gmail app password + DB creds in
-  a committed-looking `env.py` module. It's now `config.py` + a git-ignored `.env`
-  (template: tracked `.env.example`), loaded via `python-dotenv`. Keep it
-  secret-free and env-driven — never hardcode values back into `config.py`.
-- Legacy per-directory `.env` files (root `.env`, `apps/api/.env`, `apps/web/.env`,
-  `db/.env`) and `apps/web/.env.example` are git-ignored leftovers from an older
-  "single .env for all envs" model. The live model is one root `.env.<env>` loaded
-  via `--env-file`; don't reintroduce per-service env files.
+  a committed-looking `env.py` module. It's now `config.py`, which reads the shared
+  root `.env.<ENV>` (see §10) — secret-free and env-driven; never hardcode values
+  back into `config.py`.
+- **One env file per environment, no per-app `.env`.** The only real env files are
+  the root `.env.dev`/`.env.test`/`.env.prod` (git-ignored), loaded via
+  `--env-file`; the tracked templates are `.env.<env>.example`. The Python job
+  reads the *same* root file (see §10). The old per-directory leftovers (root
+  `.env`, `apps/api/.env`, `apps/web/.env`, `db/.env`, `apps/web/.env.example`,
+  `apps/scripts/weekly-report/.env[.example]`) have been removed — **don't
+  reintroduce per-service env files.**
 
 ---
 
@@ -537,8 +549,9 @@ links in `app/layout.tsx` if needed. **Read the Next 16 docs first** (§3 warnin
   `**/__pycache__/`, `*.tsbuildinfo` — build artifacts / vendored deps.
 - `go.sum`, `package-lock.json` — change only via the proper tool
   (`go mod`, `npm`), never by hand.
-- Real `.env`, `.env.dev`, `.env.test`, `.env.prod` — secrets, git-ignored; edit
-  the `.example` templates instead when documenting new vars.
+- Real `.env.dev`, `.env.test`, `.env.prod` (root only) — secrets, git-ignored;
+  edit the `.example` templates instead when documenting new vars. No per-app
+  `.env` files — everything reads the root file.
 - `infra/docker-compose.yml` values — keep it value-free; put values in env files.
 - Existing DB migrations are effectively immutable once applied — add a **new**
   numbered migration instead of editing `000001_*`.
