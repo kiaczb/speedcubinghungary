@@ -46,7 +46,7 @@ export default function RootLayout({
             <Link href="/contact" className="block">
               Contact
             </Link>
-            <Link href="/blog" className="block">
+            <Link href="/posts" className="block">
               Blog
             </Link>
             <LoginButton />
