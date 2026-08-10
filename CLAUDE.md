@@ -208,6 +208,29 @@ Other Go conventions observed:
 - Routes live in `apps/web/app/<route>/page.tsx`, with **colocated**
   `components/`, `lib/`, and `types.ts` per route (e.g. `app/calendar/`,
   `app/posts/`). Shared UI is in `app/components/`.
+- **There is a design-token layer in `app/globals.css` (`@theme`) — use it.**
+  Colors (`brand-red`/`brand-green`, `canvas`/`surface`/`surface-muted`/
+  `surface-inverse`, `line`/`line-strong`, `foreground`/`muted-foreground`/
+  `subtle-foreground`), radii (`rounded-control`/`card`/`panel`), shadows
+  (`shadow-card`/`card-hover`/`panel`) and one easing (`ease-smooth`). **Don't
+  reintroduce raw `gray-*`, `shadow-xl`, `rounded-2xl`** — match the tokens.
+  Numeric content (times, dates, counts) uses `font-mono` + the `.tabular`
+  helper; that's deliberate for a timing sport, not decoration.
+- **Shared primitives live in `app/components/ui/`**: `Button` (variants
+  `primary`/`secondary`/`ghost`/`danger`/`inverse`; renders `<button>`,
+  `<Link>`, or external `<a>` based on `href`/`external`), `Field` (+ the
+  exported `controlClass` for inputs), `PageHeader`, `StateMessage`. Plus
+  `app/components/Cards/Card.tsx` (variants `elevated`/`outlined`/`inverse`,
+  `padding`, `interactive`) and `app/components/Badge.tsx`. **Reuse these
+  instead of hand-rolling a button/card/field.**
+- **Shared data lives in `app/lib/`**: `api.ts` (`serverApiUrl()` /
+  `clientApiUrl()` — the two-base-URL split below, in one place) and `site.ts`
+  (`NAV_LINKS`, `CONTACT_ITEMS`, `SITE_DESCRIPTION`, used by the navbar, footer
+  and contact page). Add nav/contact entries there, not per-component.
+- The app is **light-theme only** by deliberate choice. The create-next-app
+  `prefers-color-scheme: dark` block was removed because it flipped
+  `--foreground` while every surface stayed white (white-on-white text). If dark
+  mode is wanted, do it properly across all surfaces, not via that block.
 - **Server Components fetch data server-side** (e.g. `app/posts/page.tsx`
   `async` component with `fetch(..., { cache: 'no-store' })`); interactive pieces
   are `"use client"` components.
@@ -468,10 +491,16 @@ links in `app/layout.tsx` if needed. **Read the Next 16 docs first** (§3 warnin
 
 - **Untracked working tree:** `apps/api`, `apps/web`, and other files show as
   untracked/added in git status — the project is mid-setup; commit history is thin.
-- `apps/web/app/layout.tsx` still has the default `create-next-app` `<title>` /
-  metadata — likely should be updated.
-- The navbar/footer "Blog" link now points to `/posts` (there is no `/blog`
-  route); the user-facing label stayed "Blog".
+- ~~`apps/web/app/layout.tsx` still has the default `create-next-app` metadata~~
+  — **resolved**: real title template + description + OpenGraph, and `lang="hu"`.
+- The navbar/footer link to `/posts` is now labelled **"Hírek"** (it was "Blog",
+  which matched neither the route nor the page's own "Hírek" heading). Nav labels
+  are Hungarian throughout and live in `app/lib/site.ts`.
+- The contact form (`app/contact/components/ContactForm.tsx`) is still **not
+  wired to any backend** — it renders and validates nothing, submitting does
+  nothing. Needs a route handler or a mail service.
+- `/results`, `/rankings`, `/guide`, `/team`, `/registration` are linked from
+  `QuickToolsSection` but **no such routes exist yet** (they 404).
 - `auth/service.go` / `auth/handler.go` bypass the `config` struct and read env
   directly (§9).
 - `competition_count` / `delegated_count` / `records` are defined but not populated

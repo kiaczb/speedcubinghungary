@@ -1,85 +1,90 @@
 import React from "react";
-import Card from "./Card";
 import Link from "next/link";
+import Card from "./Card";
 import Badge from "../Badge";
-import { badgeMap, PostsItem, TagTypes } from "@/app/posts/types";
+import { badgeMap, PostsItem } from "@/app/posts/types";
 import { postPreview } from "@/app/posts/lib/postPreview";
 import { reportSummary } from "@/app/posts/lib/report";
+import { FaArrowRight } from "react-icons/fa";
 
-// Dictionary a típusokhoz
+/**
+ * Hírkártya a főoldalra.
+ *
+ * Javítások a korábbi változathoz képest:
+ * - a "Részletek" gomb a `/about` oldalra vitt, nem a posztra;
+ * - a `group-hover:` osztályokhoz nem tartozott `group` szülő, így sosem
+ *   sültek el;
+ * - a `type` prop mindig `post.tag` volt, ezért feleslegessé vált;
+ * - a kártya középre zárt volt; balra igazítva gyorsabban átfutható.
+ *
+ * Most az egész kártya egyetlen link — nagyobb kattintófelület, és nincs
+ * link a linkben.
+ */
 
 type NewsCardProps = {
-  type: TagTypes;
-  imageUrl?: string;
   post: PostsItem;
+  /** `null`, ha a poszthoz nincs borítókép (lásd `postImageUrl`). */
+  imageUrl?: string | null;
 };
 
-const NewsCard: React.FC<NewsCardProps> = ({ type, imageUrl, post }) => {
-  const badge = badgeMap[type];
+const NewsCard: React.FC<NewsCardProps> = ({ post, imageUrl }) => {
+  const badge = badgeMap[post.tag];
   const preview =
     post.tag === "report"
       ? reportSummary(post.content)
       : postPreview(post.content, 120);
-  return (
-    <Card className="max-w-86 flex flex-col justify-between bg-white p-0 overflow-hidden hover:shadow-2xl transition-all duration-300 hover:-translate-y-1">
-      {/* Header rész az új dizájnnal */}
-      <div>
-        <div className="relative">
-          <Badge
-            label={badge.label}
-            color={badge.color}
-            className="absolute top-2 left-3 z-10"
-          />
 
-          {imageUrl && (
+  return (
+    <Card interactive className="group overflow-hidden">
+      <Link
+        href={`/posts/${post.id}`}
+        className="flex h-full flex-col rounded-card focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground"
+      >
+        <div className="relative aspect-video overflow-hidden bg-surface-muted">
+          {imageUrl ? (
             /* next/image helyett sima img: a kép lehet a saját API-nkról (posztkép,
                környezetenként más domain) vagy a public mappából — mindkettőt
                remotePatterns nélkül ki kell tudni szolgálni. */
             /* eslint-disable-next-line @next/next/no-img-element */
             <img
               src={imageUrl}
-              alt={post.title}width={350}
-    height={100}
-    className="max-w-full object-cover"
+              alt=""
+              className="h-full w-full object-cover transition-transform duration-500 ease-smooth group-hover:scale-[1.03]"
             />
+          ) : (
+            // Kép nélküli poszt is ugyanolyan magas kártyát kapjon, hogy a rács
+            // ne csússzon szét.
+            <div className="h-full w-full bg-linear-to-br from-surface-muted to-line" />
           )}
-        </div>
-      </div>
-
-      <div className="p-6 pb-4 mt-2">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900 mb-3 group-hover:text-blue-600 transition-colors">
-            {post.title}
-          </h1>
-
-          {/* Dátum és olvasási idő */}
-          <div className="flex items-center justify-center text-sm text-gray-500 mb-3">
-            <span className="flex items-center mr-4">
-              <span className="mr-1">📅</span>
-              <span>
-                {new Date(post.created_at).toLocaleDateString("hu-HU")}
-              </span>
-            </span>
-          </div>
-        </div>
-        {/* <Badge label={badge.label} color={badge.color} /> */}
-      </div>
-      {/* Tartalom rész */}
-      <div className="px-6 pb-6 flex flex-1 flex-col">
-        <div className="text-md text-gray-700 mb-6">
-          <p className="leading-relaxed">{preview}</p>
+          <Badge
+            label={badge.label}
+            color={badge.color}
+            className="absolute left-3 top-3 bg-white/90 backdrop-blur-sm"
+          />
         </div>
 
-        {/* Link rész - modernizálva */}
-        <div className="flex justify-center pt-4 border-t border-gray-100 mt-auto text-sm">
-          <Link
-            href="/about"
-            className="group inline-flex items-center px-6 py-3 bg-black text-white font-semibold rounded-lg border border-gray-800 hover:border-gray-200 duration-300 shadow-lg hover:shadow-xl"
+        <div className="flex flex-1 flex-col p-5">
+          <time
+            dateTime={post.created_at}
+            className="tabular font-mono text-xs text-subtle-foreground"
           >
-            <span>Részletek</span>
-          </Link>
+            {new Date(post.created_at).toLocaleDateString("hu-HU")}
+          </time>
+
+          <h3 className="mt-2 text-lg font-semibold leading-snug text-foreground">
+            {post.title}
+          </h3>
+
+          <p className="mt-2 line-clamp-3 text-sm leading-relaxed text-muted-foreground">
+            {preview}
+          </p>
+
+          <span className="mt-5 inline-flex items-center gap-2 border-t border-line pt-4 text-sm font-semibold text-foreground">
+            Részletek
+            <FaArrowRight className="h-3 w-3 transition-transform duration-200 ease-smooth group-hover:translate-x-1" />
+          </span>
         </div>
-      </div>
+      </Link>
     </Card>
   );
 };

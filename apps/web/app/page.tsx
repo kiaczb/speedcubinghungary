@@ -1,22 +1,29 @@
-// app/page.js
 import Hero from "./components/Hero";
 import AboutSection from "./components/Sections/Main/AboutSection";
 import CompetitionsSection from "./components/Sections/Main/CompetitionsSection";
 import NewsSection from "./components/Sections/Main/NewsSection";
 import QuickToolsSection from "./components/Sections/Main/QuickToolsSection";
 
+/**
+ * A szakaszok közti térköz korábban `gap-30` és `gap-20` keveréke volt, a
+ * NewsSection pedig a saját belső paddingjével még rá is tett erre. Egységes
+ * függőleges ritmus: a világos szakaszok között `py-20/24`, a sötét hírsáv
+ * pedig a saját paddingjével teljes szélességben ül a többi közé.
+ */
 export default function Home() {
   return (
-    <div className="flex flex-col bg-gray-50 gap-30">
+    <div className="bg-canvas">
       <Hero />
-      <div className="flex flex-col gap-20">
-        <AboutSection />
-        <NewsSection />
-        <CompetitionsSection />
 
-        {/* <EventsSection /> */}
+      <div className="flex flex-col gap-20 py-20 sm:gap-24 sm:py-24">
+        <AboutSection />
+        <CompetitionsSection />
+      </div>
+
+      <NewsSection />
+
+      <div className="py-20 sm:py-24">
         <QuickToolsSection />
-        {/* Később ide jöhet a ToolsSection */}
       </div>
     </div>
   );

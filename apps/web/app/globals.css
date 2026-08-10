@@ -1,59 +1,111 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* ---------------------------------------------------------------------------
+   Design tokenek
+   ---------------------------------------------------------------------------
+   Egyetlen forrás a színekre, sugarakra, árnyékokra és a mozgásra. A korábbi
+   ad-hoc `bg-red-600` / `shadow-xl` / `rounded-2xl` keverék helyett innen jön
+   minden — így egy érték átírása az egész oldalon érvényesül.
+
+   A `--color-*` / `--radius-*` / `--shadow-*` / `--ease-*` kulcsokból a Tailwind
+   v4 automatikusan utility-ket generál (pl. `bg-brand-red`, `rounded-card`,
+   `shadow-card`, `ease-smooth`).
+--------------------------------------------------------------------------- */
+
+@theme {
+  /* Márkaszínek — a magyar zászló piros/zöldje, amit a hero háromszögei már
+     használtak; itt kapnak nevet, hogy ne kelljen találgatni az árnyalatot. */
+  --color-brand-red: #cf2e3f;
+  --color-brand-red-strong: #a82232;
+  --color-brand-green: #12844a;
+  --color-brand-green-strong: #0c653a;
+
+  /* Felületek és keretek. A "surface" a kártyák háttere, a "canvas" az oldalé. */
+  --color-canvas: #f7f8fa;
+  --color-surface: #ffffff;
+  --color-surface-muted: #f2f4f7;
+  --color-surface-inverse: #16181d;
+  --color-line: #e5e8ec;
+  --color-line-strong: #d0d5dd;
+
+  /* Szövegszínek. A `foreground`/`muted-foreground` nevekre több komponens
+     hivatkozik — korábban a `muted-foreground` nem is létezett, így a dátumok
+     szín nélkül maradtak. */
+  --color-background: #ffffff;
+  --color-foreground: #16181d;
+  --color-ink-hover: #2c313a;
+  --color-muted-foreground: #5b6472;
+  --color-subtle-foreground: #838d9b;
+
+  /* Tipográfia. A `next/font` a layoutban tölti be a Geistet — a `body` alatti
+     Arial felülírás korábban ezt hatástalanította. */
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SFMono-Regular",
+    "Liberation Mono", monospace;
+
+  /* Sugarak — három lépcső a korábbi ötféle helyett. */
+  --radius-control: 0.625rem;
+  --radius-card: 0.875rem;
+  --radius-panel: 1.25rem;
+
+  /* Árnyékok — lágy, réteges emelés a "shadow-xl mindenhol" helyett. */
+  --shadow-card: 0 1px 2px rgb(16 24 40 / 0.04), 0 1px 3px rgb(16 24 40 / 0.06);
+  --shadow-card-hover: 0 4px 8px rgb(16 24 40 / 0.05),
+    0 12px 24px rgb(16 24 40 / 0.08);
+  --shadow-panel: 0 8px 16px rgb(16 24 40 / 0.06),
+    0 24px 48px rgb(16 24 40 / 0.1);
+
+  /* Mozgás — egy görbe az egész felületen, hogy egységes legyen a "tapintása". */
+  --ease-smooth: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+@layer base {
+  body {
+    background: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  /* Címsorok: kicsit szorosabb betűköz nagy méretben — a Geist így fog össze. */
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+
+  /* Számok mindig azonos szélességgel: a versenyidők, dátumok és a visszaszámláló
+     így nem "ugrálnak" — ez egy időmérő sportot bemutató oldalon látható nyereség. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Egységes, látható fókuszjelzés billentyűzetes navigációhoz. Korábban a
+     legtöbb gomb és link semmilyen fókuszállapotot nem adott. */
+  :focus-visible {
+    outline: 2px solid var(--color-foreground);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  ::selection {
+    background: var(--color-foreground);
+    color: var(--color-background);
+  }
+
+  html {
+    scroll-behavior: smooth;
+    /* A sticky navbar ne takarja el a horgonyra ugró szakaszok tetejét. */
+    scroll-padding-top: 5rem;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
-}
-
-/* app/globals.css */
-@tailwind utilities;
-
-@keyframes spin-full {
-  0% {
-    transform: rotate(0deg);
-  }
-  100% {
-    transform: rotate(370deg); /* 370 degrees clockwise */
-  }
-}
-
-@keyframes return-align {
-  0% {
-    transform: rotate(370deg);
-  }
-  100% {
-    transform: rotate(360deg); /* Back 10 degrees */
-  }
-}
-
-@keyframes fade-in {
-  0% {
-    opacity: 0;
-  }
-  100% {
-    opacity: 1;
-  }
-}
+/* ---------------------------------------------------------------------------
+   Logó animáció (SpeedcubingFullAnimatedSVG / SpeedcubingLogoSVG)
+--------------------------------------------------------------------------- */
 
 @keyframes spinAndCorrect {
   0% {
@@ -77,32 +129,8 @@ body {
   }
 }
 
-@keyframes offsetPaths {
-  0%,
-  79% {
-    opacity: 1;
-    transform: matrix(0.1, 0, 0, -0.1, -79.716217, 431.68919);
-  }
-  80% {
-    opacity: 1;
-    transform: matrix(0.1, 0, 0, -0.1, -79.716217, 431.68919);
-  }
-  95% {
-    opacity: 1;
-    transform: matrix(0.1, 0, 0, -0.1, -79.716217, 431.68919);
-  }
-  100% {
-    opacity: 0;
-    transform: matrix(0.1, 0, 0, -0.1, -79.716217, 431.68919);
-  }
-}
-
 @keyframes offsetTopPath {
   0%,
-  70% {
-    transform: translate(0px, 0px);
-    opacity: 0;
-  }
   75% {
     transform: translate(0px, 0px);
     opacity: 0;
@@ -111,10 +139,7 @@ body {
     transform: translate(-119px, 56.5px);
     opacity: 1;
   }
-  95% {
-    transform: translate(-238px, 113px);
-    opacity: 1;
-  }
+  95%,
   100% {
     transform: translate(-238px, 113px);
     opacity: 1;
@@ -123,10 +148,6 @@ body {
 
 @keyframes offsetRightPath {
   0%,
-  70% {
-    transform: translate(0px, 0px);
-    opacity: 0;
-  }
   75% {
     transform: translate(0px, 0px);
     opacity: 0;
@@ -135,10 +156,7 @@ body {
     transform: translate(52.5px, 94px);
     opacity: 1;
   }
-  95% {
-    transform: translate(105px, 188px);
-    opacity: 1;
-  }
+  95%,
   100% {
     transform: translate(105px, 188px);
     opacity: 1;
@@ -147,10 +165,6 @@ body {
 
 @keyframes offsetLeftPath {
   0%,
-  70% {
-    transform: translate(0px, 0px);
-    opacity: 0;
-  }
   75% {
     transform: translate(0px, 0px);
     opacity: 0;
@@ -159,10 +173,7 @@ body {
     transform: translate(-55px, -94px);
     opacity: 1;
   }
-  95% {
-    transform: translate(-110px, -188px);
-    opacity: 1;
-  }
+  95%,
   100% {
     transform: translate(-110px, -188px);
     opacity: 1;
@@ -171,10 +182,6 @@ body {
 
 @keyframes offsetBottomPath {
   0%,
-  70% {
-    transform: translate(0px, 0px);
-    opacity: 0;
-  }
   75% {
     transform: translate(0px, 0px);
     opacity: 0;
@@ -183,20 +190,19 @@ body {
     transform: translate(130px, -75px);
     opacity: 1;
   }
-  95% {
-    transform: translate(260px, -150px);
-    opacity: 1;
-  }
+  95%,
   100% {
     transform: translate(260px, -150px);
     opacity: 1;
   }
 }
+
 .rotating-group {
   animation: spinAndCorrect 1.8s forwards;
   transform-origin: center;
   transform-box: fill-box;
 }
+
 .offset-top {
   animation: offsetTopPath 1.8s forwards;
   animation-delay: 0.09s;
@@ -215,4 +221,33 @@ body {
 .offset-bottom {
   animation: offsetBottomPath 1.8s forwards;
   animation-delay: 0.09s;
+}
+
+/* ---------------------------------------------------------------------------
+   Csökkentett mozgás
+   ---------------------------------------------------------------------------
+   A logó darabjai `opacity-0`-ról animálódnak láthatóra, ezért itt NEM lehet
+   `animation: none` — az örökre eltüntetné őket. Helyette a végállapotra
+   ugratjuk (a `forwards` miatt az marad érvényben).
+--------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .rotating-group,
+  .offset-top,
+  .offset-right,
+  .offset-left,
+  .offset-bottom {
+    animation-duration: 1ms;
+    animation-delay: 0ms;
+  }
+
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+  }
 }

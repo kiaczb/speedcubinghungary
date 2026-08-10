@@ -1,7 +1,7 @@
 import { FaRegCalendarTimes } from "react-icons/fa";
 import { UpcomingCompetition } from "../types";
 import CompetitionCard from "./CompetitionCard";
-import StateMessage from "./StateMessage";
+import StateMessage from "@/app/components/ui/StateMessage";
 
 type Props = {
   competitions: UpcomingCompetition[];

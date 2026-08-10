@@ -1,123 +1,146 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import React, { useEffect, useState } from "react";
 import SpeedcubingFullAnimatedSVG from "./svgs/SpeedcubingFullAnimatedSVG";
+import { NAV_LINKS } from "../lib/site";
 
-type NavbarProps = { children?: React.ReactNode };
+/**
+ * Fejléc.
+ *
+ * A linkeket korábban a layout adta át gyerekként, a Navbar pedig
+ * `React.cloneElement`-tel írta felül a `className`-jüket — emiatt a linkek
+ * asztali nézetben teljesen stílus nélkül maradtak (se hover, se fókusz, se
+ * aktív állapot), és a mobil menü csendben felülírta a kapott osztályokat.
+ * Most a navigáció adatvezérelt (`NAV_LINKS`), a `action` slot pedig a jobb
+ * szélre kerülő elemé (bejelentkezés).
+ */
 
-const Navbar = ({ children }: NavbarProps) => {
+type NavbarProps = {
+  /** Jobb szélen megjelenő akció — a bejelentkezés gomb. */
+  action?: React.ReactNode;
+};
+
+const Navbar = ({ action }: NavbarProps) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
+  const pathname = usePathname();
+
   useEffect(() => {
     const handleScroll = () => {
       setIsScrolled(window.scrollY > 0);
     };
 
-    window.addEventListener("scroll", handleScroll);
+    handleScroll();
+    window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
-  const toggleMenu = () => {
-    setIsMenuOpen(!isMenuOpen);
-  };
+
+  const isActive = (href: string) =>
+    pathname === href || pathname.startsWith(`${href}/`);
 
   return (
     <nav
-      className={`
-    sticky top-0 w-full z-50
-    bg-white dark:bg-gray-800
-    transition-all duration-100 ease-in
-    ${isScrolled ? "shadow-md" : "shadow-none"}
-  `}
+      className={`sticky top-0 z-50 w-full border-b bg-white/85 backdrop-blur-md transition-[border-color,box-shadow] duration-300 ease-smooth ${
+        isScrolled ? "border-line shadow-card" : "border-transparent"
+      }`}
     >
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center h-16">
-          {/* Logo */}
-          <div className="shrink-0">
-            <Link href="/">
-              {/* <SpeedcubingFullSVG size={170} textColor="black" /> */}
-              <SpeedcubingFullAnimatedSVG
-                animated={false}
-                textColor="black"
-                maxWidth={210}
-              />
-            </Link>
+      <div className="mx-auto w-full max-w-6xl px-5 sm:px-8 lg:px-12">
+        <div className="flex h-16 items-center justify-between gap-6">
+          <Link
+            href="/"
+            aria-label="Speedcubing Hungary — főoldal"
+            className="shrink-0 rounded-control"
+          >
+            <SpeedcubingFullAnimatedSVG
+              animated={false}
+              textColor="#16181d"
+              maxWidth={196}
+            />
+          </Link>
+
+          {/* Asztali navigáció */}
+          <div className="hidden items-center gap-1 md:flex">
+            {NAV_LINKS.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                aria-current={isActive(link.href) ? "page" : undefined}
+                className={`relative rounded-control px-3 py-2 text-sm font-medium transition-colors duration-200 ease-smooth ${
+                  isActive(link.href)
+                    ? "text-foreground"
+                    : "text-muted-foreground hover:bg-surface-muted hover:text-foreground"
+                }`}
+              >
+                {link.label}
+                {/* Aktív oldal jelölése — korábban semmi nem mutatta, hol vagy. */}
+                <span
+                  className={`absolute inset-x-3 -bottom-px h-0.5 rounded-full bg-brand-red transition-opacity duration-200 ease-smooth ${
+                    isActive(link.href) ? "opacity-100" : "opacity-0"
+                  }`}
+                />
+              </Link>
+            ))}
+            {action && <div className="ml-3">{action}</div>}
           </div>
 
-          {/* Desktop Navigation - Hidden on mobile */}
-          <div className="hidden md:flex md:space-x-8 items-center">
-            {children}
-          </div>
-
-          {/* Mobile menu button */}
-          <div className="md:hidden">
-            <button
-              onClick={toggleMenu}
-              className="inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
-              aria-expanded="false"
+          {/* Mobil menü gomb */}
+          <button
+            type="button"
+            onClick={() => setIsMenuOpen((open) => !open)}
+            aria-expanded={isMenuOpen}
+            aria-controls="mobile-menu"
+            aria-label={isMenuOpen ? "Menü bezárása" : "Menü megnyitása"}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-control text-muted-foreground transition-colors duration-200 ease-smooth hover:bg-surface-muted hover:text-foreground md:hidden"
+          >
+            <svg
+              className="h-5 w-5"
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              aria-hidden="true"
             >
-              <span className="sr-only">Open main menu</span>
-              {/* Hamburger icon */}
-              <svg
-                className={`${isMenuOpen ? "hidden" : "block"} h-6 w-6`}
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                aria-hidden="true"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4 6h16M4 12h16M4 18h16"
-                />
-              </svg>
-              {/* Close icon */}
-              <svg
-                className={`${isMenuOpen ? "block" : "hidden"} h-6 w-6`}
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                aria-hidden="true"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
-            </button>
-          </div>
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d={isMenuOpen ? "M6 18L18 6M6 6l12 12" : "M4 6h16M4 12h16M4 18h16"}
+              />
+            </svg>
+          </button>
         </div>
       </div>
 
-      {/* Mobile Navigation Menu */}
+      {/* Mobil navigáció */}
       <div
-        className={`
-    md:hidden
-    overflow-hidden
-    
-    ${isMenuOpen ? "max-h-96 opacity-100 transition-all duration-400 ease-in-out" : "max-h-0 opacity-0"}
-  `}
+        id="mobile-menu"
+        // `inert` a becsukott állapotban: így a rejtett linkek nem fókuszálhatók
+        // tabbal, miközben az animált magasság megmarad.
+        inert={!isMenuOpen}
+        className={`overflow-hidden border-t border-line bg-white transition-[max-height,opacity] duration-300 ease-smooth md:hidden ${
+          isMenuOpen ? "max-h-96 opacity-100" : "max-h-0 border-transparent opacity-0"
+        }`}
       >
-        <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3 bg-white dark:bg-gray-800 shadow-lg">
-          {React.Children.map(children, (child) => {
-            if (!React.isValidElement(child)) return child;
-
-            // Csak mobilon adjuk az onClick-et
-            const props: { className: string; onClick?: () => void } = {
-              className:
-                "block px-3 py-2 text-base font-medium text-gray-700 dark:text-gray-200 hover:text-gray-900 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-md",
-            };
-            if (isMenuOpen) {
-              props.onClick = () => setIsMenuOpen(false);
-            }
-
-            return React.cloneElement(child, props);
-          })}
+        <div className="flex flex-col gap-1 px-5 py-4 sm:px-8">
+          {NAV_LINKS.map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              // Navigáláskor záruljon be a menü.
+              onClick={() => setIsMenuOpen(false)}
+              aria-current={isActive(link.href) ? "page" : undefined}
+              className={`rounded-control px-3 py-2.5 text-base font-medium transition-colors duration-200 ease-smooth ${
+                isActive(link.href)
+                  ? "bg-surface-muted text-foreground"
+                  : "text-muted-foreground hover:bg-surface-muted hover:text-foreground"
+              }`}
+            >
+              {link.label}
+            </Link>
+          ))}
+          {action && <div className="mt-3 border-t border-line pt-4">{action}</div>}
         </div>
       </div>
     </nav>

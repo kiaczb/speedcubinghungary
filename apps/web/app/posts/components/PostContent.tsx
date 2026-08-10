@@ -1,6 +1,7 @@
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Components } from "react-markdown";
+import { RECORD_BADGE_COLORS } from "../lib/recordBadges";
 
 /**
  * A poszt markdown tartalmának renderelése — stílussal.
@@ -17,80 +18,85 @@ import type { Components } from "react-markdown";
 // Rekord-badge-ek (NR/CR/WR) színezése, hasonlóan az e-mailes riporthoz.
 // A markdownban ezek inline kódként jönnek (pl. `NR`), így itt tudjuk chippé
 // alakítani őket anélkül, hogy nyers HTML kellene a forrásba.
-const badgeColors: Record<string, string> = {
-  WR: "bg-yellow-400 text-yellow-950",
-  CR: "bg-blue-500 text-white",
-  NR: "bg-green-600 text-white",
-  PR: "bg-gray-400 text-gray-950",
-};
+// A színek a WeeklyReportView-val közösek (lib/recordBadges.ts).
 
 const components: Components = {
   h1: ({ children }) => (
-    <h1 className="mb-4 mt-8 text-3xl font-bold first:mt-0">{children}</h1>
+    <h1 className="mb-4 mt-10 text-2xl font-bold first:mt-0">{children}</h1>
   ),
   h2: ({ children }) => (
-    <h2 className="mb-3 mt-8 border-b border-gray-200 pb-1 text-2xl font-bold first:mt-0 dark:border-gray-700">
+    <h2 className="mb-3 mt-10 border-b border-line pb-2 text-xl font-bold first:mt-0">
       {children}
     </h2>
   ),
   h3: ({ children }) => (
-    <h3 className="mb-2 mt-6 text-xl font-semibold first:mt-0">{children}</h3>
+    <h3 className="mb-2 mt-7 text-lg font-semibold first:mt-0">{children}</h3>
   ),
-  p: ({ children }) => <p className="my-3 leading-relaxed">{children}</p>,
+  p: ({ children }) => (
+    <p className="my-4 leading-[1.75] text-muted-foreground">{children}</p>
+  ),
   a: ({ href, children }) => (
     <a
       href={href}
-      className="text-blue-600 underline hover:text-blue-800 dark:text-blue-400"
+      className="font-medium text-foreground underline decoration-line-strong underline-offset-2 transition-colors duration-200 ease-smooth hover:decoration-foreground"
     >
       {children}
     </a>
   ),
   ul: ({ children }) => (
-    <ul className="my-3 list-disc space-y-1 pl-6">{children}</ul>
+    <ul className="my-4 list-disc space-y-1.5 pl-6 text-muted-foreground marker:text-line-strong">
+      {children}
+    </ul>
   ),
   ol: ({ children }) => (
-    <ol className="my-3 list-decimal space-y-1 pl-6">{children}</ol>
+    <ol className="my-4 list-decimal space-y-1.5 pl-6 text-muted-foreground marker:text-subtle-foreground">
+      {children}
+    </ol>
   ),
   blockquote: ({ children }) => (
-    <blockquote className="my-4 border-l-4 border-gray-300 pl-4 italic text-gray-600 dark:border-gray-600 dark:text-gray-400">
+    <blockquote className="my-6 border-l-2 border-brand-red pl-5 italic text-muted-foreground">
       {children}
     </blockquote>
   ),
-  hr: () => <hr className="my-6 border-gray-200 dark:border-gray-700" />,
-  strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+  hr: () => <hr className="my-10 border-line" />,
+  strong: ({ children }) => (
+    <strong className="font-semibold text-foreground">{children}</strong>
+  ),
   // Inline kód: ha a tartalma egy ismert rekord-badge, színes chippé alakítjuk.
   code: ({ children }) => {
     const text = String(children);
-    const badge = badgeColors[text];
+    const badge = RECORD_BADGE_COLORS[text];
     if (badge) {
       return (
         <span
-          className={`mx-0.5 inline-block rounded px-1.5 py-0.5 text-xs font-bold ${badge}`}
+          className={`mx-0.5 inline-block rounded px-1.5 py-0.5 font-mono text-xs font-bold ${badge}`}
         >
           {text}
         </span>
       );
     }
     return (
-      <code className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-sm dark:bg-gray-800">
+      <code className="rounded bg-surface-muted px-1.5 py-0.5 font-mono text-[0.85em] text-foreground">
         {children}
       </code>
     );
   },
   // A táblázat vízszintesen görgethető konténerben, hogy mobilon ne törje szét a layoutot.
   table: ({ children }) => (
-    <div className="my-4 overflow-x-auto">
+    <div className="my-6 overflow-x-auto rounded-card border border-line">
       <table className="w-full border-collapse text-sm">{children}</table>
     </div>
   ),
   thead: ({ children }) => (
-    <thead className="border-b-2 border-gray-300 text-left dark:border-gray-600">
+    <thead className="border-b border-line bg-surface-muted text-left">
       {children}
     </thead>
   ),
-  th: ({ children }) => <th className="px-3 py-2 font-semibold">{children}</th>,
+  th: ({ children }) => (
+    <th className="px-4 py-2.5 font-semibold text-foreground">{children}</th>
+  ),
   td: ({ children }) => (
-    <td className="border-b border-gray-100 px-3 py-2 dark:border-gray-800">
+    <td className="tabular border-b border-line px-4 py-2.5 text-muted-foreground last:border-0">
       {children}
     </td>
   ),
