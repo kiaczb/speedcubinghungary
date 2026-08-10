@@ -1,6 +1,7 @@
 // app/components/UserProvider.tsx
 "use client";
 import React, { createContext, useContext, useEffect, useState } from "react";
+import { clientApiUrl } from "../lib/api";
 
 export interface MeResponse {
   user_id: number;
@@ -31,7 +32,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({
   const [isLoading, setIsLoading] = useState(true); // Kezdetben töltünk
 
   // Környezeti változó használata a backend URL-hez (fallback a localhost-ra)
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+  const API_URL = clientApiUrl();
 
   useEffect(() => {
     const fetchMe = async () => {

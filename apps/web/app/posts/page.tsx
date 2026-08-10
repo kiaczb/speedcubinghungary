@@ -1,13 +1,19 @@
+import type { Metadata } from "next";
 import PostsList from "./components/PostList";
+import PageHeader from "../components/ui/PageHeader";
+import { serverApiUrl } from "../lib/api";
 import { PostsItem } from "./types";
+
+export const metadata: Metadata = {
+  title: "Hírek",
+  description:
+    "Versenyek, események és heti riportok a magyar kockázó közösségből.",
+};
 
 // Server oldali fetch
 async function getPosts(): Promise<PostsItem[]> {
-  // Docker környezetben az 'api' a szolgáltatás neve a docker-compose-ban
-  const baseUrl = process.env.SERVER_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
-
   try {
-    const res = await fetch(`${baseUrl}/posts`, { cache: 'no-store' });
+    const res = await fetch(`${serverApiUrl()}/posts`, { cache: "no-store" });
     if (!res.ok) return [];
     return res.json();
   } catch (error) {
@@ -18,18 +24,17 @@ async function getPosts(): Promise<PostsItem[]> {
 
 export default async function PostsPage() {
   const posts = await getPosts();
-  return (
-    <div className="min-h-screen py-8 px-4">
-      <div className="max-w-4xl mx-auto">
-        {/* Fejléc */}
-        <div className="mb-10">
-          <h1 className="text-4xl font-bold mb-3">Összes hír</h1>
-          <p className="text-gray-600">
-            Itt találod az összes közzétett hírünket.
-          </p>
-        </div>
 
-        <div>
+  return (
+    <div className="px-5 py-12 sm:px-8 sm:py-16 lg:px-12">
+      <div className="mx-auto w-full max-w-4xl">
+        <PageHeader
+          eyebrow="Blog"
+          title="Hírek"
+          description="Itt találod az összes közzétett hírünket, versenybeszámolónkat és heti riportunkat."
+        />
+
+        <div className="mt-10">
           <PostsList posts={posts} />
         </div>
       </div>

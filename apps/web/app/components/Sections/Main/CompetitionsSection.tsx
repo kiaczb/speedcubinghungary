@@ -1,51 +1,52 @@
 import Image from "next/image";
 import React from "react";
 import Section from "./Section";
+import Button from "../../ui/Button";
 import { FaArrowRight, FaGraduationCap } from "react-icons/fa";
-import Link from "next/link";
 
 const CompetitionsSection = () => {
   return (
-    <Section title="Versenyzés" left={false}>
-      <div className="flex flex-wrap justify-around gap-10 mt-20">
-        <div>
+    <Section eyebrow="Kezdés" title="Versenyzés" left={true}>
+      <div className="grid grid-cols-1 items-center gap-12 lg:grid-cols-2 lg:gap-16">
+        <div className="overflow-hidden rounded-panel border border-line">
           <Image
-            alt="dog"
+            alt="Kockázók egy magyar versenyen"
             src="/wanna_start_cubing.jpg"
             width={650}
             height={650}
+            className="h-full w-full object-cover"
           />
         </div>
-        <div className="flex flex-col justify-center text-xl gap-10 max-w-md">
-          <p>
+
+        <div>
+          <p className="text-lg leading-relaxed text-muted-foreground">
             Érdekel a versenyzés világa? Ki tudod rakni a kockát és szeretnéd
-            megpróbáltattni magad egy versenyen? Ne habozz és látogass el az
+            megpróbáltatni magad egy versenyen? Ne habozz, látogass el az
             általunk rendezett versenyek egyikére.
           </p>
-          <p>
-            Esetleg attól félsz, hogy nem vagy elég gyors? Ez ne tántorítson el,
-            a kockások egy rendkíül befogadó közösség! Azonban ha fejlsődni
-            szeretnél oldalunkon megtalálhatóak oktató anyagok ahol az ország
-            legjobb versenyzőitől tanulhatsz!
+          <p className="mt-5 text-lg leading-relaxed text-muted-foreground">
+            Attól félsz, hogy nem vagy elég gyors? Ez ne tántorítson el — a
+            kockások rendkívül befogadó közösség. Ha pedig fejlődnél, oldalunkon
+            oktatóanyagokat is találsz, ahol az ország legjobb versenyzőitől
+            tanulhatsz.
           </p>
-        </div>
-        <div className="flex flex-col gap-10 sm:gap-0 sm:flex-row justify-around w-full items-center">
-          <Link
-            href="/competitions"
-            className="group inline-flex items-center px-6 py-3 bg-black text-white font-semibold rounded-lg border border-gray-800 hover:border-gray-600 transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 duration-300"
-          >
-            <span>Versenyezni szeretnék</span>
-            <FaArrowRight className="w-4 h-4 ml-3 transform group-hover:translate-x-1 transition-transform duration-300" />
-          </Link>
-          <Link
-            href="/competitions"
-            className="group inline-flex items-center px-6 py-3  text-black font-semibold rounded-lg border border-gray-800 hover:border-gray-600 transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 duration-300"
-          >
-            <FaGraduationCap className="w-6 h-6 mr-5" />
 
-            <span>Tanulni szeretnék</span>
-            <FaArrowRight className="w-4 h-4 ml-3 transform group-hover:translate-x-1 transition-transform duration-300" />
-          </Link>
+          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+            <Button
+              href="/calendar"
+              iconRight={<FaArrowRight className="h-3.5 w-3.5" />}
+            >
+              Versenyezni szeretnék
+            </Button>
+            <Button
+              href="/tools"
+              variant="secondary"
+              icon={<FaGraduationCap className="h-4 w-4" />}
+              iconRight={<FaArrowRight className="h-3.5 w-3.5" />}
+            >
+              Tanulni szeretnék
+            </Button>
+          </div>
         </div>
       </div>
     </Section>

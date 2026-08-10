@@ -1,25 +1,25 @@
+import type { Metadata } from "next";
+import PageHeader from "../components/ui/PageHeader";
 import UnofficialSection from "./components/sections/UnofficialSection";
 import OtherSection from "./components/sections/OtherSection";
 
+export const metadata: Metadata = {
+  title: "Eszközök",
+  description:
+    "Versenyekhez és versenysorozatokhoz kapcsolódó alkalmazások, alternatív rangsorok és statisztikák.",
+};
+
 export default function Tools() {
   return (
-    <div className="px-10 lg:py-20 lg:px-30">
-      <div className="mb-10">
-        <div className="flex justify-center">
-          <h1 className="text-4xl font-bold mb-10">Eszközök</h1>
-        </div>
-        <p>
-          A Tools oldalon találhatóak azok az alkalmazások és aloldalak, amelyek
-          különböző versenyekhez és versenysorozatokhoz kapcsolódnak. Ezek az
-          eszközök az eredmények feldolgozását, összesítését és alternatív
-          rangsorok megjelenítését szolgálják. A toolok egy része speciális
-          pontszámításokra vagy összetett statisztikákra épül, amelyek a WCA
-          hivatalos helyezésein túlmutatva nyújtanak részletesebb képet a
-          versenyzők teljesítményéről.
-        </p>
-      </div>
-      <div>
-        <div className="flex flex-col gap-10">
+    <div className="px-5 py-12 sm:px-8 sm:py-16 lg:px-12">
+      <div className="mx-auto w-full max-w-5xl">
+        <PageHeader
+          eyebrow="Alkalmazások"
+          title="Eszközök"
+          description="Itt találod azokat az alkalmazásokat és aloldalakat, amelyek versenyekhez és versenysorozatokhoz kapcsolódnak: eredmények feldolgozása, összesítése és alternatív rangsorok. Egy részük speciális pontszámításra vagy összetett statisztikákra épül, amelyek a WCA hivatalos helyezésein túlmutatva adnak részletesebb képet a versenyzők teljesítményéről."
+        />
+
+        <div className="mt-12 flex flex-col gap-14">
           <UnofficialSection />
           <OtherSection />
         </div>

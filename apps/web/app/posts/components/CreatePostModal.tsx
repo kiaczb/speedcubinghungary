@@ -3,12 +3,20 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { badgeMap, PostsItem, TagTypes } from "../types";
 import { postImageUrl } from "../lib/postImage";
+import { clientApiUrl } from "@/app/lib/api";
+import Button from "@/app/components/ui/Button";
+import Field, { controlClass } from "@/app/components/ui/Field";
 
 // A backend korlátaival egyezzenek, hogy a hibát ne csak a szerver jelezze:
 // lásd apps/api/internal/post/upload.go és validator.go
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5 MB
 const MIN_CONTENT_LENGTH = 20;
-const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+const ACCEPTED_IMAGE_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+];
 
 type Props = {
   onClose: () => void;
@@ -19,7 +27,7 @@ type Props = {
 
 export default function CreatePostModal({ onClose, post }: Props) {
   const router = useRouter();
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+  const API_URL = clientApiUrl();
 
   const isEdit = Boolean(post);
   const existingImageUrl = postImageUrl(post?.image_path);
@@ -36,6 +44,7 @@ export default function CreatePostModal({ onClose, post }: Props) {
   const [submitting, setSubmitting] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const titleInputRef = useRef<HTMLInputElement>(null);
   // Az aktuális preview objectURL-je. Ref-ben tartjuk, hogy csere/unmount esetén
   // fel tudjuk szabadítani anélkül, hogy effectben hívnánk setState-et.
   const objectUrlRef = useRef<string | null>(null);
@@ -43,6 +52,8 @@ export default function CreatePostModal({ onClose, post }: Props) {
   // Az előnézetben megjelenő kép: az újonnan választott fájl elsőbbséget élvez,
   // különben a meglévő kép (ha van és nem törölték).
   const shownImage = previewUrl ?? (removeExisting ? null : existingImageUrl);
+
+  const contentLength = content.trim().length;
 
   // Escape-re zárjon
   useEffect(() => {
@@ -52,6 +63,16 @@ export default function CreatePostModal({ onClose, post }: Props) {
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
+
+  // A háttér ne görögjön a modal alatt, és a fókusz rögtön az első mezőn legyen.
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    titleInputRef.current?.focus();
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, []);
 
   // Unmountkor szabadítsuk fel az utolsó objectURL-t (különben memóriát szivárogtat).
   useEffect(() => {
@@ -81,7 +102,9 @@ export default function CreatePostModal({ onClose, post }: Props) {
       return;
     }
     if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
-      setError("Nem támogatott képformátum. Engedélyezett: JPEG, PNG, WebP, GIF.");
+      setError(
+        "Nem támogatott képformátum. Engedélyezett: JPEG, PNG, WebP, GIF.",
+      );
       e.target.value = "";
       applyImage(null);
       return;
@@ -145,7 +168,8 @@ export default function CreatePostModal({ onClose, post }: Props) {
       if (!res.ok) {
         const message = await res.text();
         throw new Error(
-          message || (isEdit ? "Hiba a poszt mentésekor" : "Hiba a poszt létrehozásakor"),
+          message ||
+            (isEdit ? "Hiba a poszt mentésekor" : "Hiba a poszt létrehozásakor"),
         );
       }
 
@@ -160,55 +184,51 @@ export default function CreatePostModal({ onClose, post }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm"
       onClick={onClose}
       role="presentation"
     >
       <div
-        className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-white p-6 shadow-xl dark:bg-gray-900"
+        className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-panel border border-line bg-surface shadow-panel"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-labelledby="create-post-title"
       >
-        <div className="mb-5 flex items-start justify-between">
-          <h2 id="create-post-title" className="text-2xl font-bold">
+        {/* Ragadós fejléc, hogy hosszú űrlapnál is elérhető maradjon a bezárás. */}
+        <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-line bg-surface/95 px-6 py-4 backdrop-blur-sm">
+          <h2 id="create-post-title" className="text-lg font-bold">
             {isEdit ? "Poszt szerkesztése" : "Új poszt létrehozása"}
           </h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="Bezárás"
-            className="text-2xl leading-none text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
+            className="-mr-2 -mt-1 inline-flex h-8 w-8 items-center justify-center rounded-control text-xl leading-none text-muted-foreground transition-colors duration-200 ease-smooth hover:bg-surface-muted hover:text-foreground"
           >
             ×
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label htmlFor="post-title" className="mb-1 block text-sm font-medium">
-              Cím
-            </label>
+        <form onSubmit={handleSubmit} className="space-y-5 px-6 py-5">
+          <Field label="Cím" htmlFor="post-title">
             <input
               id="post-title"
+              ref={titleInputRef}
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="A poszt címe"
-              className="w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800"
+              className={controlClass}
             />
-          </div>
+          </Field>
 
-          <div>
-            <label htmlFor="post-tag" className="mb-1 block text-sm font-medium">
-              Kategória
-            </label>
+          <Field label="Kategória" htmlFor="post-tag">
             <select
               id="post-tag"
               value={tag}
               onChange={(e) => setTag(e.target.value as TagTypes)}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800"
+              className={controlClass}
             >
               {Object.entries(badgeMap).map(([value, { label }]) => (
                 <option key={value} value={value}>
@@ -216,87 +236,97 @@ export default function CreatePostModal({ onClose, post }: Props) {
                 </option>
               ))}
             </select>
-          </div>
+          </Field>
 
-          <div>
-            <label htmlFor="post-content" className="mb-1 block text-sm font-medium">
-              Leírás
-            </label>
+          <Field
+            label="Leírás"
+            htmlFor="post-content"
+            hint={
+              <>
+                Markdown támogatott (címek, listák, táblázatok, **félkövér**…).{" "}
+                <span
+                  className={
+                    contentLength < MIN_CONTENT_LENGTH
+                      ? "font-medium text-brand-red"
+                      : "text-muted-foreground"
+                  }
+                >
+                  <span className="tabular font-mono">{contentLength}</span> /{" "}
+                  {MIN_CONTENT_LENGTH} karakter minimum
+                </span>
+              </>
+            }
+          >
             <textarea
               id="post-content"
               value={content}
               onChange={(e) => setContent(e.target.value)}
-              rows={7}
-              placeholder={"A poszt tartalma...\n\n## Alcím\n**félkövér**, *dőlt*, [link](https://...)\n\n- felsorolás"}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 font-mono text-sm focus:border-blue-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800"
+              rows={9}
+              placeholder={
+                "A poszt tartalma...\n\n## Alcím\n**félkövér**, *dőlt*, [link](https://...)\n\n- felsorolás"
+              }
+              className={`${controlClass} resize-y font-mono`}
             />
-            <p className="mt-1 text-xs text-gray-500">
-              Markdown támogatott (címek, listák, táblázatok, **félkövér**…).{" "}
-              {content.trim().length} / {MIN_CONTENT_LENGTH} karakter minimum
-            </p>
-          </div>
+          </Field>
 
-          <div>
-            <label htmlFor="post-image" className="mb-1 block text-sm font-medium">
-              Borítókép <span className="text-gray-500">(opcionális)</span>
-            </label>
+          <Field label="Borítókép" htmlFor="post-image" optional>
             <input
               id="post-image"
               ref={fileInputRef}
               type="file"
               accept={ACCEPTED_IMAGE_TYPES.join(",")}
               onChange={handleImageChange}
-              className="w-full text-sm file:mr-3 file:rounded-md file:border-0 file:bg-blue-500 file:px-4 file:py-2 file:text-white hover:file:bg-blue-600"
+              className="w-full cursor-pointer text-sm text-muted-foreground file:mr-3 file:cursor-pointer file:rounded-control file:border file:border-line file:bg-surface-muted file:px-4 file:py-2 file:text-sm file:font-medium file:text-foreground hover:file:bg-line"
             />
             {shownImage && (
-              <div className="mt-3">
+              <div className="mt-3 flex items-start gap-3">
                 {/* next/image helyett sima img: a kép a saját API-nkról jön, aminek
                     a domainje környezetenként más — így nem kell remotePatterns. */}
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={shownImage}
                   alt="Előnézet"
-                  className="max-h-56 w-auto rounded-md border border-gray-200 dark:border-gray-700"
+                  className="max-h-40 w-auto rounded-control border border-line"
                 />
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="sm"
                   onClick={clearImage}
-                  className="mt-2 text-sm text-red-600 hover:underline"
                 >
                   Kép eltávolítása
-                </button>
+                </Button>
               </div>
             )}
-          </div>
+          </Field>
 
           {error && (
-            <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">
+            <p
+              role="alert"
+              className="rounded-control border border-brand-red/20 bg-brand-red/5 px-3.5 py-2.5 text-sm text-brand-red-strong"
+            >
               {error}
             </p>
           )}
 
-          <div className="flex justify-end gap-3 pt-2">
-            <button
+          <div className="flex justify-end gap-3 border-t border-line pt-5">
+            <Button
               type="button"
+              variant="secondary"
               onClick={onClose}
               disabled={submitting}
-              className="rounded-md border border-gray-300 px-4 py-2 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:hover:bg-gray-800"
             >
               Mégse
-            </button>
-            <button
-              type="submit"
-              disabled={submitting}
-              className="rounded-md bg-blue-500 px-4 py-2 text-white hover:bg-blue-600 disabled:opacity-50"
-            >
+            </Button>
+            <Button type="submit" disabled={submitting}>
               {submitting
                 ? isEdit
-                  ? "Mentés..."
-                  : "Létrehozás..."
+                  ? "Mentés…"
+                  : "Létrehozás…"
                 : isEdit
                   ? "Mentés"
                   : "Létrehozás"}
-            </button>
+            </Button>
           </div>
         </form>
       </div>

@@ -1,80 +1,95 @@
 import { Competition } from "@/app/types";
+import { FaCalendarAlt, FaMapMarkerAlt } from "react-icons/fa";
 import Card from "../Cards/Card";
-import { FaCalendarAlt } from "react-icons/fa";
 import RemainingDays from "./RemainingDays";
 
-async function getPosts(): Promise<Competition[]> {
-  const res = await fetch(
-    `https://www.worldcubeassociation.org/api/v0/competitions?sort=start_date&start=${new Date().toISOString().split('T')[0]}&country_iso2=HU`,
-  );
-  if (!res.ok) throw new Error("Hírek lekérése sikertelen");
-  return res.json();
+/**
+ * A hero jobb oldalán álló "következő verseny" kártya.
+ *
+ * A "van verseny" és a "nincs verseny" ág korábban a teljes kártyát külön-külön
+ * megrajzolta; most egy váz van, és csak a tartalom tér el.
+ *
+ * A lekérés hibája sem dobja el az egész főoldalt: a WCA API kiesése esetén az
+ * üres állapot jelenik meg (a projekt többi fetch-e is így viselkedik).
+ */
+
+/**
+ * A lekérés és a "hány nap múlva" számítás együtt él itt, a komponensen kívül:
+ * a `Date.now()` render közben tisztátalan hívás lenne (a React Compiler
+ * szabálya jogosan tiltja), itt viszont az adatbetöltés része.
+ */
+async function getNextCompetition(): Promise<{
+  next: Competition | null;
+  daysUntil: number | null;
+}> {
+  const now = new Date();
+  const today = now.toISOString().split("T")[0];
+
+  try {
+    const res = await fetch(
+      `https://www.worldcubeassociation.org/api/v0/competitions?sort=start_date&start=${today}&country_iso2=HU`,
+    );
+    if (!res.ok) return { next: null, daysUntil: null };
+
+    const competitions: Competition[] = await res.json();
+    const next = competitions?.[0] ?? null;
+
+    return {
+      next,
+      daysUntil: next
+        ? Math.ceil(
+            (new Date(next.start_date).getTime() - now.getTime()) /
+              (1000 * 60 * 60 * 24),
+          )
+        : null,
+    };
+  } catch (error) {
+    console.error("Közelgő versenyek lekérése sikertelen:", error);
+    return { next: null, daysUntil: null };
+  }
 }
 
 const UpcomingEvent = async () => {
-  const competitions = await getPosts();
-
-  if (!competitions || competitions.length === 0) {
-    return (
-      <div className="relative w-full max-w-sm sm:max-w-md mb-20 lg:my-0 lg:mr-10">
-        <Card className="bg-gray-800/90 text-white mx-auto lg:mx-0 p-6">
-          <div className="text-center space-y-3">
-            {/* Főcím - szürke, kisebb, nagybetűs */}
-            <div>
-              <h3 className="text-sm md:text-md font-semibold text-gray-400 uppercase tracking-widest mb-1">
-                Következő verseny
-              </h3>
-              <div className="w-16 h-0.5 bg-gray-600 mx-auto"></div>
-            </div>
-
-            {/* Verseny neve - fehér, nagy, félkövér */}
-            <h4 className="text-2xl md:text-3xl lg:text-4xl font-bold text-white leading-tight">
-              Nincs Közelgő verseny
-            </h4>
-
-            {/* Dátum és helyszín - tagolt megjelenítés */}
-          </div>
-        </Card>
-      </div>
-    );
-  }
-  // amíg nem töltődik az adat
-
-  // Most már van adat, hozzáférhetsz például az első versenyhez:
-  const nextCompetition = competitions[0];
+  const { next, daysUntil } = await getNextCompetition();
 
   return (
-    <div className="relative w-full max-w-sm sm:max-w-md mb-20 lg:my-0 lg:mr-10">
-      <Card className="bg-gray-800/90 text-white mx-auto lg:mx-0 p-6">
-        <div className="text-center space-y-3">
-          {/* Főcím - szürke, kisebb, nagybetűs */}
-          <div>
-            <h3 className="text-sm md:text-md font-semibold text-gray-400 uppercase tracking-widest mb-1">
-              Következő verseny
-            </h3>
-            <div className="w-16 h-0.5 bg-gray-600 mx-auto"></div>
-          </div>
+    <Card
+      variant="inverse"
+      padding="lg"
+      className="w-full max-w-sm shrink-0 sm:max-w-md"
+    >
+      <div className="text-center">
+        <h2 className="font-mono text-xs font-medium uppercase tracking-[0.18em] text-white/40">
+          Következő verseny
+        </h2>
+        <div className="mx-auto mt-3 h-px w-12 bg-white/15" />
 
-          {/* Verseny neve - fehér, nagy, félkövér */}
-          <h4 className="text-2xl md:text-3xl lg:text-4xl font-bold text-white leading-tight">
-            {nextCompetition["name"]}
-          </h4>
+        <p className="mt-5 text-2xl font-bold leading-tight text-white sm:text-3xl">
+          {next ? next.name : "Nincs meghirdetett verseny"}
+        </p>
 
-          {/* Dátum és helyszín - tagolt megjelenítés */}
-          <div className="pt-2 space-y-2">
-            <div className="flex items-center justify-center gap-2 text-gray-300">
-              <FaCalendarAlt className="text-gray-400" />
-              <span className="font-medium">{nextCompetition.date_range}</span>
-            </div>
-            <div className="flex items-center justify-center gap-2 text-gray-300">
-              <span className="text-gray-400">📍</span>
-              <span>{`${nextCompetition.city}, ${nextCompetition.country_iso2}`}</span>
-            </div>
+        {next ? (
+          <div className="mt-5 flex flex-col items-center gap-2 text-sm text-white/70">
+            <span className="flex items-center gap-2">
+              <FaCalendarAlt className="h-3.5 w-3.5 shrink-0 text-white/40" />
+              <span className="tabular">{next.date_range}</span>
+            </span>
+            <span className="flex items-center gap-2">
+              <FaMapMarkerAlt className="h-3.5 w-3.5 shrink-0 text-white/40" />
+              <span>
+                {[next.city, next.country_iso2].filter(Boolean).join(", ")}
+              </span>
+            </span>
           </div>
-        </div>
-        <RemainingDays days={Math.ceil((new Date(nextCompetition.start_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24))} />
-      </Card>
-    </div>
+        ) : (
+          <p className="mt-5 text-sm leading-relaxed text-white/60">
+            Amint kiírunk egy új versenyt, itt jelenik meg elsőként.
+          </p>
+        )}
+      </div>
+
+      {daysUntil !== null && <RemainingDays days={daysUntil} />}
+    </Card>
   );
 };
 

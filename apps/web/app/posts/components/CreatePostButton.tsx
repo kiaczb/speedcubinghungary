@@ -1,5 +1,7 @@
 "use client";
 import { useState } from "react";
+import { FaPlus } from "react-icons/fa";
+import Button from "@/app/components/ui/Button";
 import CreatePostModal from "./CreatePostModal";
 
 export default function CreatePostButton() {
@@ -7,12 +9,13 @@ export default function CreatePostButton() {
 
   return (
     <>
-      <button
+      <Button
+        size="sm"
         onClick={() => setOpen(true)}
-        className="rounded-md bg-blue-500 p-3 text-center text-white hover:cursor-pointer hover:bg-blue-600"
+        icon={<FaPlus className="h-3 w-3" />}
       >
-        Új poszt létrehozása
-      </button>
+        Új poszt
+      </Button>
 
       {open && <CreatePostModal onClose={() => setOpen(false)} />}
     </>

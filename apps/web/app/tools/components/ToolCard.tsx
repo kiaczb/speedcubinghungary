@@ -1,6 +1,6 @@
 import React, { ReactNode } from "react";
-import Link from "next/link";
 import Card from "@/app/components/Cards/Card";
+import Button from "@/app/components/ui/Button";
 
 type ToolLink = {
   href: string;
@@ -13,26 +13,39 @@ type ToolCardProps = {
   children: React.ReactNode; //description
   links: ToolLink[];
 };
+
+/**
+ * Eszköz-kártya.
+ *
+ * A fejléc korábban egy szürke sáv volt lekerekítés-ütközéssel, a leírás és a
+ * gombok között pedig fix `gap-14` tátongott, amitől a rövid leírású kártyák
+ * aránytalanul magasak lettek. Most a leírás nyúlik, a gombok a kártya alján
+ * igazodnak — így a rácsban egy vonalban állnak.
+ */
 const ToolCard = ({ title, children, links }: ToolCardProps) => {
   return (
-    <Card className="max-w-lg">
-      <div className="flex flex-col items-center mb-6 rounded-t-2xl bg-gray-200 p-2">
-        <h1 className="text-xl">{title}</h1>
+    <Card interactive className="flex h-full flex-col">
+      <div className="border-b border-line px-5 py-4">
+        <h3 className="font-semibold text-foreground">{title}</h3>
       </div>
 
-      <div className="flex flex-col gap-14 p-6">
-        <div>{children}</div>
+      <div className="flex flex-1 flex-col gap-6 p-5">
+        <div className="flex-1 text-sm leading-relaxed text-muted-foreground">
+          {children}
+        </div>
 
-        <div className="flex flex-col gap-2 items-center">
+        <div className="flex flex-wrap gap-2">
           {links.map((link) => (
-            <Link
+            <Button
               key={link.href}
               href={link.href}
-              className="btn-primary bg-black text-white font-semibold py-3 px-6 rounded-xl flex items-center gap-2 hover:bg-gray-800"
+              // A külső eszközök új fülön nyíljanak, hogy az oldal ne vesszen el.
+              external={link.href.startsWith("http")}
+              size="sm"
+              icon={link.icon}
             >
-              {link.icon}
-              <span className="text-white">{link.label}</span>
-            </Link>
+              {link.label}
+            </Button>
           ))}
         </div>
       </div>

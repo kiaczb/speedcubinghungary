@@ -4,19 +4,33 @@ type Props = {
   days: number;
 };
 
+/**
+ * Visszaszámláló a következő versenyig.
+ *
+ * A szám monospace, fix szélességű számjegyekkel (`tabular`) — egy időmérő
+ * sportot bemutató oldalon a számok legyenek műszerfal-szerűek, és ne
+ * ugráljanak, ha egy számjegy változik.
+ */
 const RemainingDays = ({ days }: Props) => {
-  return (
-    <div className="mt-8 flex items-center justify-center gap-4 p-4 rounded-xl bg-linear-to-br from-gray-900/50 to-black/50 border border-white/10 backdrop-blur-sm">
-      <RiTimeFill className="text-3xl text-gray-300" />
+  // A ma kezdődő versenyt ne "0 nap múlva"-ként hirdessük.
+  const isToday = days <= 0;
 
-      <div className="flex items-baseline gap-2">
-        <p className="text-3xl md:text-4xl font-bold bg-linear-to-r from-white via-gray-100 to-gray-300 bg-clip-text text-transparent">
-          {days}
-        </p>
-        <span className="text-sm uppercase tracking-widest text-gray-400 font-medium">
-          nap
-        </span>
-      </div>
+  return (
+    <div className="mt-7 flex items-center justify-center gap-4 rounded-card border border-white/10 bg-white/5 p-4">
+      <RiTimeFill className="h-6 w-6 shrink-0 text-white/30" />
+
+      {isToday ? (
+        <p className="text-lg font-bold text-white">Már zajlik</p>
+      ) : (
+        <div className="flex items-baseline gap-2">
+          <p className="tabular font-mono text-3xl font-bold leading-none text-white sm:text-4xl">
+            {days}
+          </p>
+          <span className="font-mono text-xs uppercase tracking-[0.18em] text-white/40">
+            nap múlva
+          </span>
+        </div>
+      )}
     </div>
   );
 };

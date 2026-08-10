@@ -8,9 +8,10 @@
  * Egydomainű üzemben (Caddy) ez pl. https://test.example.com/api/uploads/x.webp,
  * fejlesztésben http://localhost:8080/uploads/x.webp.
  */
+import { clientApiUrl } from "@/app/lib/api";
+
 export function postImageUrl(imagePath?: string): string | null {
   if (!imagePath) return null;
 
-  const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
-  return `${base}${imagePath}`;
+  return `${clientApiUrl()}${imagePath}`;
 }
