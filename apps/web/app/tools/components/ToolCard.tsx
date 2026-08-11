@@ -10,18 +10,10 @@ type ToolLink = {
 
 type ToolCardProps = {
   title: string;
-  children: React.ReactNode; //description
+  children: React.ReactNode;
   links: ToolLink[];
 };
 
-/**
- * Eszköz-kártya.
- *
- * A fejléc korábban egy szürke sáv volt lekerekítés-ütközéssel, a leírás és a
- * gombok között pedig fix `gap-14` tátongott, amitől a rövid leírású kártyák
- * aránytalanul magasak lettek. Most a leírás nyúlik, a gombok a kártya alján
- * igazodnak — így a rácsban egy vonalban állnak.
- */
 const ToolCard = ({ title, children, links }: ToolCardProps) => {
   return (
     <Card interactive className="flex h-full flex-col">
@@ -39,7 +31,6 @@ const ToolCard = ({ title, children, links }: ToolCardProps) => {
             <Button
               key={link.href}
               href={link.href}
-              // A külső eszközök új fülön nyíljanak, hogy az oldal ne vesszen el.
               external={link.href.startsWith("http")}
               size="sm"
               icon={link.icon}

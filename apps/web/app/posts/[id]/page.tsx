@@ -29,15 +29,15 @@ export default async function PostPage({ params }: PageProps) {
   const { id } = await params;
   const post = await getPost(id);
   if (!post) {
-    notFound(); // 404 oldal
+    notFound();
   }
 
   const imageUrl = postImageUrl(post.image_path);
   const badge = badgeMap[post.tag];
 
   // A riport posztok tartalma strukturált JSON — dedikált komponens rendereli.
-  // Minden más poszt markdown (PostContent). Törött/régi JSON esetén a report a
-  // markdown-renderelőre esik vissza, hogy sose dőljön el az oldal.
+  // Törött/régi JSON esetén a markdown-renderelőre esik vissza, hogy sose
+  // dőljön el az oldal.
   const report = post.tag === "report" ? parseWeeklyReport(post.content) : null;
 
   return (
@@ -74,8 +74,7 @@ export default async function PostPage({ params }: PageProps) {
         </header>
 
         {imageUrl && (
-          /* next/image helyett sima img: a kép a saját API-nkról jön, aminek a
-             domainje környezetenként más — így nem kell remotePatterns config. */
+          /* Sima img: a kép domainje környezetenként más — így nem kell remotePatterns. */
           /* eslint-disable-next-line @next/next/no-img-element */
           <img
             src={imageUrl}

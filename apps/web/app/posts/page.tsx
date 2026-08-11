@@ -10,7 +10,6 @@ export const metadata: Metadata = {
     "Versenyek, események és heti riportok a magyar kockázó közösségből.",
 };
 
-// Server oldali fetch
 async function getPosts(): Promise<PostsItem[]> {
   try {
     const res = await fetch(`${serverApiUrl()}/posts`, { cache: "no-store" });

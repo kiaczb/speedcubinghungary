@@ -126,7 +126,6 @@ const CalendarView = () => {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between gap-4">
-        {/* A találatszám a lista tetején: azonnal látszik, mennyi verseny van. */}
         <p className="text-sm text-muted-foreground">
           {status === "success" && (
             <>

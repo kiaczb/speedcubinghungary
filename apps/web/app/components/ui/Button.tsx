@@ -1,15 +1,6 @@
 import Link from "next/link";
 import React, { type AnchorHTMLAttributes, type ButtonHTMLAttributes } from "react";
 
-/**
- * Egységes gomb — a korábban tucatnyi helyre bemásolt "fekete háttér, fehér
- * félkövér szöveg, kézzel megadott padding és sugár" minta helyett.
- *
- * Ugyanaz a komponens ad `<button>`-t, belső `<Link>`-et és külső `<a>`-t:
- * a `href` jelenléte dönti el. Így a hover/fókusz/átmenet viselkedés egy helyen
- * él, és nem csúszik szét felületenként.
- */
-
 type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "inverse";
 type ButtonSize = "sm" | "md" | "lg";
 
@@ -21,19 +12,14 @@ const BASE =
   "active:translate-y-px";
 
 const VARIANTS: Record<ButtonVariant, string> = {
-  // Elsődleges akció: tintafekete tömb, finom emeléssel.
   primary:
     "bg-foreground text-white shadow-card hover:bg-ink-hover hover:shadow-card-hover focus-visible:outline-foreground",
-  // Másodlagos: keretes, háttér nélkül — ugyanaz a méret, kisebb súly.
   secondary:
     "border border-line-strong text-foreground hover:border-foreground hover:bg-surface-muted focus-visible:outline-foreground",
-  // Harmadlagos: csak szöveg, listákon és kártyákon belüli akciókhoz.
   ghost:
     "text-muted-foreground hover:bg-surface-muted hover:text-foreground focus-visible:outline-foreground",
-  // Destruktív akció a márka pirosával (nem a Tailwind alap red-500-zal).
   danger:
     "bg-brand-red text-white shadow-card hover:bg-brand-red-strong hover:shadow-card-hover focus-visible:outline-brand-red",
-  // Sötét szakaszokon (pl. a hírek sáv) használt világos gomb.
   inverse:
     "bg-white text-foreground shadow-card hover:bg-surface-muted hover:shadow-card-hover focus-visible:outline-white",
 };
@@ -47,12 +33,8 @@ const SIZES: Record<ButtonSize, string> = {
 type CommonProps = {
   variant?: ButtonVariant;
   size?: ButtonSize;
-  /** Ikon a felirat előtt. */
   icon?: React.ReactNode;
-  /**
-   * Ikon a felirat után. Hoverre finoman jobbra csúszik — ez a mozdulat
-   * korábban minden hívási helyen kézzel volt bedrótozva.
-   */
+  /** Hoverre finoman jobbra csúszik. */
   iconRight?: React.ReactNode;
   fullWidth?: boolean;
   className?: string;

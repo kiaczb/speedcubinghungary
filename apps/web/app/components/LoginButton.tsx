@@ -10,7 +10,6 @@ const LoginButton = () => {
 
   const handleLogin = () => {
     const clientId = process.env.NEXT_PUBLIC_WCA_CLIENT_ID;
-    // Ezt is az .env-ből olvassuk fel!
     const redirectUri = encodeURIComponent(
       process.env.NEXT_PUBLIC_WCA_REDIRECT_URI ||
         "http://localhost:8080/login/callback",
@@ -30,7 +29,6 @@ const LoginButton = () => {
   };
 
   if (isLoading) {
-    // Placeholder a gomb méretében, hogy a navbar ne ugorjon be betöltéskor.
     return (
       <div
         aria-hidden
@@ -59,7 +57,6 @@ const LoginButton = () => {
           ) : undefined
         }
       >
-        {/* Szűk helyen csak a név, teljes felirat nagyobb navbaron. */}
         <span className="max-w-28 truncate">{user.name}</span>
         <span className="text-muted-foreground">· Kilépés</span>
       </Button>

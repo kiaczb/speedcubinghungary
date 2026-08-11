@@ -17,18 +17,6 @@ type Props = {
   isAdmin?: boolean;
 };
 
-/**
- * Egy sor a hírlistában.
- *
- * Változások:
- * - a kijelölő "checkbox" korábban egy `div` volt `onClick`-kel és egy rejtett
- *   inputtal — billentyűzettel nem lehetett elérni. Most valódi `<input>`;
- * - a kártya `text-center`-t örökölt, ezért a cím és a kivonat középre zárt volt;
- * - a `font-display` és a `text-muted-foreground` osztályok nem is léteztek a
- *   témában, így a dátum szín nélkül maradt;
- * - a kép mostantól bélyegkép a szöveg mellett, nem egy 256 px magas fejléc,
- *   így egy képernyőre több hír fér ki.
- */
 const PostsListItem = ({ postsItem, checked, onToggle, isAdmin }: Props) => {
   const badge = badgeMap[postsItem.tag];
   const imageUrl = postImageUrl(postsItem.image_path);
@@ -47,7 +35,6 @@ const PostsListItem = ({ postsItem, checked, onToggle, isAdmin }: Props) => {
       <Card
         interactive
         padding="md"
-        // `relative` kell a cím kiterjesztett kattintófelületéhez (after:inset-0).
         className={`group relative ${checked ? "border-foreground" : ""}`}
       >
         <div className="flex gap-4">
@@ -57,7 +44,6 @@ const PostsListItem = ({ postsItem, checked, onToggle, isAdmin }: Props) => {
               checked={checked}
               onChange={onToggle}
               aria-label={`${postsItem.title} kijelölése`}
-              // `relative z-10`: a cím kattintófelülete alá ne kerüljön.
               className="relative z-10 mt-1 h-4 w-4 shrink-0 cursor-pointer accent-foreground"
             />
           )}
@@ -79,9 +65,6 @@ const PostsListItem = ({ postsItem, checked, onToggle, isAdmin }: Props) => {
               <h2 className="mt-2 text-lg font-semibold leading-snug text-foreground">
                 <Link
                   href={`/posts/${postsItem.id}`}
-                  // A teljes sorra kiterjesztett kattintófelület, de a link
-                  // maga a cím marad — így a képernyőolvasó is értelmes
-                  // szöveget kap.
                   className="after:absolute after:inset-0 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-foreground"
                 >
                   {postsItem.title}
@@ -94,8 +77,7 @@ const PostsListItem = ({ postsItem, checked, onToggle, isAdmin }: Props) => {
             </div>
 
             {imageUrl && (
-              /* next/image helyett sima img: a kép a saját API-nkról jön, aminek a
-                 domainje környezetenként más — így nem kell remotePatterns config. */
+              /* Sima img: a kép domainje környezetenként más — így nem kell remotePatterns. */
               /* eslint-disable-next-line @next/next/no-img-element */
               <img
                 src={imageUrl}
@@ -106,8 +88,6 @@ const PostsListItem = ({ postsItem, checked, onToggle, isAdmin }: Props) => {
           </div>
 
           {canEdit && (
-            // `relative z-10`, hogy a cím kiterjesztett kattintófelülete alá ne
-            // kerüljön be a gomb.
             <div className="relative z-10 shrink-0">
               <Button
                 variant="ghost"

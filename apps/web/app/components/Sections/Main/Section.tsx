@@ -1,26 +1,11 @@
 import React from "react";
 
-/**
- * A főoldal szakaszainak közös kerete.
- *
- * Változások a korábbi verzióhoz képest:
- * - a `className` hiányakor a class-listába szó szerint bekerült az "undefined";
- * - minden szakasz maga döntötte el a belső szélességét és a padding-jét
- *   (`px-10 lg:px-30` itt, `container mx-auto px-4` ott), így a szakaszok
- *   tartalma nem volt egy vonalban. Most közös konténer tartja a rendet.
- */
-
 type SectionProps = {
-  /** Rövid, nagybetűs felirat a cím fölött. */
   eyebrow?: string;
   title?: string;
   subtitle?: string;
-  /** `left` megtartva a régi hívásokhoz: balra igazított fejléc. */
   left?: boolean;
-  /**
-   * Saját konténert visz a tartalom (pl. teljes szélességű háttér esetén),
-   * ezért a szakasz nem tesz rá vízszintes paddinget.
-   */
+  /** Saját konténert visz a tartalom (teljes szélességű háttérhez). */
   bleed?: boolean;
   children: React.ReactNode;
   className?: string;

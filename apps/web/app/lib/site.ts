@@ -1,14 +1,6 @@
 import type { IconType } from "react-icons";
 import { FaEnvelope, FaFacebook, FaGlobe } from "react-icons/fa";
 
-/**
- * Oldalszintű, egy helyen tartott tartalom: navigáció és elérhetőségek.
- *
- * Ezek korábban duplán szerepeltek (a navigáció a layoutban és a footerben, az
- * elérhetőségek a footerben és a kapcsolat oldalon), így egy e-mail-cím
- * módosítása két fájl átírását igényelte.
- */
-
 export type NavLink = {
   href: string;
   label: string;

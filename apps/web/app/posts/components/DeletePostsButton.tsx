@@ -17,8 +17,6 @@ export default function DeletePostsButton({ selectedIds, onDeleted }: Props) {
   const handleDelete = async () => {
     if (selectedIds.length === 0) return;
 
-    // A törlés visszavonhatatlan, és eddig egyetlen kattintás elvitte a
-    // kijelölt posztokat — legyen egy megerősítő lépés.
     const confirmed = window.confirm(
       selectedIds.length === 1
         ? "Biztosan törlöd a kijelölt posztot? Ez nem vonható vissza."

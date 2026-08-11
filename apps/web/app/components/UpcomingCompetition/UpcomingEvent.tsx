@@ -3,21 +3,8 @@ import { FaCalendarAlt, FaMapMarkerAlt } from "react-icons/fa";
 import Card from "../Cards/Card";
 import RemainingDays from "./RemainingDays";
 
-/**
- * A hero jobb oldalán álló "következő verseny" kártya.
- *
- * A "van verseny" és a "nincs verseny" ág korábban a teljes kártyát külön-külön
- * megrajzolta; most egy váz van, és csak a tartalom tér el.
- *
- * A lekérés hibája sem dobja el az egész főoldalt: a WCA API kiesése esetén az
- * üres állapot jelenik meg (a projekt többi fetch-e is így viselkedik).
- */
-
-/**
- * A lekérés és a "hány nap múlva" számítás együtt él itt, a komponensen kívül:
- * a `Date.now()` render közben tisztátalan hívás lenne (a React Compiler
- * szabálya jogosan tiltja), itt viszont az adatbetöltés része.
- */
+// A `Date.now()` render közben tisztátalan hívás lenne (React Compiler szabály),
+// ezért a nap-számítás itt, az adatbetöltésben történik.
 async function getNextCompetition(): Promise<{
   next: Competition | null;
   daysUntil: number | null;

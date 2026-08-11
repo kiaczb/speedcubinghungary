@@ -2,15 +2,6 @@ import Link from "next/link";
 import React from "react";
 import { CONTACT_ITEMS, NAV_LINKS, SITE_DESCRIPTION } from "../lib/site";
 
-/**
- * Lábléc.
- *
- * A navigáció és az elérhetőségek most a közös `lib/site.ts`-ből jönnek — eddig
- * a linklista a layoutból, a kontaktlista pedig a kapcsolat oldalról volt
- * kimásolva, és külön kellett őket karbantartani. A `<h1>`-ek `<h2>`-re
- * változtak: egy oldalon egy `<h1>` legyen, és az a tartalomé.
- */
-
 const Footer = () => {
   return (
     <footer className="border-t border-line bg-surface-inverse text-white">

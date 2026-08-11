@@ -27,8 +27,6 @@ const Contact = () => {
               Elérhetőségeink
             </h2>
 
-            {/* Az adatok a közös `lib/site.ts`-ből jönnek — ugyanaz a lista, amit
-                a lábléc is használ, így nem tudnak elcsúszni egymástól. */}
             <ul className="mt-5 space-y-2">
               {CONTACT_ITEMS.map(({ icon: Icon, label, href }) => (
                 <li key={label}>

@@ -21,7 +21,6 @@ type Props = {
 
 const MAX_CHIPS = 2;
 
-/** Üzenetdoboz a naptár alatti sávhoz (kiválasztás nélkül / üres nap). */
 const AgendaNote = ({ children }: { children: React.ReactNode }) => (
   <p className="rounded-card border border-dashed border-line-strong bg-surface px-4 py-6 text-center text-sm text-muted-foreground">
     {children}
@@ -71,7 +70,6 @@ const MonthCalendar = ({ competitions }: Props) => {
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Hónap fejléc + navigáció */}
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold capitalize text-foreground">
           {monthLabel}
@@ -103,7 +101,6 @@ const MonthCalendar = ({ competitions }: Props) => {
         </div>
       </div>
 
-      {/* Naptárrács */}
       <div className="overflow-hidden rounded-card border border-line bg-line">
         <div className="grid grid-cols-7 gap-px bg-line">
           {WEEKDAY_LABELS.map((label) => (
@@ -167,7 +164,6 @@ const MonthCalendar = ({ competitions }: Props) => {
                   )}
                 </div>
 
-                {/* Verseny-chipek asztali nézetben */}
                 {hasComps && (
                   <div className="mt-1 hidden flex-col gap-1 sm:flex">
                     {dayComps.slice(0, MAX_CHIPS).map((competition) => (
@@ -196,7 +192,6 @@ const MonthCalendar = ({ competitions }: Props) => {
         </div>
       </div>
 
-      {/* Kiválasztott nap programja */}
       <div>
         {selectedDate ? (
           <>

@@ -6,19 +6,7 @@ import React, { useEffect, useState } from "react";
 import SpeedcubingFullAnimatedSVG from "./svgs/SpeedcubingFullAnimatedSVG";
 import { NAV_LINKS } from "../lib/site";
 
-/**
- * Fejléc.
- *
- * A linkeket korábban a layout adta át gyerekként, a Navbar pedig
- * `React.cloneElement`-tel írta felül a `className`-jüket — emiatt a linkek
- * asztali nézetben teljesen stílus nélkül maradtak (se hover, se fókusz, se
- * aktív állapot), és a mobil menü csendben felülírta a kapott osztályokat.
- * Most a navigáció adatvezérelt (`NAV_LINKS`), a `action` slot pedig a jobb
- * szélre kerülő elemé (bejelentkezés).
- */
-
 type NavbarProps = {
-  /** Jobb szélen megjelenő akció — a bejelentkezés gomb. */
   action?: React.ReactNode;
 };
 
@@ -60,7 +48,6 @@ const Navbar = ({ action }: NavbarProps) => {
             />
           </Link>
 
-          {/* Asztali navigáció */}
           <div className="hidden items-center gap-1 md:flex">
             {NAV_LINKS.map((link) => (
               <Link
@@ -74,7 +61,6 @@ const Navbar = ({ action }: NavbarProps) => {
                 }`}
               >
                 {link.label}
-                {/* Aktív oldal jelölése — korábban semmi nem mutatta, hol vagy. */}
                 <span
                   className={`absolute inset-x-3 -bottom-px h-0.5 rounded-full bg-brand-red transition-opacity duration-200 ease-smooth ${
                     isActive(link.href) ? "opacity-100" : "opacity-0"
@@ -85,7 +71,6 @@ const Navbar = ({ action }: NavbarProps) => {
             {action && <div className="ml-3">{action}</div>}
           </div>
 
-          {/* Mobil menü gomb */}
           <button
             type="button"
             onClick={() => setIsMenuOpen((open) => !open)}
@@ -113,11 +98,9 @@ const Navbar = ({ action }: NavbarProps) => {
         </div>
       </div>
 
-      {/* Mobil navigáció */}
       <div
         id="mobile-menu"
-        // `inert` a becsukott állapotban: így a rejtett linkek nem fókuszálhatók
-        // tabbal, miközben az animált magasság megmarad.
+        // `inert`: becsukott állapotban a rejtett linkek ne legyenek tabbal elérhetők.
         inert={!isMenuOpen}
         className={`overflow-hidden border-t border-line bg-white transition-[max-height,opacity] duration-300 ease-smooth md:hidden ${
           isMenuOpen ? "max-h-96 opacity-100" : "max-h-0 border-transparent opacity-0"
@@ -128,7 +111,6 @@ const Navbar = ({ action }: NavbarProps) => {
             <Link
               key={link.href}
               href={link.href}
-              // Navigáláskor záruljon be a menü.
               onClick={() => setIsMenuOpen(false)}
               aria-current={isActive(link.href) ? "page" : undefined}
               className={`rounded-control px-3 py-2.5 text-base font-medium transition-colors duration-200 ease-smooth ${

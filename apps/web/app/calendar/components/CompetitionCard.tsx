@@ -38,8 +38,6 @@ const CompetitionCard = ({ competition }: Props) => {
       padding="md"
       className="flex flex-col gap-5 sm:flex-row sm:gap-6"
     >
-      {/* Dátum-blokk: a hónap/nap monospace-ben, hogy a kártyák egymás alatt
-          azonos szélességű számokkal sorakozzanak. */}
       <div className="flex h-16 w-16 shrink-0 flex-col items-center justify-center rounded-control border border-line bg-surface-muted">
         <span className="font-mono text-[10px] font-medium uppercase tracking-[0.14em] text-subtle-foreground">
           {month}

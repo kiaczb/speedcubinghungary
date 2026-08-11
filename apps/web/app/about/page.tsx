@@ -17,11 +17,6 @@ const STATS = [
   { value: "15", label: "Város adott otthont" },
 ];
 
-/**
- * Az oldal korábban szó szerint a kapcsolat oldal bevezetőjét tartalmazta
- * ("Kérdéseid vannak a kockázással kapcsolatban?…"), vagyis nem az egyesületről
- * szólt. Most a főoldali "Rólunk" szakasz tartalmát bontja ki.
- */
 export default function About() {
   return (
     <div className="px-5 py-12 sm:px-8 sm:py-16 lg:px-12">

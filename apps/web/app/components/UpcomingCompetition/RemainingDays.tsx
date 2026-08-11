@@ -4,15 +4,7 @@ type Props = {
   days: number;
 };
 
-/**
- * Visszaszámláló a következő versenyig.
- *
- * A szám monospace, fix szélességű számjegyekkel (`tabular`) — egy időmérő
- * sportot bemutató oldalon a számok legyenek műszerfal-szerűek, és ne
- * ugráljanak, ha egy számjegy változik.
- */
 const RemainingDays = ({ days }: Props) => {
-  // A ma kezdődő versenyt ne "0 nap múlva"-ként hirdessük.
   const isToday = days <= 0;
 
   return (

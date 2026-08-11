@@ -6,25 +6,12 @@ import {
 import { flagEmoji, formatPeriod } from "../lib/report";
 import { RECORD_BADGE_COLORS, RECORD_BADGE_FALLBACK } from "../lib/recordBadges";
 
-/**
- * A heti riport strukturált megjelenítése (a `tag === "report"` posztokhoz).
- *
- * A tartalom NEM markdown, hanem JSON (lásd lib/report.ts + a weekly-report job).
- * Így a megjelenés teljesen itt, komponensben stílusozható — az email riporthoz
- * hasonló, szekciós/kártyás elrendezés, tetszőleges kontrollal.
- *
- * A rekord-jelölések színei a `lib/recordBadges.ts`-ből jönnek, közösen a
- * markdown-renderelővel — korábban a térkép itt is, ott is külön létezett.
- */
-
 function ResultChip({ result }: { result: WeeklyReportResult }) {
   const badge = RECORD_BADGE_COLORS[result.badge] ?? RECORD_BADGE_FALLBACK;
   return (
     <span className="inline-flex items-center gap-1.5 rounded-control border border-line bg-surface px-2 py-1 text-sm">
       <span className="font-medium text-foreground">{result.event}</span>
       <span className="text-subtle-foreground">{result.type}</span>
-      {/* Az idő monospace, fix szélességű számjegyekkel — így az egymás alatti
-          eredmények tizedespontjai egy vonalba esnek. */}
       <span className="tabular font-mono text-foreground">{result.result}</span>
       <span
         className={`rounded px-1.5 py-0.5 font-mono text-xs font-bold ${badge}`}
@@ -84,7 +71,6 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** Mérföldkő-lista (versenyzők és delegáltak) — közös váz a két szekcióhoz. */
 function MilestoneList({ children }: { children: React.ReactNode }) {
   return <ul className="space-y-2.5">{children}</ul>;
 }

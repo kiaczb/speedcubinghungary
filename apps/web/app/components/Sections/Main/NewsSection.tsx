@@ -22,7 +22,6 @@ async function getLatestPosts(): Promise<PostsItem[]> {
 export default async function NewsSection() {
   const latestPosts = await getLatestPosts();
 
-  // Ha nincs mit mutatni, ne maradjon ott egy üres sötét sáv.
   if (latestPosts.length === 0) return null;
 
   return (
@@ -38,8 +37,6 @@ export default async function NewsSection() {
           </p>
         </div>
 
-        {/* Rács a korábbi `flex-wrap` helyett: így a kártyák egy sorban azonos
-            magasak és rendezetten sorakoznak, nem középre torlódnak. */}
         <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {latestPosts.map((post) => (
             <NewsCard
