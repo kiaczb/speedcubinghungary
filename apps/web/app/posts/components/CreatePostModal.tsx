@@ -6,6 +6,7 @@ import { postImageUrl } from "../lib/postImage";
 import { clientApiUrl } from "@/app/lib/api";
 import Button from "@/app/components/ui/Button";
 import Field, { controlClass } from "@/app/components/ui/Field";
+import MarkdownEditor from "./MarkdownEditor";
 
 // Egyezzenek a backend korlátaival: apps/api/internal/post/upload.go + validator.go
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5 MB
@@ -233,30 +234,24 @@ export default function CreatePostModal({ onClose, post }: Props) {
             label="Leírás"
             htmlFor="post-content"
             hint={
-              <>
-                Markdown támogatott (címek, listák, táblázatok, **félkövér**…).{" "}
-                <span
-                  className={
-                    contentLength < MIN_CONTENT_LENGTH
-                      ? "font-medium text-brand-red"
-                      : "text-muted-foreground"
-                  }
-                >
-                  <span className="tabular font-mono">{contentLength}</span> /{" "}
-                  {MIN_CONTENT_LENGTH} karakter minimum
-                </span>
-              </>
+              <span
+                className={
+                  contentLength < MIN_CONTENT_LENGTH
+                    ? "font-medium text-brand-red"
+                    : "text-muted-foreground"
+                }
+              >
+                <span className="tabular font-mono">{contentLength}</span> /{" "}
+                {MIN_CONTENT_LENGTH} karakter minimum
+              </span>
             }
           >
-            <textarea
+            <MarkdownEditor
               id="post-content"
               value={content}
-              onChange={(e) => setContent(e.target.value)}
-              rows={9}
-              placeholder={
-                "A poszt tartalma...\n\n## Alcím\n**félkövér**, *dőlt*, [link](https://...)\n\n- felsorolás"
-              }
-              className={`${controlClass} resize-y font-mono`}
+              onChange={setContent}
+              rows={12}
+              placeholder={"A poszt tartalma…\n\nJelöld ki a szöveget, és használd a fenti gombokat."}
             />
           </Field>
 

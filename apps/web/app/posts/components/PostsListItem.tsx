@@ -1,5 +1,6 @@
 "use client";
 import React, { useState } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import Card from "@/app/components/Cards/Card";
 import Badge from "@/app/components/Badge";
@@ -8,7 +9,11 @@ import { badgeMap, PostsItem } from "../types";
 import { postImageUrl } from "../lib/postImage";
 import { postPreview } from "../lib/postPreview";
 import { reportSummary } from "../lib/report";
-import CreatePostModal from "./CreatePostModal";
+
+// Lásd CreatePostButton: a szerkesztő külön chunkban tölt be, csak ha kell.
+const CreatePostModal = dynamic(() => import("./CreatePostModal"), {
+  ssr: false,
+});
 
 type Props = {
   postsItem: PostsItem;

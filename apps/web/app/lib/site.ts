@@ -1,7 +1,7 @@
 import type { IconType } from "react-icons";
 import { FaEnvelope, FaFacebook, FaGlobe } from "react-icons/fa";
 
-export type NavLink = {
+type NavLink = {
   href: string;
   label: string;
 };
@@ -14,7 +14,7 @@ export const NAV_LINKS: NavLink[] = [
   { href: "/contact", label: "Kapcsolat" },
 ];
 
-export type ContactItem = {
+type ContactItem = {
   icon: IconType;
   label: string;
   href: string;

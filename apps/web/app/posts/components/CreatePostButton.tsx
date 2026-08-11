@@ -1,8 +1,14 @@
 "use client";
 import { useState } from "react";
+import dynamic from "next/dynamic";
 import { FaPlus } from "react-icons/fa";
 import Button from "@/app/components/ui/Button";
-import CreatePostModal from "./CreatePostModal";
+
+// A szerkesztő csak adminnak kell — külön chunkban, hogy a /posts oldal
+// bundle-je ne vigye magával minden látogatónak.
+const CreatePostModal = dynamic(() => import("./CreatePostModal"), {
+  ssr: false,
+});
 
 export default function CreatePostButton() {
   const [open, setOpen] = useState(false);

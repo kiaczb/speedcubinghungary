@@ -243,6 +243,15 @@ Other Go conventions observed:
   context calling `/me` and `/logout` with `credentials: "include"`. Use
   `useUser()` to read `{ user, isLoading, logout }`.
 - Styling is Tailwind v4 utility classes inline in JSX. UI copy is largely Hungarian.
+- **The post editor is Markdown-based, deliberately.** `CreatePostModal` uses
+  `app/posts/components/MarkdownEditor.tsx` — a formatting toolbar that inserts
+  Markdown syntax plus an "Előnézet" tab that renders through the *same*
+  `PostContent` component as the live page. Storage stays Markdown, so the
+  no-`rehype-raw` XSS guarantee below is untouched. **Don't swap this for an
+  HTML-storing WYSIWYG** without re-solving sanitization and migrating existing
+  posts. The editor and the markdown renderer are both `next/dynamic`
+  (`ssr: false`) so the ~144 KB markdown chunk and the modal ship only when an
+  admin opens them, not to every `/posts` visitor — keep that lazy boundary.
 - **Post content is Markdown.** The detail page renders it with
   `app/posts/components/PostContent.tsx` (`react-markdown` + `remark-gfm`),
   styled per-element via the `components` map (no `@tailwindcss/typography`

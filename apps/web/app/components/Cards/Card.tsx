@@ -1,17 +1,15 @@
 import React from "react";
 
-type CardVariant = "elevated" | "outlined" | "inverse";
-type CardPadding = "none" | "sm" | "md" | "lg";
+type CardVariant = "elevated" | "inverse";
+type CardPadding = "none" | "md" | "lg";
 
 const VARIANTS: Record<CardVariant, string> = {
   elevated: "bg-surface border border-line shadow-card",
-  outlined: "bg-surface border border-line",
   inverse: "bg-surface-inverse text-white border border-white/10 shadow-panel",
 };
 
 const PADDINGS: Record<CardPadding, string> = {
   none: "",
-  sm: "p-4",
   md: "p-5",
   lg: "p-6",
 };
