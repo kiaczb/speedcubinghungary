@@ -70,16 +70,6 @@ func GetUserFromContext(r *http.Request) *UserClaims {
 	return user
 }
 
-// AuthMiddleware is deprecated - use AuthMiddlewareWithConfig instead
-// Kept for backward compatibility
-func AuthMiddleware(next http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			http.Error(w, "AuthMiddleware deprecated: use AuthMiddlewareWithConfig", http.StatusInternalServerError)
-		})
-	}(next)
-}
-
 // RBACMiddleware ellenőrzi, hogy a user rendelkezik-e a szükséges szereppel
 func RBACMiddleware(requiredRoles ...types.Role) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {

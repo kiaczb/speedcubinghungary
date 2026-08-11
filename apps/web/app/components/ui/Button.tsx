@@ -53,7 +53,7 @@ type ButtonAsLink = CommonProps &
     external?: boolean;
   };
 
-export type ButtonProps = ButtonAsButton | ButtonAsLink;
+type ButtonProps = ButtonAsButton | ButtonAsLink;
 
 export default function Button(props: ButtonProps) {
   const {
