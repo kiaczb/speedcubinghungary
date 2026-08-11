@@ -26,8 +26,6 @@ export default function PostsListClient({ posts }: Props) {
   return (
     <>
       {isAdmin && (
-        // Admin eszközsor: a két gomb korábban egymás alatt lógott, saját
-        // margókkal. Most egy sávban ülnek, a kijelölés állapotával együtt.
         <div className="mb-6 flex flex-wrap items-center gap-3 rounded-card border border-line bg-surface p-3">
           <CreatePostButton />
           <DeletePostsButton

@@ -4,12 +4,6 @@ import CompetitionsSection from "./components/Sections/Main/CompetitionsSection"
 import NewsSection from "./components/Sections/Main/NewsSection";
 import QuickToolsSection from "./components/Sections/Main/QuickToolsSection";
 
-/**
- * A szakaszok közti térköz korábban `gap-30` és `gap-20` keveréke volt, a
- * NewsSection pedig a saját belső paddingjével még rá is tett erre. Egységes
- * függőleges ritmus: a világos szakaszok között `py-20/24`, a sötét hírsáv
- * pedig a saját paddingjével teljes szélességben ül a többi közé.
- */
 export default function Home() {
   return (
     <div className="bg-canvas">

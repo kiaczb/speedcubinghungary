@@ -12,8 +12,6 @@ const UnofficialSection = () => {
         Alternatív pontszámítások és összesítők a WCA hivatalos helyezésein túl.
       </p>
 
-      {/* Rács a korábbi `flex-wrap justify-center` helyett: a kártyák így azonos
-          szélességűek és balról igazodnak, nem középre torlódnak. */}
       <div className="mt-6 grid grid-cols-1 items-stretch gap-5 md:grid-cols-2">
         <ToolCard
           title="Budapest Special"

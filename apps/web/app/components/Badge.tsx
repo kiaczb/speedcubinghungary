@@ -1,16 +1,8 @@
 import React from "react";
 
-/**
- * Kategória-címke a posztokhoz.
- *
- * A `color` a hívótól jön (lásd `badgeMap` az app/posts/types.ts-ben), és most
- * teljes szín-hármast ad: háttér + szöveg + gyűrű. A korábbi telített, fehér
- * szövegű változat a sárga "Közlemény" címkén olvashatatlan volt.
- */
-
 type BadgeProps = {
   label: string;
-  /** Tailwind osztályok a tónushoz (háttér + szöveg + ring). */
+  /** Tailwind osztályok a tónushoz (háttér + szöveg + ring), lásd `badgeMap`. */
   color: string;
   className?: string;
 };

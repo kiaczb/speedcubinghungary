@@ -4,21 +4,9 @@ import SpeedcubingFullAnimatedSVG from "./svgs/SpeedcubingFullAnimatedSVG";
 import Button from "./ui/Button";
 import { SITE_DESCRIPTION } from "../lib/site";
 
-/**
- * Nyitóképernyő.
- *
- * A zászlószínű háromszögek maradtak — ez az oldal védjegye —, csak
- * visszafogottabbak lettek, hogy a logó animációja legyen a főszereplő.
- *
- * A két gomb korábban a `#events` és `#join` horgonyokra mutatott, amelyek
- * sehol nem léteznek az oldalon, így kattintásra nem történt semmi. Most a
- * feliratuknak megfelelő oldalra visznek.
- */
-
 const Hero = () => {
   return (
     <section className="relative flex min-h-[calc(100vh-4rem)] flex-col items-center justify-center overflow-hidden bg-white px-5 py-20 sm:px-8 lg:px-12">
-      {/* Felső háromszögek */}
       <div className="pointer-events-none absolute inset-x-0 top-0 h-[9vh] xl:h-[13vh]">
         <div
           className="absolute left-0 top-0 h-full w-[60%] bg-brand-green lg:w-[40%]"
@@ -30,7 +18,6 @@ const Hero = () => {
         />
       </div>
 
-      {/* Alsó háromszögek */}
       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[9vh] xl:h-[13vh]">
         <div
           className="absolute bottom-0 left-0 h-full w-[80%] bg-brand-red"
@@ -45,7 +32,6 @@ const Hero = () => {
       <div className="relative z-10 mx-auto flex w-full max-w-6xl flex-col items-center gap-14 xl:flex-row xl:items-center xl:justify-between xl:gap-16">
         <div className="flex max-w-xl flex-col items-center text-center xl:items-start xl:text-left">
           <h1 className="mb-7">
-            {/* A logó maga a főcím — a szöveges változat a képernyőolvasóknak. */}
             <span className="sr-only">
               Speedcubing Hungary — a magyar kockázó közösség
             </span>

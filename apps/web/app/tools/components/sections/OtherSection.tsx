@@ -11,10 +11,7 @@ const OtherSection = () => {
       </p>
 
       <div className="mt-6 grid grid-cols-1 items-stretch gap-5 md:grid-cols-2">
-        {/* FIGYELEM: mindkét kártya leírása korábban a Hungarian All-Rounder
-            szövegének véletlen másolata volt (a Tippversenyé félmondatban meg is
-            szakadt). Ideiglenes, tárgyszerű szöveget kaptak — érdemes a végleges
-            leírásra cserélni. */}
+        {/* TODO: ideiglenes leírások — cseréld le a véglegesre. */}
         <ToolCard
           title="Szavazás"
           links={[

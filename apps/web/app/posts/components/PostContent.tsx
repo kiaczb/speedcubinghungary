@@ -4,21 +4,10 @@ import type { Components } from "react-markdown";
 import { RECORD_BADGE_COLORS } from "../lib/recordBadges";
 
 /**
- * A poszt markdown tartalmának renderelése — stílussal.
- *
  * BIZTONSÁG: nincs `rehype-raw`, ezért a react-markdown a forrásban lévő nyers
- * HTML-t NEM rendereli (escape-eli). Így a content markdownból stílusozható, de
- * XSS-t nem lehet beinjektálni még akkor sem, ha egy admin fiók kompromittálódik
- * vagy a weekly-report generálja a tartalmat. Ne adj hozzá rehype-raw-t.
- *
- * A megjelenést a `components` map adja (Tailwind), nem maga a markdown — a
- * struktúrát (címek, táblázat, idézet, badge) a markdown írja le, a kinézetet mi.
+ * HTML-t NEM rendereli (escape-eli). Így XSS-t nem lehet beinjektálni még akkor
+ * sem, ha egy admin fiók kompromittálódik. Ne adj hozzá rehype-raw-t.
  */
-
-// Rekord-badge-ek (NR/CR/WR) színezése, hasonlóan az e-mailes riporthoz.
-// A markdownban ezek inline kódként jönnek (pl. `NR`), így itt tudjuk chippé
-// alakítani őket anélkül, hogy nyers HTML kellene a forrásba.
-// A színek a WeeklyReportView-val közösek (lib/recordBadges.ts).
 
 const components: Components = {
   h1: ({ children }) => (
@@ -62,7 +51,7 @@ const components: Components = {
   strong: ({ children }) => (
     <strong className="font-semibold text-foreground">{children}</strong>
   ),
-  // Inline kód: ha a tartalma egy ismert rekord-badge, színes chippé alakítjuk.
+  // Inline kód: ha a tartalma egy ismert rekord-jelölés, színes chippé alakítjuk.
   code: ({ children }) => {
     const text = String(children);
     const badge = RECORD_BADGE_COLORS[text];
@@ -81,7 +70,7 @@ const components: Components = {
       </code>
     );
   },
-  // A táblázat vízszintesen görgethető konténerben, hogy mobilon ne törje szét a layoutot.
+  // Vízszintesen görgethető konténer, hogy mobilon ne törje szét a layoutot.
   table: ({ children }) => (
     <div className="my-6 overflow-x-auto rounded-card border border-line">
       <table className="w-full border-collapse text-sm">{children}</table>

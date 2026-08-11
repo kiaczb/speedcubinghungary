@@ -3,7 +3,6 @@ import CalendarView from "./components/CalendarView";
 import PageHeader from "../components/ui/PageHeader";
 
 export const metadata: Metadata = {
-  // A layout `template`-je fűzi hozzá a " | Speedcubing Hungary" részt.
   title: "Versenynaptár",
   description:
     "Közelgő magyar WCA versenyek egy helyen, Google Naptár mentéssel.",

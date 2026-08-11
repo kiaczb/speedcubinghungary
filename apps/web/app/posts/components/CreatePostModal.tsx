@@ -7,8 +7,7 @@ import { clientApiUrl } from "@/app/lib/api";
 import Button from "@/app/components/ui/Button";
 import Field, { controlClass } from "@/app/components/ui/Field";
 
-// A backend korlátaival egyezzenek, hogy a hibát ne csak a szerver jelezze:
-// lásd apps/api/internal/post/upload.go és validator.go
+// Egyezzenek a backend korlátaival: apps/api/internal/post/upload.go + validator.go
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5 MB
 const MIN_CONTENT_LENGTH = 20;
 const ACCEPTED_IMAGE_TYPES = [
@@ -45,17 +44,14 @@ export default function CreatePostModal({ onClose, post }: Props) {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
-  // Az aktuális preview objectURL-je. Ref-ben tartjuk, hogy csere/unmount esetén
-  // fel tudjuk szabadítani anélkül, hogy effectben hívnánk setState-et.
+  // Ref-ben tartjuk, hogy csere/unmount esetén fel tudjuk szabadítani anélkül,
+  // hogy effectben hívnánk setState-et.
   const objectUrlRef = useRef<string | null>(null);
 
-  // Az előnézetben megjelenő kép: az újonnan választott fájl elsőbbséget élvez,
-  // különben a meglévő kép (ha van és nem törölték).
   const shownImage = previewUrl ?? (removeExisting ? null : existingImageUrl);
 
   const contentLength = content.trim().length;
 
-  // Escape-re zárjon
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -64,7 +60,6 @@ export default function CreatePostModal({ onClose, post }: Props) {
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
 
-  // A háttér ne görögjön a modal alatt, és a fókusz rögtön az első mezőn legyen.
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -81,7 +76,6 @@ export default function CreatePostModal({ onClose, post }: Props) {
     };
   }, []);
 
-  // A képet és az előnézetét együtt állítjuk, a korábbi objectURL-t eldobva.
   const applyImage = (file: File | null) => {
     if (objectUrlRef.current) {
       URL.revokeObjectURL(objectUrlRef.current);
@@ -115,8 +109,6 @@ export default function CreatePostModal({ onClose, post }: Props) {
       applyImage(null);
       return;
     }
-    // Új kép esetén a "meglévő törlése" jelző már lényegtelen (a feltöltés úgyis
-    // felülírja), állítsuk vissza, hogy a submit logika egyértelmű legyen.
     setRemoveExisting(false);
     applyImage(file);
   };
@@ -195,7 +187,6 @@ export default function CreatePostModal({ onClose, post }: Props) {
         aria-modal="true"
         aria-labelledby="create-post-title"
       >
-        {/* Ragadós fejléc, hogy hosszú űrlapnál is elérhető maradjon a bezárás. */}
         <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-line bg-surface/95 px-6 py-4 backdrop-blur-sm">
           <h2 id="create-post-title" className="text-lg font-bold">
             {isEdit ? "Poszt szerkesztése" : "Új poszt létrehozása"}
@@ -280,8 +271,7 @@ export default function CreatePostModal({ onClose, post }: Props) {
             />
             {shownImage && (
               <div className="mt-3 flex items-start gap-3">
-                {/* next/image helyett sima img: a kép a saját API-nkról jön, aminek
-                    a domainje környezetenként más — így nem kell remotePatterns. */}
+                {/* Sima img: a kép domainje környezetenként más — így nem kell remotePatterns. */}
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={shownImage}

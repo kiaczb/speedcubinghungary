@@ -1,18 +1,9 @@
 import React from "react";
 
-/**
- * Üres és hibaállapotok egységes megjelenítése.
- *
- * Korábban csak a versenynaptár alatt élt; mivel semmi naptár-specifikus nincs
- * benne, felkerült a közös komponensek közé — így a hírek listája is ugyanezt
- * az üres állapotot kapja, nem egy sajátot.
- */
-
 type StateMessageProps = {
   icon: React.ReactNode;
   title: string;
   description: string;
-  /** Kivezető akció — az üres képernyő legyen felszólítás, ne zsákutca. */
   action?: React.ReactNode;
 };
 

@@ -1,4 +1,3 @@
-// app/components/UserProvider.tsx
 "use client";
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { clientApiUrl } from "../lib/api";
@@ -31,7 +30,6 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({
   const [user, setUser] = useState<MeResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true); // Kezdetben töltünk
 
-  // Környezeti változó használata a backend URL-hez (fallback a localhost-ra)
   const API_URL = clientApiUrl();
 
   useEffect(() => {

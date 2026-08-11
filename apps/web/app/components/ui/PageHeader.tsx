@@ -1,18 +1,9 @@
 import React from "react";
 
-/**
- * Aloldalak fejléce (Hírek, Versenynaptár, Eszközök, Rólunk, Kapcsolat).
- *
- * Mindegyik oldal a saját `<h1>` blokkját rajzolta meg, más-más mérettel és
- * margóval — ettől az aloldalak nem tűntek egy oldal részének.
- */
-
 type PageHeaderProps = {
-  /** Rövid, nagybetűs felirat a cím fölött (opcionális). */
   eyebrow?: string;
   title: string;
   description?: string;
-  /** Jobb oldali akció (pl. "Új poszt létrehozása"). */
   action?: React.ReactNode;
   className?: string;
 };

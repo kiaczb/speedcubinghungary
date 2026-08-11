@@ -1,26 +1,11 @@
 @import "tailwindcss";
 
-/* ---------------------------------------------------------------------------
-   Design tokenek
-   ---------------------------------------------------------------------------
-   Egyetlen forrás a színekre, sugarakra, árnyékokra és a mozgásra. A korábbi
-   ad-hoc `bg-red-600` / `shadow-xl` / `rounded-2xl` keverék helyett innen jön
-   minden — így egy érték átírása az egész oldalon érvényesül.
-
-   A `--color-*` / `--radius-*` / `--shadow-*` / `--ease-*` kulcsokból a Tailwind
-   v4 automatikusan utility-ket generál (pl. `bg-brand-red`, `rounded-card`,
-   `shadow-card`, `ease-smooth`).
---------------------------------------------------------------------------- */
-
 @theme {
-  /* Márkaszínek — a magyar zászló piros/zöldje, amit a hero háromszögei már
-     használtak; itt kapnak nevet, hogy ne kelljen találgatni az árnyalatot. */
   --color-brand-red: #cf2e3f;
   --color-brand-red-strong: #a82232;
   --color-brand-green: #12844a;
   --color-brand-green-strong: #0c653a;
 
-  /* Felületek és keretek. A "surface" a kártyák háttere, a "canvas" az oldalé. */
   --color-canvas: #f7f8fa;
   --color-surface: #ffffff;
   --color-surface-muted: #f2f4f7;
@@ -28,35 +13,27 @@
   --color-line: #e5e8ec;
   --color-line-strong: #d0d5dd;
 
-  /* Szövegszínek. A `foreground`/`muted-foreground` nevekre több komponens
-     hivatkozik — korábban a `muted-foreground` nem is létezett, így a dátumok
-     szín nélkül maradtak. */
   --color-background: #ffffff;
   --color-foreground: #16181d;
   --color-ink-hover: #2c313a;
   --color-muted-foreground: #5b6472;
   --color-subtle-foreground: #838d9b;
 
-  /* Tipográfia. A `next/font` a layoutban tölti be a Geistet — a `body` alatti
-     Arial felülírás korábban ezt hatástalanította. */
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system,
     "Segoe UI", sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, "SFMono-Regular",
     "Liberation Mono", monospace;
 
-  /* Sugarak — három lépcső a korábbi ötféle helyett. */
   --radius-control: 0.625rem;
   --radius-card: 0.875rem;
   --radius-panel: 1.25rem;
 
-  /* Árnyékok — lágy, réteges emelés a "shadow-xl mindenhol" helyett. */
   --shadow-card: 0 1px 2px rgb(16 24 40 / 0.04), 0 1px 3px rgb(16 24 40 / 0.06);
   --shadow-card-hover: 0 4px 8px rgb(16 24 40 / 0.05),
     0 12px 24px rgb(16 24 40 / 0.08);
   --shadow-panel: 0 8px 16px rgb(16 24 40 / 0.06),
     0 24px 48px rgb(16 24 40 / 0.1);
 
-  /* Mozgás — egy görbe az egész felületen, hogy egységes legyen a "tapintása". */
   --ease-smooth: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -69,7 +46,6 @@
     text-rendering: optimizeLegibility;
   }
 
-  /* Címsorok: kicsit szorosabb betűköz nagy méretben — a Geist így fog össze. */
   h1,
   h2,
   h3 {
@@ -77,14 +53,10 @@
     text-wrap: balance;
   }
 
-  /* Számok mindig azonos szélességgel: a versenyidők, dátumok és a visszaszámláló
-     így nem "ugrálnak" — ez egy időmérő sportot bemutató oldalon látható nyereség. */
   .tabular {
     font-variant-numeric: tabular-nums;
   }
 
-  /* Egységes, látható fókuszjelzés billentyűzetes navigációhoz. Korábban a
-     legtöbb gomb és link semmilyen fókuszállapotot nem adott. */
   :focus-visible {
     outline: 2px solid var(--color-foreground);
     outline-offset: 2px;
@@ -98,14 +70,9 @@
 
   html {
     scroll-behavior: smooth;
-    /* A sticky navbar ne takarja el a horgonyra ugró szakaszok tetejét. */
     scroll-padding-top: 5rem;
   }
 }
-
-/* ---------------------------------------------------------------------------
-   Logó animáció (SpeedcubingFullAnimatedSVG / SpeedcubingLogoSVG)
---------------------------------------------------------------------------- */
 
 @keyframes spinAndCorrect {
   0% {
@@ -223,19 +190,13 @@
   animation-delay: 0.09s;
 }
 
-/* ---------------------------------------------------------------------------
-   Csökkentett mozgás
-   ---------------------------------------------------------------------------
-   A logó darabjai `opacity-0`-ról animálódnak láthatóra, ezért itt NEM lehet
-   `animation: none` — az örökre eltüntetné őket. Helyette a végállapotra
-   ugratjuk (a `forwards` miatt az marad érvényben).
---------------------------------------------------------------------------- */
-
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
   }
 
+  /* A logó darabjai opacity-0-ról animálódnak láthatóra, ezért itt NEM lehet
+     `animation: none` — az örökre eltüntetné őket. */
   .rotating-group,
   .offset-top,
   .offset-right,

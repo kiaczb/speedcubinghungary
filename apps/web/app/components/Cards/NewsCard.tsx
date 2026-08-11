@@ -7,23 +7,8 @@ import { postPreview } from "@/app/posts/lib/postPreview";
 import { reportSummary } from "@/app/posts/lib/report";
 import { FaArrowRight } from "react-icons/fa";
 
-/**
- * Hírkártya a főoldalra.
- *
- * Javítások a korábbi változathoz képest:
- * - a "Részletek" gomb a `/about` oldalra vitt, nem a posztra;
- * - a `group-hover:` osztályokhoz nem tartozott `group` szülő, így sosem
- *   sültek el;
- * - a `type` prop mindig `post.tag` volt, ezért feleslegessé vált;
- * - a kártya középre zárt volt; balra igazítva gyorsabban átfutható.
- *
- * Most az egész kártya egyetlen link — nagyobb kattintófelület, és nincs
- * link a linkben.
- */
-
 type NewsCardProps = {
   post: PostsItem;
-  /** `null`, ha a poszthoz nincs borítókép (lásd `postImageUrl`). */
   imageUrl?: string | null;
 };
 
@@ -42,9 +27,7 @@ const NewsCard: React.FC<NewsCardProps> = ({ post, imageUrl }) => {
       >
         <div className="relative aspect-video overflow-hidden bg-surface-muted">
           {imageUrl ? (
-            /* next/image helyett sima img: a kép lehet a saját API-nkról (posztkép,
-               környezetenként más domain) vagy a public mappából — mindkettőt
-               remotePatterns nélkül ki kell tudni szolgálni. */
+            /* Sima img: a kép domainje környezetenként más — így nem kell remotePatterns. */
             /* eslint-disable-next-line @next/next/no-img-element */
             <img
               src={imageUrl}
@@ -52,8 +35,6 @@ const NewsCard: React.FC<NewsCardProps> = ({ post, imageUrl }) => {
               className="h-full w-full object-cover transition-transform duration-500 ease-smooth group-hover:scale-[1.03]"
             />
           ) : (
-            // Kép nélküli poszt is ugyanolyan magas kártyát kapjon, hogy a rács
-            // ne csússzon szét.
             <div className="h-full w-full bg-linear-to-br from-surface-muted to-line" />
           )}
           <Badge

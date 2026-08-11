@@ -2,10 +2,6 @@ import Section from "./Section";
 import Card from "../../Cards/Card";
 import Button from "../../ui/Button";
 
-/**
- * A négy statisztika-kártya korábban négyszer bemásolt, azonos felépítésű JSX
- * volt, amelyben csak a szám, a szín és a felirat tért el — most adat.
- */
 const STATS = [
   { value: "50+", label: "Megszervezett verseny", accent: "text-brand-red" },
   { value: "5000+", label: "Résztvevő összesen", accent: "text-brand-green" },

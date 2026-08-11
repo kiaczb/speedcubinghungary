@@ -8,9 +8,7 @@ export type PostsItem = {
   created_at: string;
 };
 
-// A `color` teljes tónust ad (háttér + szöveg + gyűrű), nem csak háttérszínt.
-// A korábbi telített változatban a sárga "Közlemény" fehér szöveggel gyakorlatilag
-// olvashatatlan volt; a lágy tónusok mindegyik címkén megfelelő kontrasztot adnak.
+// A `color` teljes tónust ad: háttér + szöveg + gyűrű.
 export const badgeMap = {
   news: { label: "Hír", color: "bg-sky-50 text-sky-700 ring-sky-600/20" },
   event: {
