@@ -16,7 +16,6 @@ const Contact = () => {
     <div className="px-5 py-12 sm:px-8 sm:py-16 lg:px-12">
       <div className="mx-auto w-full max-w-5xl">
         <PageHeader
-          eyebrow="Írj nekünk"
           title="Kapcsolat"
           description="Kérdésed van a kockázással kapcsolatban, versenyt szerveznél, vagy részt vennél egy eseményen? Keress minket bátran."
         />

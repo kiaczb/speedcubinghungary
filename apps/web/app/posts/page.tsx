@@ -26,9 +26,8 @@ export default async function PostsPage() {
 
   return (
     <div className="px-5 py-12 sm:px-8 sm:py-16 lg:px-12">
-      <div className="mx-auto w-full max-w-4xl">
+      <div className="mx-auto w-full max-w-5xl">
         <PageHeader
-          eyebrow="Blog"
           title="Hírek"
           description="Itt találod az összes közzétett hírünket, versenybeszámolónkat és heti riportunkat."
         />

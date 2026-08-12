@@ -5,8 +5,8 @@ import { CONTACT_ITEMS, NAV_LINKS, SITE_DESCRIPTION } from "../lib/site";
 const Footer = () => {
   return (
     <footer className="border-t border-line bg-surface-inverse text-white">
-      <div className="mx-auto w-full max-w-6xl px-5 py-14 sm:px-8 lg:px-12">
-        <div className="grid grid-cols-1 gap-10 md:grid-cols-[1.5fr_1fr_1fr]">
+      <div className="mx-auto w-full max-w-6xl px-5 py-10 sm:px-8 lg:px-12">
+        <div className="grid grid-cols-1 gap-8 md:grid-cols-[1.5fr_1fr_1fr]">
           <div>
             <h2 className="text-lg font-bold tracking-tight">
               Speedcubing Hungary
@@ -54,7 +54,7 @@ const Footer = () => {
           </div>
         </div>
 
-        <div className="mt-12 border-t border-white/10 pt-6">
+        <div className="mt-8 border-t border-white/10 pt-5">
           <p className="font-mono text-xs text-white/40">
             © {new Date().getFullYear()} Speedcubing Hungary. Minden jog
             fenntartva.

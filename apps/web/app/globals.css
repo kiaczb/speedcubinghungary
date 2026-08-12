@@ -1,10 +1,10 @@
 @import "tailwindcss";
 
 @theme {
-  --color-brand-red: #cf2e3f;
-  --color-brand-red-strong: #a82232;
-  --color-brand-green: #12844a;
-  --color-brand-green-strong: #0c653a;
+  --color-brand-red: #d81f38;
+  --color-brand-red-strong: #ad1a2d;
+  --color-brand-green: #0a8a4d;
+  --color-brand-green-strong: #076b3c;
 
   --color-canvas: #f7f8fa;
   --color-surface: #ffffff;
@@ -46,10 +46,10 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --color-brand-red: #e35167;
-    --color-brand-red-strong: #ec7183;
-    --color-brand-green: #27a869;
-    --color-brand-green-strong: #35c07c;
+    --color-brand-red: #e8536b;
+    --color-brand-red-strong: #f0798d;
+    --color-brand-green: #24bd76;
+    --color-brand-green-strong: #3dd48d;
 
     --color-canvas: #0e1013;
     --color-surface: #16191e;
@@ -81,19 +81,19 @@
     }
   }
 
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+
   body {
     background: var(--color-background);
     color: var(--color-foreground);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
-  }
-
-  h1,
-  h2,
-  h3 {
-    letter-spacing: -0.02em;
-    text-wrap: balance;
   }
 
   .tabular {
