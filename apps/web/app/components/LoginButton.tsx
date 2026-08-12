@@ -38,28 +38,37 @@ const LoginButton = () => {
   }
 
   if (user) {
+    const isAdmin = user.roles.includes("admin");
+
     return (
-      <Button
-        variant="secondary"
-        size="sm"
-        onClick={logout}
-        title={`Kijelentkezés — ${user.name}`}
-        icon={
-          user.avatarURL ? (
-            /* next/image helyett sima img: a kép a WCA-ról jön (külső domain),
-               remotePatterns config nélkül így szolgálható ki. */
-            /* eslint-disable-next-line @next/next/no-img-element */
-            <img
-              src={user.avatarURL}
-              alt=""
-              className="-ml-1 h-6 w-6 rounded-full object-cover ring-1 ring-line"
-            />
-          ) : undefined
-        }
-      >
-        <span className="max-w-28 truncate">{user.name}</span>
-        <span className="text-muted-foreground">· Kilépés</span>
-      </Button>
+      <div className="flex items-center gap-2">
+        {isAdmin && (
+          <Button href="/admin" variant="ghost" size="sm">
+            Admin
+          </Button>
+        )}
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={logout}
+          title={`Kijelentkezés — ${user.name}`}
+          icon={
+            user.avatarURL ? (
+              /* next/image helyett sima img: a kép a WCA-ról jön (külső domain),
+                 remotePatterns config nélkül így szolgálható ki. */
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img
+                src={user.avatarURL}
+                alt=""
+                className="-ml-1 h-6 w-6 rounded-full object-cover ring-1 ring-line"
+              />
+            ) : undefined
+          }
+        >
+          <span className="max-w-28 truncate">{user.name}</span>
+          <span className="text-muted-foreground">· Kilépés</span>
+        </Button>
+      </div>
     );
   }
 
