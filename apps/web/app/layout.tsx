@@ -43,7 +43,7 @@ export default function RootLayout({
       >
         <a
           href="#main"
-          className="sr-only rounded-control bg-foreground px-4 py-2 text-sm font-semibold text-white focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-60"
+          className="sr-only rounded-control bg-foreground px-4 py-2 text-sm font-semibold text-background focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-60"
         >
           Ugrás a tartalomra
         </a>

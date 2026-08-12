@@ -227,10 +227,30 @@ Other Go conventions observed:
   `clientApiUrl()` — the two-base-URL split below, in one place) and `site.ts`
   (`NAV_LINKS`, `CONTACT_ITEMS`, `SITE_DESCRIPTION`, used by the navbar, footer
   and contact page). Add nav/contact entries there, not per-component.
-- The app is **light-theme only** by deliberate choice. The create-next-app
-  `prefers-color-scheme: dark` block was removed because it flipped
-  `--foreground` while every surface stayed white (white-on-white text). If dark
-  mode is wanted, do it properly across all surfaces, not via that block.
+- **Dark mode is implemented and follows the OS** (`prefers-color-scheme`; no
+  toggle, no class strategy, so no JS and no hydration flash). It works by
+  **redefining the design tokens** in a `@media (prefers-color-scheme: dark)`
+  block in `globals.css` — so `bg-surface`, `text-foreground`, `border-line`
+  etc. flip on their own and most components needed no change. Rules to keep:
+  - **`dark:` is only for hardcoded colors** a token can't reach (`bg-white` on
+    the navbar/hero, the badge tints in `posts/types.ts`, the modal scrim).
+    Don't add `dark:` next to a token utility — the token already handles it.
+  - **`--color-surface-inverse` stays dark in BOTH themes.** It's the feature-band
+    colour (footer, news band, "next competition" card). That's why the many
+    `text-white` classes sitting on it are correct in both themes and must not be
+    "fixed".
+  - **`bg-foreground` must pair with `text-background`, never `text-white`** —
+    `foreground` inverts to near-white in dark, so `text-white` becomes invisible.
+  - ⚠️ **Tailwind v4 inlines `--shadow-*` values into the utility at build time**,
+    so overriding `--shadow-card` in the dark block does nothing. The shadow
+    tokens therefore reference `var(--shadow-tint*)` custom properties, and *those*
+    get redefined for dark. Keep that indirection if you touch the shadows.
+  - The logo (`SpeedcubingFullAnimatedSVG`) draws its letters and black cube
+    pieces with `fill="currentColor"` under `text-foreground`, so it turns white
+    in dark mode. The red/green tiles stay brand-coloured. It no longer takes a
+    `textColor` prop.
+  - `color-scheme` is set per theme so native controls (scrollbars, `<select>`
+    dropdown, file input, checkboxes) match.
 - **Server Components fetch data server-side** (e.g. `app/posts/page.tsx`
   `async` component with `fetch(..., { cache: 'no-store' })`); interactive pieces
   are `"use client"` components.
