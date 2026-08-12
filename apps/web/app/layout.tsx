@@ -7,14 +7,15 @@ import LoginButton from "./components/LoginButton";
 import { UserProvider } from "./components/UserProvider";
 import { SITE_DESCRIPTION } from "./lib/site";
 
+// A magyar ő/ű ékezetekhez a latin-ext subset is kell, nem csak latin.
 const geistSans = Geist({
   variable: "--font-geist-sans",
-  subsets: ["latin"],
+  subsets: ["latin", "latin-ext"],
 });
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
-  subsets: ["latin"],
+  subsets: ["latin", "latin-ext"],
 });
 
 export const metadata: Metadata = {

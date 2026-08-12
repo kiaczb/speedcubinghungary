@@ -11,9 +11,8 @@ export const metadata: Metadata = {
 export default function CalendarPage() {
   return (
     <div className="px-5 py-12 sm:px-8 sm:py-16 lg:px-12">
-      <div className="mx-auto w-full max-w-3xl">
+      <div className="mx-auto w-full max-w-4xl">
         <PageHeader
-          eyebrow="WCA"
           title="Versenynaptár"
           description="Közelgő magyar WCA versenyek időrendben. Mentsd el a számodra érdekes versenyeket egyenesen a Google Naptáradba."
         />

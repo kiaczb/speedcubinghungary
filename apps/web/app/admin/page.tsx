@@ -10,12 +10,11 @@ export const metadata: Metadata = {
 
 export default function AdminPage() {
   return (
-    <div className="px-5 py-12 sm:px-8 sm:py-16 lg:px-12">
-      <div className="mx-auto w-full max-w-5xl">
+    <div className="px-5 py-10 sm:px-8 lg:px-12">
+      <div className="mx-auto w-full max-w-6xl">
         <PageHeader
-          eyebrow="Admin felület"
           title="Adminisztráció"
-          description="Innen érheted el az oldal kezeléséhez használt adminisztrátori eszközöket."
+          description="Az oldal kezeléséhez használt eszközök."
         />
 
         <div className="mt-12">

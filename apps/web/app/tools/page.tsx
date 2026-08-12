@@ -12,9 +12,8 @@ export const metadata: Metadata = {
 export default function Tools() {
   return (
     <div className="px-5 py-12 sm:px-8 sm:py-16 lg:px-12">
-      <div className="mx-auto w-full max-w-5xl">
+      <div className="mx-auto w-full max-w-6xl">
         <PageHeader
-          eyebrow="Alkalmazások"
           title="Eszközök"
           description="Itt találod azokat az alkalmazásokat és aloldalakat, amelyek versenyekhez és versenysorozatokhoz kapcsolódnak: eredmények feldolgozása, összesítése és alternatív rangsorok. Egy részük speciális pontszámításra vagy összetett statisztikákra épül, amelyek a WCA hivatalos helyezésein túlmutatva adnak részletesebb képet a versenyzők teljesítményéről."
         />

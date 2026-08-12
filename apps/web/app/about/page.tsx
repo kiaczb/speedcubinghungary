@@ -22,7 +22,6 @@ export default function About() {
     <div className="px-5 py-12 sm:px-8 sm:py-16 lg:px-12">
       <div className="mx-auto w-full max-w-3xl">
         <PageHeader
-          eyebrow="Egyesület"
           title="Rólunk"
           description="Kik vagyunk, mit csinálunk, és hogyan csatlakozhatsz."
         />
