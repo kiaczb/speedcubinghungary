@@ -158,7 +158,7 @@ const MonthCalendar = ({ competitions }: Props) => {
                     {date.getDate()}
                   </span>
                   {hasComps && (
-                    <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-foreground px-1 font-mono text-[10px] font-semibold text-white sm:hidden">
+                    <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-foreground px-1 font-mono text-[10px] font-semibold text-background sm:hidden">
                       {dayComps.length}
                     </span>
                   )}

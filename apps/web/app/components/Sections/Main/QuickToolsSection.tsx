@@ -73,7 +73,7 @@ const QuickToolsSection = () => {
           >
             <Card interactive padding="lg" className="h-full">
               <div className="flex items-center justify-between">
-                <div className="flex h-11 w-11 items-center justify-center rounded-control border border-line bg-surface-muted text-muted-foreground transition-colors duration-200 ease-smooth group-hover:border-foreground group-hover:bg-foreground group-hover:text-white">
+                <div className="flex h-11 w-11 items-center justify-center rounded-control border border-line bg-surface-muted text-muted-foreground transition-colors duration-200 ease-smooth group-hover:border-foreground group-hover:bg-foreground group-hover:text-background">
                   <Icon className="h-4 w-4" />
                 </div>
                 <span className="font-mono text-xs font-medium uppercase tracking-[0.14em] text-subtle-foreground">

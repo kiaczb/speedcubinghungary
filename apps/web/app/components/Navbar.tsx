@@ -30,7 +30,7 @@ const Navbar = ({ action }: NavbarProps) => {
 
   return (
     <nav
-      className={`sticky top-0 z-50 w-full border-b bg-white/85 backdrop-blur-md transition-[border-color,box-shadow] duration-300 ease-smooth ${
+      className={`sticky top-0 z-50 w-full border-b bg-white/85 backdrop-blur-md transition-[border-color,box-shadow] duration-300 ease-smooth dark:bg-canvas/85 ${
         isScrolled ? "border-line shadow-card" : "border-transparent"
       }`}
     >
@@ -41,11 +41,7 @@ const Navbar = ({ action }: NavbarProps) => {
             aria-label="Speedcubing Hungary — főoldal"
             className="shrink-0 rounded-control"
           >
-            <SpeedcubingFullAnimatedSVG
-              animated={false}
-              textColor="#16181d"
-              maxWidth={196}
-            />
+            <SpeedcubingFullAnimatedSVG animated={false} maxWidth={196} />
           </Link>
 
           <div className="hidden items-center gap-1 md:flex">
@@ -100,9 +96,8 @@ const Navbar = ({ action }: NavbarProps) => {
 
       <div
         id="mobile-menu"
-        // `inert`: becsukott állapotban a rejtett linkek ne legyenek tabbal elérhetők.
         inert={!isMenuOpen}
-        className={`overflow-hidden border-t border-line bg-white transition-[max-height,opacity] duration-300 ease-smooth md:hidden ${
+        className={`overflow-hidden border-t border-line bg-white transition-[max-height,opacity] duration-300 ease-smooth dark:bg-surface md:hidden ${
           isMenuOpen ? "max-h-96 opacity-100" : "max-h-0 border-transparent opacity-0"
         }`}
       >

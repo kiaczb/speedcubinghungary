@@ -36,7 +36,7 @@ const ViewToggle = ({
 }) => {
   const baseClass =
     "inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors duration-200 ease-smooth";
-  const activeClass = "bg-foreground text-white shadow-card";
+  const activeClass = "bg-foreground text-background shadow-card";
   const inactiveClass =
     "text-muted-foreground hover:bg-surface-muted hover:text-foreground";
 

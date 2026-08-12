@@ -13,7 +13,7 @@ const BASE =
 
 const VARIANTS: Record<ButtonVariant, string> = {
   primary:
-    "bg-foreground text-white shadow-card hover:bg-ink-hover hover:shadow-card-hover focus-visible:outline-foreground",
+    "bg-foreground text-background shadow-card hover:bg-ink-hover hover:shadow-card-hover focus-visible:outline-foreground",
   secondary:
     "border border-line-strong text-foreground hover:border-foreground hover:bg-surface-muted focus-visible:outline-foreground",
   ghost:
@@ -21,7 +21,7 @@ const VARIANTS: Record<ButtonVariant, string> = {
   danger:
     "bg-brand-red text-white shadow-card hover:bg-brand-red-strong hover:shadow-card-hover focus-visible:outline-brand-red",
   inverse:
-    "bg-white text-foreground shadow-card hover:bg-surface-muted hover:shadow-card-hover focus-visible:outline-white",
+    "bg-white text-surface-inverse shadow-card hover:bg-surface-muted hover:text-foreground hover:shadow-card-hover focus-visible:outline-white",
 };
 
 const SIZES: Record<ButtonSize, string> = {
