@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Egy verseny minden feliratkozója megkapja a jelzést.
 func TestBroadcaster_NotifiesSubscribersOfCompetition(t *testing.T) {
 	broadcaster := NewBroadcaster()
 
@@ -28,8 +27,6 @@ func TestBroadcaster_NotifiesSubscribersOfCompetition(t *testing.T) {
 	}
 }
 
-// A versenyt a néző választja, ezért egyszerre több verseny is nyitva lehet —
-// az egyik frissülése nem ránthatja újra a másikat.
 func TestBroadcaster_NotifyIsScopedToCompetition(t *testing.T) {
 	broadcaster := NewBroadcaster()
 
@@ -54,9 +51,6 @@ func TestBroadcaster_NotifyIsScopedToCompetition(t *testing.T) {
 	}
 }
 
-// A jelzések összevonódnak: ha a kliens nem ért rá, egyetlen jelzés vár rá.
-// Ez azért helyes, mert a jelzés nem hordoz adatot — a kliens úgyis
-// újrakérdezi a teljes riportot.
 func TestBroadcaster_CoalescesNotifications(t *testing.T) {
 	broadcaster := NewBroadcaster()
 
@@ -90,11 +84,9 @@ func TestBroadcaster_Unsubscribe(t *testing.T) {
 	unsubscribe()
 	assert.Zero(t, broadcaster.SubscriberCount("SpeedcubingHungary2026"))
 
-	// Feliratkozó nélkül sem blokkolhat.
 	broadcaster.Notify("SpeedcubingHungary2026")
 }
 
-// A nil Broadcaster is használható (a figyelő opcionálisan kapja meg).
 func TestBroadcaster_NilIsSafe(t *testing.T) {
 	var broadcaster *Broadcaster
 	assert.NotPanics(t, func() { broadcaster.Notify("SpeedcubingHungary2026") })

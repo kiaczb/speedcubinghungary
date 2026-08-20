@@ -18,9 +18,6 @@ export default function SpecialPage() {
           description="A Special versenyeken az összes versenyszám idejének összege számít. Válaszd ki a versenyt, és az eredmények élőben érkeznek a WCA Live-ról — a DNF-ek tényleges hosszát a helyszínen rögzítjük, mert azt a hivatalos eredmény nem őrzi meg."
         />
 
-        {/* A kiválasztott verseny az URL-ben él (?competition=…), amit a
-            SpecialView a useSearchParams hookkal olvas — ez pedig Suspense
-            határt kíván, különben a statikus build elbukik. */}
         <div className="mt-10">
           <Suspense fallback={null}>
             <SpecialView />

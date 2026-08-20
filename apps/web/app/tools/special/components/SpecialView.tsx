@@ -20,9 +20,6 @@ import CompetitorCard from "./CompetitorCard";
 import RoundTabs from "./RoundTabs";
 import type { Competition, Competitor, SpecialReport } from "../types";
 
-// A backend Server-Sent Eventen szól, ha változott az adat — a felület erre
-// kérdez újra. A poll csak biztonsági háló, ha az SSE nem épül fel (proxy,
-// hálózat), ezért ritka.
 const FALLBACK_POLL_MS = 30_000;
 
 async function apiFetch(path: string, init?: RequestInit) {
@@ -50,14 +47,6 @@ function matchesQuery(competitor: Competitor, query: string): boolean {
   );
 }
 
-/**
- * A Special eredménytábla. A versenyt a NÉZŐ választja ki, és a választás az
- * URL-ben él (`?competition=…`) — így megosztható és újratöltésre is megmarad.
- * Amíg az oldal nyitva van, a szerver élőben tartja az eredményeket (SSE).
- *
- * Admin ugyanezt látja, plusz a DNF-cellák szerkeszthetők. A jogosultságot a
- * szerver külön is kikényszeríti; ez a kapcsoló csak a felületet igazítja.
- */
 const SpecialView = () => {
   const { user } = useUser();
   const isAdmin = user?.roles.includes("admin") ?? false;
@@ -67,18 +56,12 @@ const SpecialView = () => {
   const competitionId = searchParams.get("competition");
 
   const [report, setReport] = useState<SpecialReport | null>(null);
-  // Melyik verseny lekérése bukott el. Versenyhez kötve tartjuk, hogy váltáskor
-  // magától elévüljön — így nem kell effektben állapotot nullázni.
   const [failedCompetition, setFailedCompetition] = useState<string | null>(
     null,
   );
   const [live, setLive] = useState(false);
   const [query, setQuery] = useState("");
   const [onlyMissing, setOnlyMissing] = useState(false);
-  // A kiválasztott kör (null = minden kör) a VERSENYHEZ kötve él: másik
-  // versenyen az előző kör nem értelmes, viszont így nem kell effektben
-  // visszaállítani — egyszerűen kiolvasáskor derül ki, hogy nem érvényes.
-  // A szűrés a szerveren történik (lásd RoundTabs).
   const [roundSelection, setRoundSelection] = useState<{
     competition: string | null;
     round: number | null;
@@ -91,8 +74,6 @@ const SpecialView = () => {
     setRoundSelection({ competition: competitionId, round });
   };
 
-  // Az SSE-kapcsolatot NEM építjük újra körváltáskor, ezért a frissítés a
-  // ref-ből olvassa az aktuális kört, nem a closure-ből.
   const selectedRoundRef = useRef<number | null>(null);
 
   const selectCompetition = (competition: Competition) => {
@@ -106,8 +87,6 @@ const SpecialView = () => {
     router.replace("/tools/special", { scroll: false });
   };
 
-  // Szándékosan CSAK lekér, állapotot nem ír: így a setState mindig a
-  // `.then`-ben történik, nem az effekt törzsében (React Compiler szabály).
   const fetchReport = useCallback(
     async (
       competition: string,
@@ -122,8 +101,6 @@ const SpecialView = () => {
     [],
   );
 
-  // Verseny- vagy körváltáskor (és induláskor) újratöltünk. A ref frissítése
-  // effektben történik, nem renderben — így a React Compiler is elfogadja.
   useEffect(() => {
     selectedRoundRef.current = selectedRound;
 
@@ -147,15 +124,6 @@ const SpecialView = () => {
     };
   }, [competitionId, selectedRound, fetchReport]);
 
-  // Élő frissítés: a szerver SSE-n jelzi, hogy változott a NÉZETT verseny
-  // adata, mi pedig újrakérdezzük a riportot. A jelzés nem hordoz adatot, így
-  // nem kell két forrást szinkronban tartani.
-  //
-  // A nyitott kapcsolat egyben azt is jelenti a szervernek, hogy van nézője a
-  // versenynek — erre indul a WCA Live subscription.
-  //
-  // A kapcsolatot körváltáskor NEM építjük újra (a hatás nem függ a
-  // kiválasztott körtől) — a frissítés a ref-ből olvassa az aktuális kört.
   useEffect(() => {
     if (!competitionId) return;
 
@@ -200,21 +168,16 @@ const SpecialView = () => {
       {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        // A rögzítés ahhoz a versenyhez tartozik, amit épp nézünk — nincs
-        // szerveroldali "figyelt verseny".
         body: JSON.stringify({ competitionWcaId: competitionId, elapsedCs }),
       },
     );
     setReport(await fetchReport(competitionId, selectedRound));
   };
 
-  // Verseny nélkül a választó a teljes felület.
   if (!competitionId) {
     return <CompetitionPicker onSelect={selectCompetition} />;
   }
 
-  // Az állapotot a betöltött riportból vezetjük le: a NÉZETT versenyhez
-  // tartozó riport a friss, minden más az előző versenyé.
   const current =
     report?.competition.competitionWcaId === competitionId ? report : null;
 
@@ -252,9 +215,6 @@ const SpecialView = () => {
     0,
   );
 
-  // A kapcsoló csak adminnak és csak akkor látszik, ha van mit szűrni — a
-  // szűrés ugyanezen a feltételen múlik, különben bekapcsolva ragadhatna egy
-  // eltüntetett vezérlővel.
   const missingFilterAvailable = isAdmin && totalMissing > 0;
 
   const visible = competitors
@@ -304,8 +264,6 @@ const SpecialView = () => {
         </div>
       </div>
 
-      {/* A kör-választó a szűkítő ágakon KÍVÜL van: ha egy körben még nincs
-          eredmény, a fülek nélkül nem lehetne visszaváltani. */}
       <RoundTabs
         rounds={availableRounds}
         selected={selectedRound}
@@ -343,7 +301,6 @@ const SpecialView = () => {
               />
             </div>
 
-            {/* A hiányzó idők szűrője üzemeltetői eszköz — csak adminnak. */}
             {missingFilterAvailable && (
               <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
                 <input

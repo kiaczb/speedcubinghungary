@@ -16,46 +16,26 @@ var (
 	ErrInvalidAttempt       = errors.New("invalid attempt reference")
 )
 
-// maxElapsedCs 24 óra századmásodpercben — józan felső határ az emberi bevitelre.
 const maxElapsedCs = 24 * 60 * 60 * 100
 
-// competitionIDPattern a WCA verseny-azonosító alakja (csak betű és szám).
-// Azért ellenőrizzük, mert az azonosító a WCA Live /link/ URL-jébe kerül, és
-// kérésenként a kliens adja — hibás alakút meg se próbálunk feloldani.
 var competitionIDPattern = regexp.MustCompile(`^[A-Za-z0-9]{1,64}$`)
 
 const (
-	// A verseny-választó alapból a magyar versenyeket kínálja; kereséssel
-	// bármelyik WCA Live-on futó verseny elérhető.
-	defaultCountryISO2 = "HU"
-	// Ennyi napra visszamenőleg soroljuk fel a versenyeket: egy Special
-	// eredménytábláját a verseny napja után is nézik.
+	defaultCountryISO2      = "HU"
 	competitionLookbackDays = 60
-	// A WCA Live a from utáni ÖSSZES versenyt adja (világszerte, mért adat
-	// szerint ~185 db ~27 KB-ban), az ország szerinti szűrés itt történik.
-	competitionListLimit   = 500
-	competitionSearchLimit = 25
+	competitionListLimit    = 500
+	competitionSearchLimit  = 25
 
-	// A verseny alapadatai ritkán változnak, a feloldás viszont két WCA Live
-	// kérés (átirányítás + lekérdezés) — ezért gyorsítótárazzuk.
-	competitionCacheTTL = time.Hour
-	// A lista rövid ideig él: verseny közben is nyílhat új WCA Live verseny.
+	competitionCacheTTL     = time.Hour
 	competitionListCacheTTL = time.Minute
 )
 
-// Service a riport összeállítása és az emberi időrögzítés.
-//
-// A versenyt kérésenként a NÉZŐ adja meg — nincs szerveroldali "figyelt
-// verseny". A kapott azonosítót mindig a WCA Live-nál oldjuk fel, hogy a
-// numerikus id ne a kliens szava legyen.
 type Service struct {
 	repo        Repository
 	client      *LiveClient
 	tracker     *Tracker
 	broadcaster *Broadcaster
 
-	// A feloldott versenyek és a választó listája gyorsítótárban; a WCA Live-ot
-	// önkéntesek üzemeltetik, ne kérdezzük fölöslegesen.
 	mu       sync.Mutex
 	resolved map[string]cachedCompetition
 	list     []Competition
@@ -77,19 +57,10 @@ func NewService(repo Repository, client *LiveClient, tracker *Tracker, broadcast
 	}
 }
 
-// Broadcaster a nyitott felületek élő értesítéséhez (SSE).
 func (s *Service) Broadcaster() *Broadcaster { return s.broadcaster }
 
-// Tracker a WCA Live oldali állapot; az SSE kezelő ezen keresztül jelzi, hogy
-// van nyitott nézet.
 func (s *Service) Tracker() *Tracker { return s.tracker }
 
-// Competitions a verseny-választó találatai.
-//
-// Üres kereséssel a magyar versenyeket adja vissza (az elmúlt
-// competitionLookbackDays nap + a jövőbeliek), keresésre pedig a WCA Live
-// névre szűrő lekérdezését használjuk, ország szerinti szűkítés nélkül — így
-// egy külföldi verseny is megnyitható, ha valaki keresi.
 func (s *Service) Competitions(ctx context.Context, query string) ([]Competition, error) {
 	query = strings.TrimSpace(query)
 
@@ -138,11 +109,6 @@ func (s *Service) cachedList() ([]Competition, bool) {
 	return s.list, true
 }
 
-// ResolveCompetition a WCA verseny-azonosítóból a verseny alapadatait adja.
-//
-// A numerikus WCA Live id-t SOHA nem a klienstől vesszük: a /link/ átirányítás
-// és a lekérdezés a WCA Live-tól jön, így elgépelt vagy hamis azonosítóval nem
-// kérdezünk le semmit.
 func (s *Service) ResolveCompetition(ctx context.Context, competitionWCAID string) (Competition, error) {
 	competitionWCAID = strings.TrimSpace(competitionWCAID)
 	if !competitionIDPattern.MatchString(competitionWCAID) {
@@ -174,33 +140,13 @@ func (s *Service) ResolveCompetition(ctx context.Context, competitionWCAID strin
 	return *competition, nil
 }
 
-// Report a versenyzőnkénti nézet: minden idő, felhasznált/maradék keret.
-//
-// A kumulatív keret számítása KIZÁRÓLAG a Competitor.Budgets mezőben él
-// (buildBudgets) — a Szabályzat A1a3 értelmezését szándékosan egyetlen helyen
-// tartjuk, hogy ne csúszhasson szét két implementáció.
 type Report struct {
-	// Competition a riport tárgya: a néző által választott verseny.
-	Competition Competition `json:"competition"`
-	// AvailableRounds a versenyen előforduló körsorszámok (növekvő sorrendben),
-	// MINDIG a teljes adathalmazból — a kör-választó ebből épül fel, ezért nem
-	// szűkülhet a kiválasztott körre.
-	AvailableRounds []int `json:"availableRounds"`
-	// Round a szűrés tárgya; nil, ha minden kör benne van.
-	Round       *int         `json:"round"`
-	Competitors []Competitor `json:"competitors"`
+	Competition     Competition  `json:"competition"`
+	AvailableRounds []int        `json:"availableRounds"`
+	Round           *int         `json:"round"`
+	Competitors     []Competitor `json:"competitors"`
 }
 
-// GetReport a megadott verseny riportját adja vissza.
-//
-// Az eredmények a WCA Live-ból jönnek (tracker), a DNF-ek tényleges hossza az
-// adatbázisból; a kettő itt találkozik.
-//
-// roundNumber != nil esetén CSAK az adott sorszámú körökre szűkít, minden
-// versenyszámban (pl. 1 → 333-r1, 222-r1, …). A szűrés a BuildCompetitors ELŐTT
-// történik, hogy a felhasznált/maradék idő és a kumulatív keret ugyanazzal az
-// egyetlen implementációval (buildBudgets) számolódjon — kliensoldali
-// újraszámolás nélkül.
 func (s *Service) GetReport(ctx context.Context, competitionWCAID string, roundNumber *int) (*Report, error) {
 	competition, err := s.ResolveCompetition(ctx, competitionWCAID)
 	if err != nil {
@@ -217,7 +163,6 @@ func (s *Service) GetReport(ctx context.Context, competitionWCAID string, roundN
 		return nil, err
 	}
 
-	// A választható körök a SZŰRÉS ELŐTTI halmazból jönnek.
 	available := availableRoundNumbers(results)
 
 	if roundNumber != nil {
@@ -257,8 +202,6 @@ func filterResultsByRound(results []ResultSnapshot, roundNumber int) []ResultSna
 	return filtered
 }
 
-// sortCompetitions a választó sorrendje: előbb a most futó versenyek, utána a
-// közelgők (dátum szerint növekvő), végül a lezártak (a legfrissebb elöl).
 func sortCompetitions(competitions []Competition, today string) {
 	sort.SliceStable(competitions, func(i, j int) bool {
 		left, right := competitions[i], competitions[j]
@@ -268,8 +211,6 @@ func sortCompetitions(competitions []Competition, today string) {
 			return leftRank < rightRank
 		}
 
-		// A lezártak közül a legfrissebb az érdekes, a többinél a soron
-		// következő. Az ISO dátumok sorrendje megegyezik a szövegessel.
 		if leftRank == rankPast {
 			return left.StartDate > right.StartDate
 		}
@@ -298,11 +239,6 @@ func today() string {
 	return time.Now().Format(dateLayout)
 }
 
-// RecordElapsed rögzíti egy DNF kísérlet TÉNYLEGES megoldási idejét.
-//
-// Ez emberi megfigyelés: a WCA Live nem tudja megmondani, meddig tartott a
-// solve (az Attempt modellben nincs időbélyeg, a limitet átlépő időt pedig a
-// mentés előtt DNF-re cseréli). nil elapsedCs törli a bejegyzést.
 func (s *Service) RecordElapsed(
 	ctx context.Context,
 	competitionWCAID string,
@@ -321,8 +257,6 @@ func (s *Service) RecordElapsed(
 	}
 
 	if elapsedCs == nil {
-		// Törléshez nem kell a WCA Live: a (live_result_id, attempt_number)
-		// kulcs önmagában azonosítja a bejegyzést.
 		if err := s.repo.DeleteElapsed(liveResultID, attemptNumber); err != nil {
 			return err
 		}
@@ -334,8 +268,6 @@ func (s *Service) RecordElapsed(
 		return ErrInvalidElapsed
 	}
 
-	// A verseny sora a rögzített idő idegen kulcsa — csak itt keletkezik, tehát
-	// akkor, ha ember tényleg rögzített valamit.
 	competition, err := s.ResolveCompetition(ctx, competitionWCAID)
 	if err != nil {
 		return err

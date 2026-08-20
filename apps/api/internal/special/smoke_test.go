@@ -13,14 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Ez a teszt a VALÓDI WCA Live ellen fut, ezért alapból kimarad (a CI nem
-// függhet külső szolgáltatástól). Kézzel így indítható:
-//
-//	WCA_LIVE_SMOKE=HungarianAllRounder62026 go test ./internal/special -run Smoke -v
-//
-// Azt ellenőrzi, hogy a lekérdezés és a subscription drótformátuma egyezik-e a
-// WCA Live aktuális implementációjával — élő verseny nélkül is kiderül, ha
-// elromlott valami (átnevezett mező, megváltozott socket protokoll).
 func TestSmoke_AgainstRealWCALive(t *testing.T) {
 	competitionWCAID := os.Getenv("WCA_LIVE_SMOKE")
 	if competitionWCAID == "" {
@@ -77,7 +69,6 @@ func TestSmoke_AgainstRealWCALive(t *testing.T) {
 		assert.NotEmpty(t, snapshot.Attempts, "üres eredmény nem kerül a pillanatképbe")
 	}
 
-	// A subscription drótformátuma: Phoenix csatorna + Absinthe doc.
 	socket := NewSocketClient(DefaultWCALiveURL)
 	connected := make(chan struct{}, 1)
 	socket.SetOnConnect(func() {
@@ -100,13 +91,6 @@ func TestSmoke_AgainstRealWCALive(t *testing.T) {
 	}
 }
 
-// Végponttól végpontig: valódi WCA Live → versenyzői nézet → időrögzítés IGAZI
-// Postgres ellen. A sqlmock nem futtatja le az SQL-t, ezért a típushibák csak
-// így derülnek ki. Kézzel indítandó:
-//
-//	SMOKE_DATABASE_URL="postgres://..." SMOKE_USER_ID=<users.id> \
-//	  WCA_LIVE_SMOKE=HungarianAllRounder62026 \
-//	  go test ./internal/special -run SmokeDatabase -v
 func TestSmokeDatabase_EndToEnd(t *testing.T) {
 	databaseURL := os.Getenv("SMOKE_DATABASE_URL")
 	competitionWCAID := os.Getenv("WCA_LIVE_SMOKE")
@@ -128,10 +112,6 @@ func TestSmokeDatabase_EndToEnd(t *testing.T) {
 	tracker := NewTracker(client, NewSocketClient(DefaultWCALiveURL), broadcaster)
 	service := NewService(repo, client, tracker, broadcaster)
 
-	// 1) A verseny feloldása a WCA Live-tól — ugyanaz az út, amit a néző jár
-	//    be, amikor kiválasztja a versenyt.
-	// A recorded_by/added_by idegen kulcs a users táblára mutat, ezért valódi
-	// felhasználó-id kell (SMOKE_USER_ID).
 	userID, _ := strconv.Atoi(os.Getenv("SMOKE_USER_ID"))
 	require.Positive(t, userID, "set SMOKE_USER_ID to an existing users.id")
 
@@ -139,8 +119,6 @@ func TestSmokeDatabase_EndToEnd(t *testing.T) {
 	require.NoError(t, err)
 	t.Logf("watching %s (live id %d)", tracked.CompetitionWCAID, tracked.LiveCompetitionID)
 
-	// 2) Versenyzői nézet valódi adatból. Nincs külön egyeztetési lépés: az
-	//    eredményeket a tracker kéri le a WCA Live-tól, tárolás nélkül.
 	report, err := service.GetReport(ctx, competitionWCAID, nil)
 	require.NoError(t, err)
 	require.NotEmpty(t, report.Competitors, "a versenyzői nézet nem lehet üres")
@@ -148,7 +126,6 @@ func TestSmokeDatabase_EndToEnd(t *testing.T) {
 	t.Logf("%d competitors, %d DNF attempts",
 		len(report.Competitors), countDNFAttempts(report.Competitors))
 
-	// Keresünk egy DNF kísérletet, amihez időt lehet rögzíteni.
 	var (
 		liveResultID  int
 		attemptNumber int
@@ -158,7 +135,6 @@ func TestSmokeDatabase_EndToEnd(t *testing.T) {
 			for _, attempt := range round.Attempts {
 				assert.NotEqual(t, 0, attempt.AttemptNumber)
 
-				// A tényleges időt SOHA nem tölthetjük ki magunktól.
 				if attempt.Result == AttemptDNF && attempt.ElapsedCs != nil {
 					t.Fatalf("a WCA Live nem ad tényleges időt, mégis ki van töltve: %v", attempt)
 				}
@@ -172,7 +148,6 @@ func TestSmokeDatabase_EndToEnd(t *testing.T) {
 	}
 	require.Positive(t, liveResultID, "kell legyen legalább egy DNF kísérlet")
 
-	// 3) Idő rögzítése — ez volt az a lekérdezés, ami típushibára futott.
 	const elapsed = 3742
 	value := elapsed
 	require.NoError(t, service.RecordElapsed(ctx, competitionWCAID, liveResultID, attemptNumber, &value, "smoke test", userID))
@@ -183,21 +158,18 @@ func TestSmokeDatabase_EndToEnd(t *testing.T) {
 		"a rögzített időnek meg kell jelennie a nézetben")
 	assert.Equal(t, elapsed, *findAttempt(after, liveResultID, attemptNumber).ElapsedCs)
 
-	// 4) Idempotencia: ugyanaz a rögzítés újra nem hoz létre második sort.
 	require.NoError(t, service.RecordElapsed(ctx, competitionWCAID, liveResultID, attemptNumber, &value, "smoke test", userID))
 
 	recorded, err := repo.ListRecordedTimes(tracked.CompetitionWCAID)
 	require.NoError(t, err)
 	assert.Len(t, recorded, 1, "az ismételt rögzítés nem duplikálhat")
 
-	// 5) Törlés: az admin visszavonja a bejegyzést.
 	require.NoError(t, service.RecordElapsed(ctx, competitionWCAID, liveResultID, attemptNumber, nil, "", userID))
 
 	recorded, err = repo.ListRecordedTimes(tracked.CompetitionWCAID)
 	require.NoError(t, err)
 	assert.Empty(t, recorded, "a null idő törli a bejegyzést")
 
-	// 6) Takarítás.
 	_, err = db.Exec(`DELETE FROM special_competitions WHERE competition_wca_id = $1`,
 		tracked.CompetitionWCAID)
 	require.NoError(t, err)
@@ -233,13 +205,6 @@ func countDNFAttempts(competitors []Competitor) int {
 	return count
 }
 
-// A tracker a TELJES versenyt lekéri a WCA Live-tól, tárolás nélkül. Ez váltja
-// ki a korábbi helyi eredmény-tükröt, ezért valódi verseny ellen is
-// ellenőrizzük — kiderül belőle, ha a kör-lekérdezés vagy a WCA Live
-// komplexitási korlátja megváltozik:
-//
-//	WCA_LIVE_SMOKE=HungarianAllRounder62026 \
-//	  go test ./internal/special -run SmokeTracker -v
 func TestSmokeTracker_LoadsWholeCompetition(t *testing.T) {
 	competitionWCAID := os.Getenv("WCA_LIVE_SMOKE")
 	if competitionWCAID == "" {
@@ -253,7 +218,6 @@ func TestSmokeTracker_LoadsWholeCompetition(t *testing.T) {
 	liveID, err := client.ResolveCompetitionID(ctx, competitionWCAID)
 	require.NoError(t, err)
 
-	// A Results nem nyúl a tárolóhoz — csak a WCA Live-ot kérdezi.
 	tracker := NewTracker(client, NewSocketClient(DefaultWCALiveURL), NewBroadcaster())
 
 	started := time.Now()
@@ -273,7 +237,6 @@ func TestSmokeTracker_LoadsWholeCompetition(t *testing.T) {
 	require.Greater(t, len(rounds), 1,
 		"a Special minden versenyszáma kell, nem csak egy kör")
 
-	// A második hívás a memóriából jön, lekérdezés nélkül.
 	cachedAt := time.Now()
 	cached, err := tracker.Results(ctx, Competition{
 		CompetitionWCAID:  competitionWCAID,
@@ -284,11 +247,6 @@ func TestSmokeTracker_LoadsWholeCompetition(t *testing.T) {
 	assert.Less(t, time.Since(cachedAt), 50*time.Millisecond, "a gyorsítótárnak azonnalinak kell lennie")
 }
 
-// A verseny-választó a VALÓDI WCA Live ellen: a competitions lekérdezés
-// drótformátuma (id, wcaId, venues.country) és a service oldali szűrés/rendezés.
-// Kézzel indítandó:
-//
-//	WCA_LIVE_SMOKE=HungarianAllRounder62026 go test ./internal/special -run SmokeCompetitions -v
 func TestSmokeCompetitions_AgainstRealWCALive(t *testing.T) {
 	competitionWCAID := os.Getenv("WCA_LIVE_SMOKE")
 	if competitionWCAID == "" {
@@ -301,7 +259,6 @@ func TestSmokeCompetitions_AgainstRealWCALive(t *testing.T) {
 	client := NewLiveClient(DefaultWCALiveURL)
 	service := NewService(nil, client, nil, NewBroadcaster())
 
-	// 1) Keresés név szerint: a választó így ér el bármelyik versenyt.
 	found, err := service.Competitions(ctx, "Hungarian")
 	require.NoError(t, err)
 	require.NotEmpty(t, found, "a névre keresésnek adnia kell találatot")
@@ -312,7 +269,6 @@ func TestSmokeCompetitions_AgainstRealWCALive(t *testing.T) {
 	}
 	t.Logf("%d competitions matched %q, first: %s", len(found), "Hungarian", found[0].Name)
 
-	// 2) Alaplista: a magyar versenyek, ország szerint szűrve.
 	local, err := service.Competitions(ctx, "")
 	require.NoError(t, err)
 	for _, competition := range local {
@@ -321,7 +277,6 @@ func TestSmokeCompetitions_AgainstRealWCALive(t *testing.T) {
 	}
 	t.Logf("%d Hungarian competitions in the picker", len(local))
 
-	// 3) Feloldás: a kliens által megadott azonosítóból a mi Competition-ünk.
 	competition, err := service.ResolveCompetition(ctx, competitionWCAID)
 	require.NoError(t, err)
 	assert.Equal(t, competitionWCAID, competition.CompetitionWCAID)

@@ -12,39 +12,28 @@ import {
 } from "../lib/time";
 import type { Competitor, CompetitorAttempt, CompetitorRound } from "../types";
 
-// WCIF AttemptResult speciális értékei.
 const DNF = -1;
 const DNS = -2;
 
 type CompetitorCardProps = {
   competitor: Competitor;
-  /**
-   * Csak adminnak: az idő rögzítése. Enélkül a kártya csak olvasható.
-   * A kulcs a WCA Live result id-ja + a kísérlet sorszáma — a DNF-ek listája a
-   * friss WCA Live adatból jön, nálunk csak a rögzített idő él.
-   */
   onRecord?: (
     liveResultId: number,
     attemptNumber: number,
     elapsedCs: number | null,
   ) => Promise<void>;
-  /** A kártya első DNF-mezőjére fókuszál (kereséskor). */
   autoFocus?: boolean;
 };
 
-// A fejléc a leghosszabb kör kísérletszámához igazodik (Bo3/Mo3-nál kevesebb).
 function maxAttemptCount(rounds: CompetitorRound[]): number {
   return rounds.reduce((max, round) => Math.max(max, round.attempts.length), 0);
 }
 
-/** Nem szerkeszthető cella: hivatalos eredmény, vagy DNF a rögzített idővel. */
 const ReadOnlyAttemptCell = ({ attempt }: { attempt: CompetitorAttempt }) => {
   if (attempt.result === DNF) {
     return (
       <td className="tabular px-2 py-2 text-center font-mono text-sm text-brand-red">
         {attempt.elapsedCs != null ? (
-          // A rögzített idő a MI megfigyelésünk, nem hivatalos eredmény —
-          // ezért jelöljük, hogy DNF-ről van szó.
           <span title="DNF · a solve tényleges hossza">
             {formatCentiseconds(attempt.elapsedCs)}
             <span className="ml-1 text-[10px] uppercase">dnf</span>
@@ -91,8 +80,6 @@ const EditableAttemptCell = ({
   const [busy, setBusy] = useState(false);
   const [invalid, setInvalid] = useState(false);
 
-  // Ha máshonnan (másik gépről, vagy a háttérfrissítésből) változik a rögzített
-  // érték, átvesszük — renderben igazítva, nem effectben.
   const [lastRecorded, setLastRecorded] = useState(recorded);
   if (recorded !== lastRecorded) {
     setLastRecorded(recorded);
@@ -132,10 +119,6 @@ const EditableAttemptCell = ({
           if (event.key === "Enter") {
             event.preventDefault();
             void save();
-            // Enter után a következő mezőre lépünk, ahogy a versenyeken
-            // használt beviteli felületeken szokás.
-            // Kártyánként egy táblázat van, ezért ez pontosan az adott
-            // versenyző mezőit adja vissza.
             const inputs = Array.from(
               event.currentTarget
                 .closest("table")
@@ -181,8 +164,6 @@ const CompetitorCard = ({
 }: CompetitorCardProps) => {
   const columns = maxAttemptCount(competitor.rounds);
 
-  // Kereséskor az első DNF-mezőre ugrunk. A kísérletet a kör result id-ja és a
-  // sorszám azonosítja, ezért ebből képezünk kulcsot.
   const focusTargetKey = autoFocus
     ? competitor.rounds
         .flatMap((round) =>
@@ -239,8 +220,6 @@ const CompetitorCard = ({
                 </td>
 
                 {round.attempts.map((attempt) =>
-                  // Csak a DNF-ből lesz beviteli mező; minden más cella
-                  // állapot nélküli megjelenítés.
                   onRecord && attempt.result === DNF ? (
                     <EditableAttemptCell
                       key={attempt.attemptNumber}
@@ -289,8 +268,6 @@ const CompetitorCard = ({
   );
 };
 
-// Összesítő: a BpSpecial "Remaining / Used" sávjának megfelelője. Kumulatív
-// keret nélkül csak a felhasznált időt tudjuk mutatni — maradék nincs.
 const CompetitorSummary = ({ competitor }: { competitor: Competitor }) => {
   if (competitor.budgets.length === 0) {
     return (

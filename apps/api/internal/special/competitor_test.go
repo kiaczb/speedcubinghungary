@@ -39,8 +39,6 @@ func recorded(resultID, attemptNumber, elapsedCs int) RecordedTime {
 	}
 }
 
-// Alapeset: minden idő megjelenik, a DNF-hez odakerül a rögzített idő és a
-// számított felső korlát.
 func TestBuildCompetitors_AttachesRecordedDurations(t *testing.T) {
 	competitors := BuildCompetitors(
 		[]ResultSnapshot{
@@ -62,7 +60,6 @@ func TestBuildCompetitors_AttachesRecordedDurations(t *testing.T) {
 	round := competitor.Rounds[0]
 	require.Len(t, round.Attempts, 5)
 
-	// Az írás kulcsa: a WCA Live result id-ja + a kísérlet sorszáma.
 	assert.Equal(t, 101, round.LiveResultID)
 
 	assert.Equal(t, 696, round.Attempts[0].Result)
@@ -79,14 +76,11 @@ func TestBuildCompetitors_AttachesRecordedDurations(t *testing.T) {
 	assert.Nil(t, round.Attempts[3].ElapsedCs, "a DNS nem DNF")
 	assert.Nil(t, round.Attempts[3].MaxElapsedCs)
 
-	// Felhasznált = sikeres kísérletek + rögzített DNF idő (Szabályzat A1a3).
 	assert.Equal(t, 696+674, round.CompletedCs)
 	assert.Equal(t, 3742, round.RecordedDNFCs)
 	assert.Equal(t, 696+674+3742, competitor.UsedCs)
 }
 
-// Rögzített idő nélküli DNF hiányzóként számít — így a felület jelezheti, hogy
-// a maradék csak felső becslés. Sor csak akkor van, ha valaki rögzített időt.
 func TestBuildCompetitors_CountsMissingDurations(t *testing.T) {
 	competitors := BuildCompetitors(
 		[]ResultSnapshot{
@@ -101,8 +95,6 @@ func TestBuildCompetitors_CountsMissingDurations(t *testing.T) {
 	assert.Equal(t, 800, competitors[0].UsedCs, "az ismeretlen DNF idő nem növelheti a felhasználtat")
 }
 
-// A rögzített idők párosítása kísérletenként történik: ugyanannak az
-// eredménynek egy másik kísérletéhez felvett idő nem szivároghat át.
 func TestBuildCompetitors_MatchesRecordedTimePerAttempt(t *testing.T) {
 	competitors := BuildCompetitors(
 		[]ResultSnapshot{
@@ -120,8 +112,6 @@ func TestBuildCompetitors_MatchesRecordedTimePerAttempt(t *testing.T) {
 	assert.Equal(t, 1, competitors[0].MissingDNFCount)
 }
 
-// Másik körhöz tartozó rögzített idő nem kerülhet át: a live_result_id
-// körönként egyedi.
 func TestBuildCompetitors_IgnoresRecordedTimeFromAnotherResult(t *testing.T) {
 	competitors := BuildCompetitors(
 		[]ResultSnapshot{snapshot(101, 7, "Teszt Elek", "333", 1, []int{AttemptDNF})},
@@ -133,7 +123,6 @@ func TestBuildCompetitors_IgnoresRecordedTimeFromAnotherResult(t *testing.T) {
 	assert.Equal(t, 1, competitors[0].MissingDNFCount)
 }
 
-// Több versenyző: nem keveredhetnek össze a köreik.
 func TestBuildCompetitors_SeparatesCompetitors(t *testing.T) {
 	competitors := BuildCompetitors([]ResultSnapshot{
 		snapshot(102, 2, "Második", "333", 1, []int{900, AttemptDNF}),
@@ -143,11 +132,9 @@ func TestBuildCompetitors_SeparatesCompetitors(t *testing.T) {
 
 	require.Len(t, competitors, 2)
 
-	// Rajtszám szerint rendezve.
 	assert.Equal(t, 1, competitors[0].RegistrantID)
 	assert.Equal(t, 2, competitors[1].RegistrantID)
 
-	// Az első versenyzőnek két köre van, esemény szerint rendezve.
 	require.Len(t, competitors[0].Rounds, 2)
 	assert.Equal(t, "222-r1", competitors[0].Rounds[0].RoundWCIFID)
 	assert.Equal(t, "333-r1", competitors[0].Rounds[1].RoundWCIFID)
@@ -156,8 +143,6 @@ func TestBuildCompetitors_SeparatesCompetitors(t *testing.T) {
 	assert.Equal(t, 1, competitors[1].DNFCount)
 }
 
-// Több körre szóló kumulatív keret ("Budapest Special"): a körök EGYETLEN
-// keretbe adódnak össze, nem körönként külön.
 func TestBuildCompetitors_CrossRoundCumulativeBudget(t *testing.T) {
 	rounds := []string{"333bf-r1", "444bf-r1", "555bf-r1"}
 
@@ -185,8 +170,6 @@ func TestBuildCompetitors_CrossRoundCumulativeBudget(t *testing.T) {
 	assert.Zero(t, budget.MissingDNFCount)
 }
 
-// Rögzítetlen DNF mellett a maradék csak felső becslés — ezt a MissingDNFCount
-// jelzi a felületnek.
 func TestBuildCompetitors_BudgetMarksEstimate(t *testing.T) {
 	competitors := BuildCompetitors(
 		[]ResultSnapshot{
@@ -203,7 +186,6 @@ func TestBuildCompetitors_BudgetMarksEstimate(t *testing.T) {
 	assert.Equal(t, 1, budget.MissingDNFCount, "amíg van rögzítetlen DNF, a maradék felső becslés")
 }
 
-// Kísérletenkénti limitnél nincs keret — csak a kumulatív limit ad keretet.
 func TestBuildCompetitors_NoBudgetWithoutCumulativeLimit(t *testing.T) {
 	competitors := BuildCompetitors(
 		[]ResultSnapshot{withLimit(snapshot(101, 7, "Teszt Elek", "333", 1, []int{696, AttemptDNF}), 60000)},

@@ -1,9 +1,7 @@
 "use client";
 
 type RoundTabsProps = {
-  /** A választható körsorszámok, növekvő sorrendben. */
   rounds: number[];
-  /** A kiválasztott kör, vagy null = összes. */
   selected: number | null;
   onSelect: (round: number | null) => void;
 };
@@ -12,13 +10,6 @@ const TAB_BASE =
   "rounded-control px-3.5 py-1.5 text-sm font-medium transition-colors duration-200 ease-smooth " +
   "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground";
 
-/**
- * Kör-választó: minden versenyszám adott sorszámú körére szűkít (1 → 333-r1,
- * 222-r1, …). A szűrés a szerveren történik, hogy a felhasznált/maradék idő és
- * a kumulatív keret a meglévő egyetlen implementációval számolódjon.
- *
- * Egyetlen kör esetén nem jelenítünk meg semmit — nincs mit választani.
- */
 const RoundTabs = ({ rounds, selected, onSelect }: RoundTabsProps) => {
   if (rounds.length < 2) return null;
 

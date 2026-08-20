@@ -12,8 +12,6 @@ import StateMessage from "@/app/components/ui/StateMessage";
 import { clientApiUrl } from "@/app/lib/api";
 import type { Competition } from "../types";
 
-// Gépelés közben nem kérdezünk minden leütésre: a keresés a WCA Live-ot
-// szólítja meg, amit önkéntesek üzemeltetnek.
 const SEARCH_DEBOUNCE_MS = 300;
 
 type CompetitionPickerProps = {
@@ -30,12 +28,6 @@ function formatRange(competition: Competition): string {
     : `${competition.startDate} – ${competition.endDate}`;
 }
 
-/**
- * Verseny-választó: a versenyt a NÉZŐ választja ki, nincs szerveroldali
- * "figyelt verseny". Keresés nélkül a magyar versenyeket kínálja (a közeli
- * múlt + a jövőbeliek), kereséssel bármelyik WCA Live-on futó verseny
- * megnyitható — a szűrés a szerveren történik.
- */
 const CompetitionPicker = ({ onSelect }: CompetitionPickerProps) => {
   const [query, setQuery] = useState("");
   const [competitions, setCompetitions] = useState<Competition[]>([]);

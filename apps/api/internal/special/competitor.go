@@ -5,20 +5,11 @@ import (
 	"strings"
 )
 
-// attemptKey egy konkrét kísérletet azonosít: a WCA Live result id-ja
-// (verseny + kör + versenyző) és a kísérlet 1-alapú sorszáma.
 type attemptKey struct {
 	resultID      int
 	attemptNumber int
 }
 
-// BuildCompetitors összeállítja a versenyzői nézetet a WCA Live friss
-// eredményeiből és a saját, rögzített DNF-időinkből.
-//
-// A felhasznált idő a Szabályzat A1a3 szerint áll össze: a sikeres kísérletek
-// eredménye + a DNF kísérletek ELTELT ideje. Utóbbi csak akkor ismert, ha
-// valaki rögzítette; a hiányzókat a MissingDNFCount jelzi, és amíg az nem
-// nulla, a RemainingCs csak felső becslés.
 func BuildCompetitors(results []ResultSnapshot, recorded []RecordedTime) []Competitor {
 	recordedByAttempt := make(map[attemptKey]RecordedTime, len(recorded))
 	for _, entry := range recorded {
@@ -65,8 +56,6 @@ func BuildCompetitors(results []ResultSnapshot, recorded []RecordedTime) []Compe
 		competitors = append(competitors, *competitor)
 	}
 
-	// A rajtszám versenyzőnként egyedi, ezért ez teljes (determinisztikus)
-	// rendezés — a map bejárási sorrendje nem szivárog ki.
 	sort.Slice(competitors, func(i, j int) bool {
 		return competitors[i].RegistrantID < competitors[j].RegistrantID
 	})
@@ -74,8 +63,6 @@ func BuildCompetitors(results []ResultSnapshot, recorded []RecordedTime) []Compe
 	return competitors
 }
 
-// buildRound egy kör sorát állítja össze, a DNF kísérletekhez hozzákötve a
-// rögzített tényleges időt és a felső korlátot.
 func buildRound(result ResultSnapshot, recorded map[attemptKey]RecordedTime) CompetitorRound {
 	round := CompetitorRound{
 		LiveResultID:       result.LiveResultID,
@@ -102,9 +89,6 @@ func buildRound(result ResultSnapshot, recorded map[attemptKey]RecordedTime) Com
 			round.CompletedCs += value
 		}
 
-		// Csak a -1 (DNF) kap rögzíthető időt:
-		//   - -2 (DNS): a versenyző el sem indult, nincs eltelt idő (Szabályzat 9f2),
-		//   - 0 (skipped): cutoff miatt kimaradt vagy még meg sem történt kísérlet.
 		if value == AttemptDNF {
 			attempt.MaxElapsedCs = attemptBound(
 				result.TimeLimitCs, result.CumulativeRoundIDs, result.Attempts, index,
@@ -125,8 +109,6 @@ func buildRound(result ResultSnapshot, recorded map[attemptKey]RecordedTime) Com
 	return round
 }
 
-// buildBudgets a kumulatív kereteket állítja össze. A keret azonosítója a
-// cumulativeRoundIds halmaz — az ugyanabba a keretbe tartozó körök összeadódnak.
 func buildBudgets(rounds []CompetitorRound) []CumulativeBudget {
 	budgets := make(map[string]*CumulativeBudget)
 	order := make([]string, 0)
@@ -136,8 +118,6 @@ func buildBudgets(rounds []CompetitorRound) []CumulativeBudget {
 			continue
 		}
 
-		// A keret azonosítója a körök rendezett halmaza — így a sorrendtől
-		// függetlenül ugyanaz a keret ugyanoda kerül.
 		ids := append([]string(nil), round.CumulativeRoundIDs...)
 		sort.Strings(ids)
 		key := strings.Join(ids, "|")

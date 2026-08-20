@@ -12,17 +12,10 @@ import (
 	"time"
 )
 
-// DefaultWCALiveURL a WCA Live nyilvános példánya. A GraphQL végpont a /api,
-// a subscription pedig a Phoenix socket — mindkettő autentikáció nélkül
-// elérhető (wca_live UserSocket.connect/3 minden kapcsolatot elfogad).
 const DefaultWCALiveURL = "https://live.worldcubeassociation.org"
 
-// competitionIDFromPath a /link/... végpont átirányításából szedi ki a WCA Live
-// numerikus verseny-azonosítóját: "/competitions/11151" → 11151.
 var competitionIDFromPath = regexp.MustCompile(`/competitions/(\d+)`)
 
-// LiveClient a WCA Live GraphQL API HTTP oldalát szólítja meg (lekérdezések).
-// A subscription külön, WebSocketen megy — lásd socket.go.
 type LiveClient struct {
 	client  *http.Client
 	baseURL string
@@ -33,7 +26,6 @@ func NewLiveClient(baseURL string) *LiveClient {
 		baseURL = DefaultWCALiveURL
 	}
 	return &LiveClient{
-		// A /link/ végpont 302-vel válaszol, amit magunk dolgozunk fel.
 		client: &http.Client{
 			Timeout: 15 * time.Second,
 			CheckRedirect: func(*http.Request, []*http.Request) error {
@@ -91,12 +83,6 @@ func (c *LiveClient) query(ctx context.Context, doc string, variables map[string
 	return json.Unmarshal(parsed.Data, out)
 }
 
-// ResolveCompetitionID a WCA verseny-azonosítóból (pl. "HungarianAllRounder62026")
-// megadja a WCA Live numerikus id-ját.
-//
-// A GraphQL sémában nincs wcaId szerinti lekérdezés (a competitions(filter:)
-// csak névre keres), ezért a WCA Live saját, dokumentált /link/ átirányítását
-// használjuk — ugyanezt teszi a WCA Live kliense is a megosztható linkekhez.
 func (c *LiveClient) ResolveCompetitionID(ctx context.Context, competitionWCAID string) (int, error) {
 	url := fmt.Sprintf("%s/link/competitions/%s", c.baseURL, competitionWCAID)
 
@@ -147,7 +133,6 @@ const competitionQuery = `query Competition($id: ID!) {
   }
 }`
 
-// GetCompetition a verseny köreit kéri le (eredmények nélkül).
 func (c *LiveClient) GetCompetition(ctx context.Context, liveCompetitionID int) (*liveCompetition, error) {
 	var data struct {
 		Competition *liveCompetition `json:"competition"`
@@ -166,9 +151,6 @@ func (c *LiveClient) GetCompetition(ctx context.Context, liveCompetitionID int) 
 	return data.Competition, nil
 }
 
-// RoundQuery a kör teljes pillanatképe. Szándékosan ugyanazokat a mezőket kéri,
-// mint a RoundSubscription, hogy az induló állapot és az élő frissítés azonos
-// alakú legyen és ugyanaz a feldolgozás (snapshotResults) kezelhesse mindkettőt.
 const RoundQuery = `query Round($id: ID!) {
   round(id: $id) {
     id
@@ -192,8 +174,6 @@ const RoundQuery = `query Round($id: ID!) {
   }
 }`
 
-// RoundSubscription a WCA Live EGYETLEN subscription-je (scoretaking_subscription_types.ex).
-// Minden esemény TELJES kör-pillanatképet küld, nem deltát.
 const RoundSubscription = `subscription RoundUpdated($id: ID!) {
   roundUpdated(id: $id) {
     id
@@ -208,9 +188,6 @@ const RoundSubscription = `subscription RoundUpdated($id: ID!) {
   }
 }`
 
-// GetRound egy kör aktuális állapotát kéri le eredményekkel együtt. Ezt
-// használjuk induláskor és minden újracsatlakozás után, hogy a subscription
-// alatt kimaradt eseményeket behozzuk.
 func (c *LiveClient) GetRound(ctx context.Context, liveRoundID int) (*liveRound, error) {
 	var data struct {
 		Round *liveRound `json:"round"`
@@ -229,12 +206,6 @@ func (c *LiveClient) GetRound(ctx context.Context, liveRoundID int) (*liveRound,
 	return data.Round, nil
 }
 
-// competitionsQuery a verseny-választó listája.
-//
-// A WCA Live `competitions` lekérdezése névre szűr (filter) és a megadott
-// naptól kezdve sorolja fel a versenyeket (from). Eredményeket NEM kérünk, így
-// a komplexitási korlát közelébe sem ér: mért adat szerint ~185 verseny és a
-// helyszínek országa együtt is ~27 KB.
 const competitionsQuery = `query Competitions($filter: String, $from: Date, $limit: Int) {
   competitions(filter: $filter, from: $from, limit: $limit) {
     id
@@ -246,9 +217,6 @@ const competitionsQuery = `query Competitions($filter: String, $from: Date, $lim
   }
 }`
 
-// ListCompetitions a verseny-választó forrása. filter üresen hagyható (ekkor
-// a from utáni összes versenyt adja), a from nulla értéke pedig azt jelenti:
-// nincs dátumszűrés.
 func (c *LiveClient) ListCompetitions(ctx context.Context, filter string, from time.Time, limit int) ([]Competition, error) {
 	variables := map[string]any{"limit": limit}
 	if filter != "" {
@@ -269,7 +237,6 @@ func (c *LiveClient) ListCompetitions(ctx context.Context, filter string, from t
 	for _, live := range data.Competitions {
 		competition, err := toCompetition(live)
 		if err != nil {
-			// Egy értelmezhetetlen sor ne vigye el az egész listát.
 			continue
 		}
 		competitions = append(competitions, competition)
@@ -278,8 +245,6 @@ func (c *LiveClient) ListCompetitions(ctx context.Context, filter string, from t
 	return competitions, nil
 }
 
-// competitionInfoQuery a verseny alapadatai, körök nélkül — a kliens által
-// megadott azonosító feloldásához pontosan ennyi kell.
 const competitionInfoQuery = `query CompetitionInfo($id: ID!) {
   competition(id: $id) {
     id
@@ -314,11 +279,8 @@ func (c *LiveClient) GetCompetitionInfo(ctx context.Context, liveCompetitionID i
 	return &competition, nil
 }
 
-// dateLayout a WCA Live Date skalárjának alakja.
 const dateLayout = "2006-01-02"
 
-// toCompetition a WCA Live DTO-jából a saját típusunkat képzi. Az országot az
-// első helyszínből vesszük: több helyszín esetén is ugyanaz az ország.
 func toCompetition(live liveCompetition) (Competition, error) {
 	liveID, err := strconv.Atoi(live.ID)
 	if err != nil {

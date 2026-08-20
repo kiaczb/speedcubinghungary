@@ -1,8 +1,3 @@
-// Századmásodperc ↔ olvasható idő. A WCA a századmásodpercet használja
-// mértékegységként (WCIF AttemptResult), ezért mindenhol egész cs-ben számolunk
-// — lebegőpontos másodperc soha nem kerül a rendszerbe.
-
-/** 3742 → "37.42", 12345 → "2:03.45" */
 export function formatCentiseconds(centiseconds: number): string {
   const negative = centiseconds < 0;
   const value = Math.abs(centiseconds);
@@ -19,10 +14,6 @@ export function formatCentiseconds(centiseconds: number): string {
   return negative ? `-${body}` : body;
 }
 
-/**
- * Beviteli maszk: a beírt számjegyeket jobbról tölti fel, ahogy a versenyeken
- * használt időbeviteli mezők. "3742" → "37.42", "12345" → "1:23.45".
- */
 export function formatTimeInput(value: string): string {
   const digits = value.replace(/\D/g, "").replace(/^0+(?=\d)/, "");
   if (!digits) return "";
@@ -39,9 +30,6 @@ export function formatTimeInput(value: string): string {
   return `${minutes}:${digits.slice(-4, -2)}.${digits.slice(-2)}`;
 }
 
-/**
- * "37.42" → 3742, "1:23.45" → 8345. Érvénytelen vagy üres bemenetre null.
- */
 export function parseTimeToCentiseconds(formatted: string): number | null {
   const trimmed = formatted.trim().replace(",", ".");
   if (!trimmed) return null;
@@ -58,10 +46,6 @@ export function parseTimeToCentiseconds(formatted: string): number | null {
   return total > 0 ? total : null;
 }
 
-/**
- * Egy hivatalos WCIF AttemptResult megjelenítése.
- * A speciális értékek: -1 DNF, -2 DNS, 0 még nem történt meg / kihagyott.
- */
 export function formatAttemptResult(result: number): string {
   if (result === -1) return "DNF";
   if (result === -2) return "DNS";

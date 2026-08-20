@@ -11,9 +11,6 @@ import (
 
 var testNow = time.Date(2026, 8, 14, 10, 0, 0, 0, time.UTC)
 
-// A verseny sora a rögzített idők szülője, ezért a rögzítés előtt fel kell
-// vennünk. Ütközéskor frissítjük az alapadatokat: a nevet vagy a dátumot a
-// szervező menet közben is javíthatja a WCA Live-on.
 func TestEnsureCompetition(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
@@ -35,8 +32,6 @@ func TestEnsureCompetition(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-// A rögzítés idempotens: ugyanarra a kísérletre másodszor írva az ON CONFLICT
-// (live_result_id, attempt_number) ág frissít, nem keletkezik második sor.
 func TestSetElapsed(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
@@ -57,8 +52,6 @@ func TestSetElapsed(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-// A törlés a kísérlet természetes kulcsára megy, és nem hiba, ha nem volt sor:
-// a cél állapot (nincs rögzített idő) így is teljesül.
 func TestDeleteElapsed(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
@@ -88,7 +81,6 @@ func TestListRecordedTimes(t *testing.T) {
 		WithArgs("SpeedcubingHungary2026").
 		WillReturnRows(sqlmock.NewRows(columns).
 			AddRow(4973030, 2, 3742, "bíró jegyezte", 3, testNow).
-			// recorded_by / recorded_at NULL: a sor attól még használható.
 			AddRow(4973031, 1, 5000, "", nil, nil))
 
 	recorded, err := NewPostgresRepository(db).ListRecordedTimes("SpeedcubingHungary2026")
