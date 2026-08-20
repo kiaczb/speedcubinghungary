@@ -7,6 +7,7 @@ import (
 	"speedcubinghungary/internal/auth"
 	"speedcubinghungary/internal/competition"
 	"speedcubinghungary/internal/config"
+	"speedcubinghungary/internal/special"
 	"speedcubinghungary/internal/middleware"
 	"speedcubinghungary/internal/post"
 	"speedcubinghungary/internal/types"
@@ -15,7 +16,12 @@ import (
 	"github.com/go-chi/cors"
 )
 
-func New(db *sql.DB, cfg *config.Config) *chi.Mux {
+// New összeállítja a HTTP routert.
+//
+// A specialHandler kívülről érkezik, mert a WCA Live tracker (main.go) és a
+// HTTP réteg UGYANAZT a Broadcastert kell hogy használja — különben az élő
+// frissítésekről nem értesülnének a megnyitott felületek.
+func New(db *sql.DB, cfg *config.Config, specialHandler *special.Handler) *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(middleware.JSON)
 
@@ -61,6 +67,23 @@ func New(db *sql.DB, cfg *config.Config) *chi.Mux {
 
 	r.Get("/competitions/upcoming", competitionHandler.GetUpcoming)
 
+	// Budapest Special: WCA Live alapú eredménytábla a DNF-ek tényleges idejével.
+	//
+	// A versenyt a NÉZŐ választja ki (?competition=), nincs szerveroldali
+	// "figyelt verseny". Az OLVASÁS publikus — ugyanez a verseny eredménytáblája
+	// a WCA Live-on is bárki számára látható, a DNF-idők pedig épp azért
+	// készülnek, hogy a versenyzők lássák őket. Egyedül a DNF-idő RÖGZÍTÉSE
+	// admin, mert az a verseny üzemeltetése.
+	r.Get("/special/competitions", specialHandler.GetCompetitions)
+	r.Get("/special/report", specialHandler.GetReport)
+	r.Get("/special/stream", specialHandler.StreamUpdates)
+
+	r.Group(func(r chi.Router) {
+		r.Use(middleware.AuthMiddlewareWithConfig(cfg))
+		r.Use(middleware.RBACMiddleware(types.ROLE_ADMIN))
+
+		r.Put("/special/results/{liveResultId}/attempts/{attemptNumber}/elapsed", specialHandler.RecordElapsed)
+	})
 	//Auth feature
 	authRepo := auth.NewPostgresRepository(db)
 	authService := auth.NewService(authRepo)

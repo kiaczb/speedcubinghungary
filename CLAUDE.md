@@ -52,6 +52,7 @@ speedcubinghungary/
 │   │       ├── auth/        # WCA OAuth login, JWT minting, /me, /logout, users table
 │   │       ├── post/        # news posts CRUD (Postgres-backed)
 │   │       ├── competition/ # WCA API proxy for upcoming Hungarian competitions
+│   │       ├── special/     # Budapest Special: live WCA Live results + recorded DNF times
 │   │       ├── middleware/  # JSON content-type, JWT auth, RBAC
 │   │       ├── config/      # env var loading + validation (fail-fast)
 │   │       ├── db/          # Postgres connection (pgx stdlib driver)
@@ -88,6 +89,13 @@ vertical slice**: `model.go` (types) → `repository.go` (data access) → `serv
   `validator.go`. Owns the `posts` table.
 - `competition`: read-only WCA API proxy. Paginates the public WCA competitions
   endpoint for `country_iso2=HU`, maps to a slim DTO. No DB.
+- `special`: **Budapest Special** — WCA Live integration. Official results are
+  **not stored**: they are fetched live and held in memory, kept real-time by a
+  `roundUpdated` websocket subscription that runs only while someone has the page
+  open. The **only** persisted data is the human-recorded duration of a DNF
+  attempt. Owns `special_competitions` and `special_dnf_attempts`. The
+  competition is chosen **by the viewer**, per request (`?competition=<wcaId>`);
+  there is no server-side "tracked competition" and no admin selection. See §18.
 
 ---
 
@@ -96,7 +104,7 @@ vertical slice**: `model.go` (types) → `repository.go` (data access) → `serv
 | Layer     | Stack |
 | --------- | ----- |
 | Frontend  | Next.js **16.2.7** (App Router, Turbopack default), React **19.2.4**, TypeScript 5, Tailwind CSS **v4** (`@tailwindcss/postcss`), `react-icons`. Node 22. |
-| Backend   | Go **1.25.5**, `go-chi/chi/v5` (router), `go-chi/cors`, `golang-jwt/jwt/v5`, `golang-migrate/migrate/v4`, `jackc/pgx/v5` (via `stdlib` driver) + `lib/pq` (for `pq.Array`), `google/uuid`. Tests: `stretchr/testify` + `DATA-DOG/go-sqlmock`. |
+| Backend   | Go **1.25.5**, `go-chi/chi/v5` (router), `go-chi/cors`, `golang-jwt/jwt/v5`, `golang-migrate/migrate/v4`, `jackc/pgx/v5` (via `stdlib` driver) + `lib/pq` (for `pq.Array`), `google/uuid`, `coder/websocket` (WCA Live subscriptions). Tests: `stretchr/testify` + `DATA-DOG/go-sqlmock`. |
 | Scripts   | Python 3.11+ (weekly-report), Jinja-style HTML templates, SMTP email. `requirements.txt` at `apps/scripts/weekly-report/`. |
 | Data      | PostgreSQL **17**. |
 | Infra     | Docker Compose, Caddy 2 (alpine) reverse proxy w/ Let's Encrypt, GitHub Actions CI/CD, SSH-based deploy. |
@@ -334,9 +342,17 @@ Other Go conventions observed:
 
 Migrations: `000001_init_schema`, `000002_add_post_image` (nullable
 `posts.image_path`), `000003_add_weekly_report_post` (adds the `'report'`
-`post_tag` enum value + the nullable `posts.report_week DATE UNIQUE`) and
+`post_tag` enum value + the nullable `posts.report_week DATE UNIQUE`),
 `000004_add_user_avatar` (nullable `users.avatar_url TEXT` — the WCA profile
-picture URL). Applied automatically on API startup via
+picture URL), `000005_add_live_dnf_tracking` + `000006_add_live_results` (the
+Budapest Special tables, see §18), `000007_rename_live_to_special` (renames
+those three tables `live_*` → `special_*`; **column** names keep the `live_`
+prefix on purpose — those are genuine WCA Live identifiers),
+`000008_simplify_special_tracking` (drops `special_results` and every derived
+column off `special_dnf_attempts` — official results are no longer stored, §18)
+and `000009_special_competition_per_viewer` (drops `special_competitions.active`
+— the viewer picks the competition, so there is no active one, §18).
+Applied automatically on API startup via
 `migrate.New("file:///migrations", cfg.DatabaseURL)` (the prod image bakes
 `db/migrations` to `/migrations`).
 
@@ -357,6 +373,26 @@ users(id SERIAL PK, wca_id VARCHAR(50) UNIQUE, name, email,
 
 records(region VARCHAR, event_id VARCHAR, single INT, average INT,
         PRIMARY KEY (region, event_id))
+
+-- 000005 + 000007 + 000009: Budapest Special (§18). TIMESTAMPTZ, mert a WCA
+-- Live UTC pillanatokat ad, és élő verseny közben a zóna nem lehet kérdéses.
+-- NINCS "aktív verseny" (000009 eldobta az active oszlopot): a versenyt a néző
+-- választja kérésenként. Ez a tábla ma már CSAK a rögzített idők szülője —
+-- sor kizárólag akkor keletkezik, ha ember rögzített DNF-időt (EnsureCompetition),
+-- publikus kérésre soha.
+special_competitions(competition_wca_id TEXT PK, live_competition_id INT,
+        name, start_date, end_date, added_by → users(id), ...)
+
+-- 000008: a HIVATALOS eredmények NINCSENEK tárolva (a special_results tábla
+-- megszűnt) — a WCA Live-tól jönnek kérésre, és a memóriában élnek (§18).
+-- Itt CSAK az van, amit a WCA Live nem tud megmondani: a DNF tényleges hossza.
+-- Sor kizárólag akkor keletkezik, ha ember rögzített időt.
+special_dnf_attempts(id UUID PK, competition_wca_id → special_competitions,
+        live_result_id INT,        -- a WCA Live result id globálisan egyedi
+        attempt_number INT,        -- 1-alapú
+        elapsed_cs INT NOT NULL,   -- a solve TÉNYLEGES ideje — EMBERI megfigyelés
+        elapsed_note, recorded_by → users(id), recorded_at,
+        UNIQUE (live_result_id, attempt_number))   -- idempotencia-kulcs
 ```
 
 Notes / current state:
@@ -394,6 +430,24 @@ chi router in `internal/router/router.go`. Global middleware: `middleware.JSON`
 | GET  | `/login/callback` | public | `auth.LoginCallback` (WCA OAuth redirect target) |
 | GET  | `/me` | JWT | `auth.Me` |
 | POST | `/logout` | JWT | `auth.Logout` |
+| GET  | `/special/competitions` | public | `special.GetCompetitions` — the competition picker. `?query=` searches WCA Live by **name** (any country); without it, the **Hungarian** competitions of the last 60 days plus the upcoming ones. Sorted ongoing → upcoming → past |
+| GET  | `/special/report` | public | `special.GetReport` (per-competitor view, assembled from **live** WCA Live results + our recorded DNF times). **`?competition=<wcaId>` is required** (400 without it). Optional `?round=N` narrows to the Nth round of **every** event (1 → `333-r1`, `222-r1`, …); invalid values 400, WCA Live unreachable 502, watch capacity exhausted 503 |
+| GET  | `/special/stream` | public | `special.StreamUpdates` (**SSE**: `update` event on every change of `?competition=<wcaId>`, required). An open stream is also what keeps *that competition's* WCA Live subscription alive (§18) |
+| PUT  | `/special/results/{liveResultId}/attempts/{attemptNumber}/elapsed` | JWT + `admin` | `special.RecordElapsed` (body `{competitionWcaId, elapsedCs, note}`; `elapsedCs: null` **deletes** the entry). Keyed by WCA Live ids, not our own — there is no row for an un-timed DNF |
+
+**Reading `/special/*` is public; only recording a DNF duration is admin.** The
+Budapest Special is a public leaderboard — the same competitor results are
+already public on WCA Live, and the recorded DNF durations exist precisely so
+competitors can see them. **Choosing the competition is NOT an admin action any
+more:** any visitor picks one and the page goes live for them. Only writing the
+human-observed duration is competition operation, hence admin-only. (Both this
+and the earlier admin-only-everything decision were reversed deliberately —
+don't "restore" either.)
+
+⚠️ The WCA competition id comes from the client on every request and ends up in
+the WCA Live `/link/` URL, so `Service.ResolveCompetition` validates it against
+`^[A-Za-z0-9]{1,64}$` and always resolves the numeric WCA Live id **itself**
+(cached for an hour). Never take `liveCompetitionId` from the client.
 
 Integrations: **WCA API** — OAuth token + `/api/v0/me` (auth), and
 `/api/v0/competitions` (competition proxy, paginated, `maxPages=20` guard, 10s
@@ -454,6 +508,11 @@ Other important vars:
   required in any env file; the base compose mounts the `uploads_data` named
   volume there. Deliberately **not** under `/app`, because the dev override
   bind-mounts the source tree over `/app` and would shadow it.
+- `WCA_LIVE_URL` — WCA Live base URL (default
+  `https://live.worldcubeassociation.org`); both the GraphQL endpoint and the
+  Phoenix socket are derived from it. Not required; mapped in the base compose
+  with an empty default. (There is no `WCA_LIVE_WATCHER` kill switch any more —
+  the subscription only exists while someone has the page open, §18.)
 - Web: `SERVER_API_URL` (server→api, Docker service name), `NEXT_PUBLIC_API_URL`
   (browser→api), `NEXT_PUBLIC_WCA_CLIENT_ID`, `NEXT_PUBLIC_WCA_REDIRECT_URI`,
   `NEXT_PUBLIC_BACKEND_LOGIN`. **`NEXT_PUBLIC_*` are baked into the browser bundle
@@ -642,6 +701,253 @@ links in `app/layout.tsx` if needed. **Read the Next 16 docs first** (§3 warnin
   When editing a package, match **that package's** existing style.
 
 ---
+
+## 18. Budapest Special (`internal/special`)
+
+The public leaderboard for "Special"-format competitions, where a competitor's
+score is the **sum of their times across every event**. That format needs the
+one number the official results deliberately omit: how long a DNF attempt
+actually took. Verified against the wca-live source (commit `f44ced1`,
+2026-07-31) and probed against production.
+
+⚠️ Naming: inside this package, **"live" always means the upstream WCA Live
+service** — never our feature. That is why `LiveClient`, `SocketClient`, and the
+`live_result_id` / `live_competition_id` **columns** keep the name, while the
+package, tables and routes are `special`.
+
+**The viewer picks the competition, per request.** There is no "active"/"tracked"
+competition in the database and no admin selection step: `/special/report` and
+`/special/stream` both take `?competition=<wcaId>`, and the page keeps that
+choice in the URL. Several competitions can therefore be open at once, in
+different browsers — the tracker, the broadcaster and the subscriptions are all
+keyed by competition. (Earlier the admin set one active competition; migration
+`000009` removed the flag. Don't reintroduce a server-side "current"
+competition.)
+
+Consequences worth keeping in mind:
+
+- Any visitor can make us open a WCA Live session for any competition, so
+  `maxTrackedCompetitions` (20) caps concurrent tracking; idle competitions are
+  evicted after `idleRetention` (5 min), and when only viewed ones remain the
+  request fails with `ErrTooManyCompetitions` (503) rather than growing.
+- `special_competitions` rows are created **only** by `EnsureCompetition` when an
+  admin records a duration — never by a public read, so browsing cannot fill the
+  table.
+
+### ⚠️ The single most important fact: WCA Live cannot tell you how long a DNF took
+
+Do not spend time looking for this again. `lib/wca_live/scoretaking/attempt.ex`
+is the *entire* attempt model:
+
+```elixir
+embedded_schema do
+  field :result, :integer
+  field :reconstruction, :string
+end
+```
+
+There is **no attempt start/finish timestamp, no elapsed time, no timer state,
+no live timer** — anywhere in WCA Live. Worse, `Result.changeset` →
+`apply_time_limit/2` rewrites an over-the-limit time to DNF (`-1`) **before**
+insert, so the entered time never reaches the database. The only timestamp is
+`Result.entered_at`: **data-entry time**, second precision, shared by all five
+attempts of one result — unrelated to when any solve happened. Never present it
+as a solve time.
+
+Yet WCA Regulation **A1a3** says the time counting toward a cumulative limit for
+a DNF attempt is *"the time elapsed in the solve"* — a number the official data
+model deliberately does not carry.
+
+### The one thing we store
+
+**The official results are NOT stored.** They belong to WCA Live; a local copy
+would be a pure round-trip (`snapshotResults` → INSERT → SELECT → unchanged).
+They are fetched live and held **in memory** by `Tracker` (tracker.go).
+
+The **only** persisted data is what WCA Live cannot tell us: the actual duration
+of a DNF, keyed by `(live_result_id, attempt_number)`. That is the whole
+`special_dnf_attempts` table, and it is written **only when a human records a
+time** — there are no rows for un-timed DNFs.
+
+That single decision is why this package has no detection step, no
+reconciliation, no `resolved_at`, and no backfill problem:
+
+- The list of DNFs comes from the *current* WCA Live data, so it is never stale.
+- A scoretaker fixing a typo means the attempt is no longer `-1`, so our row
+  simply stops joining. Nothing to resolve, and the audit row survives.
+- `max_elapsed_cs`, `completed_cs`, competitor names, event/round ids were all
+  derived — they are recomputed per request instead (`attemptBound`).
+
+**Don't reintroduce a results mirror or a background detector.** Migration
+`000008_simplify_special_tracking` removed both deliberately.
+
+### Transport (verified, not guessed)
+
+| | |
+| --- | --- |
+| GraphQL | `POST https://live.worldcubeassociation.org/api` — public, no auth |
+| Subscriptions | `wss://…/socket/websocket?vsn=2.0.0` — **Phoenix channels + Absinthe** (`absinthe_phoenix` 2.0.3), *not* graphql-ws |
+| Handshake | `phx_join` on `__absinthe__:control` → `doc` push → `{"subscriptionId": "__absinthe__:doc:global:…"}` → data arrives on that topic as `subscription:data` |
+| Frame format | Phoenix v2 array: `[join_ref, ref, topic, event, payload]` (`join_ref`/`ref` are `null` on broadcasts) |
+| Auth | none — `UserSocket.connect/3` accepts every connection. Send **no** `Origin` header (Phoenix `check_origin` passes when it is absent). |
+| Heartbeat | required every <60s on topic `phoenix`, event `heartbeat` |
+| Subscription | there is exactly **one**: `roundUpdated(id: ID!): Round!` |
+| WCA ID → live ID | no GraphQL lookup exists; follow the `302` from `/link/competitions/{wcaId}` → `/competitions/{numericId}` |
+
+⚠️ **You cannot fetch a whole competition's results in one query.** Adding
+`results { … }` to `competitionEvents.rounds` is rejected by WCA Live's query
+complexity limit (measured: complexity 7331, maximum 5000). Rounds must be
+fetched one `round(id:)` query each — `Tracker.load` does that in parallel
+(`roundFetchConcurrency = 4`). Measured against production: 10 rounds, 286
+results, ~1.2s.
+
+### The tracker's lifecycle: viewer-scoped, not a background job
+
+There is **no start/stop watching system and no background watcher**. A viewer
+opens the page for a competition; the data is fetched because someone is looking
+at it:
+
+- The tracker holds a **map of `trackedCompetition` entries** (competition wcaId
+  → rounds + viewer count), not a single competition.
+- `Tracker.Results(ctx, competition)` serves that entry's in-memory snapshot,
+  re-fetching when it is not live-tracked and older than `cacheTTL` (15s). A
+  **per-competition `loadMu`** keeps concurrent requests from multiplying
+  upstream traffic.
+- `Tracker.AddViewer(competition)` is **reference-counted by open SSE
+  connections**, per competition *and* globally. The first viewer anywhere starts
+  the session (one websocket); each competition's `roundUpdated` subscriptions
+  are added while it has viewers and dropped when it loses its last one. The
+  last viewer overall stops the session, so we hold no connection to WCA Live
+  when nobody is watching.
+- **One socket serves every competition.** `SocketClient` multiplexes over
+  Phoenix channels, and WCA Live round ids are globally unique, so the
+  `round:<id>` subscription key cannot collide between competitions. Don't
+  create a socket per competition.
+- `entry.trackedSince` exists so a snapshot cached *before* live tracking began
+  is not mistaken for a self-updating one; only a load newer than that counts as
+  live.
+- `refreshInterval` (2 min) only re-checks whether new rounds opened, for the
+  competitions that currently have viewers.
+
+Two concurrency rules that are easy to break:
+
+- **Sessions must not overlap.** `SocketClient` resets its per-connection state
+  (`sentKeys`, `topicKey`) per session, so a new session waits on the previous
+  one's `sessionDone`, and `runSession` waits for `socket.Run` to return.
+- **`SetOnConnect` is called once, in `NewTracker`** — not per session, which
+  would race with the socket's own goroutine. It reads the live session context
+  through `currentSessionContext()`.
+
+### Why the design is state-based
+
+**Every `roundUpdated` event is a full Round snapshot, not a delta.** That single
+fact makes duplicate, out-of-order and missed events self-healing, and is why
+there is no event log, no sequence numbers and no dedup cache. Keep it that way.
+
+Other invariants worth preserving:
+
+- **Only `-1` is a DNF.** `-2` (DNS — never started, no elapsed time exists) and
+  `0` (skipped/cutoff) never get an input. `333fm`/`333mbf` have no time limit,
+  so no bound.
+- `max_elapsed_cs` is a derived **upper bound** (per-attempt limit → the limit;
+  cumulative → limit − prior positive attempts). It is a bound, not a
+  measurement — label it as such in the UI.
+- **The tracker loads every `open` round — including already-`finished` ones**
+  (`openRounds` is just `round.Open`). This is deliberately *wider* than WCA
+  Live's own client (`open && (!finished || active)`), and must stay that way: a
+  Special score sums **all** events, but the page is typically opened
+  mid-competition, and the morning's 2x2 is already finished.
+- Round parameters (`timeLimit`) are cached per tracked round because the
+  subscription payload carries only results.
+- On every (re)connect the tracker **re-queries every round of every watched
+  competition in full**, so nothing is lost while the socket was down. After an
+  API restart there is nothing to recover: the open pages reconnect their SSE
+  streams and that is what re-establishes the tracking.
+- **WCA Live results have no group dimension.** Groups exist only in the WCIF
+  schedule (`ActivityCode` `333-r1-g2`). Separation is by round + competitor +
+  attempt number, which is strictly finer than per-group.
+- Never write observations back into WCIF/WCA. The duration is not part of the
+  official result.
+
+### The competitor view
+
+`BuildCompetitors` (competitor.go) merges the live snapshots with our recorded
+durations into per-person cards (all attempts, best/average, used and remaining
+time). Rules:
+
+- **Cumulative budgets are keyed by the `cumulativeRoundIds` SET, not by round.**
+  A "Budapest Special"-style limit spanning several events is therefore ONE
+  shared budget, which is more correct than WCA Live's own per-round handling.
+  `buildBudgets` is the single place that encodes Regulation A1a3 — do not add a
+  second cumulative calculation.
+- `remainingCs` is only exact once every DNF has a recorded duration;
+  `missingDnfCount > 0` means it is an **upper estimate**, and the UI says so.
+- **The round picker filters server-side, on purpose.** `GetReport(ctx, roundNumber)`
+  narrows the snapshots *before* calling `BuildCompetitors`, so used/remaining
+  time and the cumulative budget still come from the one `buildBudgets`
+  implementation. Do **not** move this filter into the client — that would
+  require a second A1a3 calculation in TypeScript. `availableRounds` is always
+  computed from the **unfiltered** set, otherwise the picker would collapse to
+  the selected round. ⚠️ A cumulative budget spanning round numbers (e.g.
+  `["333-r1","333-r2"]`) shows only partial usage when filtered; the realistic
+  Special setup is one budget per round across events, so this hasn't come up.
+
+### Live updates to the browser
+
+`Broadcaster` (broadcaster.go) + SSE at `/special/stream?competition=…`. The
+event carries **no data**, only "something changed"; the client refetches the
+report. That keeps one source of truth and makes dropped or duplicated
+notifications harmless. The broadcaster **is keyed by competition** — several
+competitions can be open at once, and one's update must not make the other's
+viewers refetch.
+⚠️ The SSE handler must `w.Header().Del("Content-Type")` before setting
+`text/event-stream` — the global `middleware.JSON` would otherwise mislabel the
+stream (§17).
+
+The SSE handler is also what tells the tracker a viewer is present
+(`AddViewer`), so the WCA Live subscription is tied to the page being open. The
+tracker and the HTTP layer must share one `Broadcaster`, which is why
+`router.New` takes a `*special.Handler` built in `main.go`.
+
+Frontend: **`/tools/special`** (colocated `components/lib/types`), person cards
+with search; SSE-driven with a 30s poll only as a fallback. Flow:
+
+- With no `?competition=`, `SpecialView` renders `CompetitionPicker`: Hungarian
+  competitions by default, debounced free-text search over all of WCA Live,
+  "Most fut" badge on ongoing ones.
+- Picking one does `router.replace("?competition=…")` — **the URL is the single
+  source of truth for the selection**, so the view is shareable and survives a
+  reload. `page.tsx` wraps the view in `<Suspense>` because `useSearchParams`
+  requires it in a statically rendered route (Next 16).
+- Round selection is stored **paired with the competition**
+  (`{competition, round}`) and read back only when it matches, instead of being
+  reset in an effect — the React Compiler lint (`react-hooks/set-state-in-effect`)
+  rejects `setState` in an effect body. Loading/error states are derived the same
+  way (`report.competition.competitionWcaId === competitionId`,
+  `failedCompetition`), not stored as a separate status.
+- The page is **public**; `SpecialView` checks `useUser()` for the `admin` role
+  and only then turns the DNF cells into editable inputs. Non-admins see the
+  recorded durations as read-only text. The server enforces this independently
+  (§8) — the client check is UX only.
+
+### Verifying against reality
+
+`sqlmock` does not execute SQL and `psql PREPARE` declares parameter types, so
+both can hide type-inference bugs (a `CASE ... THEN NULL ELSE $4 END` was
+inferred as `text` against an `integer` column). Four opt-in smoke tests cover
+this — `TestSmoke_AgainstRealWCALive` (wire format),
+`TestSmokeTracker_LoadsWholeCompetition` (the whole-competition fetch and the
+complexity limit), `TestSmokeCompetitions_AgainstRealWCALive` (the picker: the
+`competitions(filter:, from:)` query, the country filter and the wcaId → live id
+resolution) and `TestSmokeDatabase_EndToEnd` (real Postgres + real WCA Live, end
+to end):
+
+```bash
+WCA_LIVE_SMOKE=HungarianAllRounder62026 go test ./internal/special -run Smoke -v
+
+SMOKE_DATABASE_URL="postgres://…" SMOKE_USER_ID=<users.id> \
+  WCA_LIVE_SMOKE=HungarianAllRounder62026 go test ./internal/special -run Smoke -v
+```
 
 ## Instructions for Claude
 

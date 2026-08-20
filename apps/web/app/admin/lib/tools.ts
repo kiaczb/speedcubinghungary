@@ -1,4 +1,9 @@
-import { FaChartBar, FaRegNewspaper, FaUsers } from "react-icons/fa";
+import {
+  FaChartBar,
+  FaRegNewspaper,
+  FaSatelliteDish,
+  FaUsers,
+} from "react-icons/fa";
 import type { AdminTool } from "../types";
 
 // Minden admin eszköz itt kerül regisztrálásra — új csempe hozzáadásához
@@ -11,6 +16,15 @@ export const ADMIN_TOOLS: AdminTool[] = [
       "Posztok, versenybeszámolók és heti riportok létrehozása, szerkesztése és törlése.",
     href: "/posts",
     icon: FaRegNewspaper,
+    status: "active",
+  },
+  {
+    id: "special",
+    title: "Budapest Special",
+    description:
+      "A DNF-ek tényleges hosszának rögzítése a Special versenyeken. Az eredménytábla publikus, a versenyt bárki kiválaszthatja.",
+    href: "/tools/special",
+    icon: FaSatelliteDish,
     status: "active",
   },
   {
