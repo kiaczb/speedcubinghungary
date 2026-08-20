@@ -203,7 +203,6 @@ func TestSmokeDatabase_EndToEnd(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// findAttempt egy konkrét kísérletet keres ki a riportból.
 func findAttempt(report *Report, liveResultID, attemptNumber int) CompetitorAttempt {
 	for _, competitor := range report.Competitors {
 		for _, round := range competitor.Rounds {
@@ -220,7 +219,6 @@ func findAttempt(report *Report, liveResultID, attemptNumber int) CompetitorAtte
 	return CompetitorAttempt{}
 }
 
-// countDNFAttempts a versenyzői nézetben szereplő DNF kísérletek száma.
 func countDNFAttempts(competitors []Competitor) int {
 	count := 0
 	for _, competitor := range competitors {

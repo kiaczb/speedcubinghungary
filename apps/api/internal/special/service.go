@@ -11,12 +11,9 @@ import (
 )
 
 var (
-	// ErrInvalidCompetitionID érvénytelen WCA verseny-azonosító.
 	ErrInvalidCompetitionID = errors.New("invalid competition id")
-	// ErrInvalidElapsed érvénytelen megadott idő.
-	ErrInvalidElapsed = errors.New("elapsed time must be between 1 and 8640000 centiseconds")
-	// ErrInvalidAttempt érvénytelen kísérlet-hivatkozás.
-	ErrInvalidAttempt = errors.New("invalid attempt reference")
+	ErrInvalidElapsed       = errors.New("elapsed time must be between 1 and 8640000 centiseconds")
+	ErrInvalidAttempt       = errors.New("invalid attempt reference")
 )
 
 // maxElapsedCs 24 óra századmásodpercben — józan felső határ az emberi bevitelre.
@@ -235,7 +232,6 @@ func (s *Service) GetReport(ctx context.Context, competitionWCAID string, roundN
 	}, nil
 }
 
-// availableRoundNumbers a versenyen előforduló körsorszámok, növekvő sorrendben.
 func availableRoundNumbers(results []ResultSnapshot) []int {
 	seen := make(map[int]bool)
 	for _, result := range results {

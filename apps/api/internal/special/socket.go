@@ -105,10 +105,8 @@ func socketURL(baseURL string) string {
 	return url + "/socket/websocket?vsn=2.0.0"
 }
 
-// Events a beérkező subscription eseményeket adja vissza.
 func (s *SocketClient) Events() <-chan SubscriptionEvent { return s.events }
 
-// SetOnConnect beállítja a (újra)csatlakozás utáni visszahívást.
 func (s *SocketClient) SetOnConnect(fn func()) { s.onConnect = fn }
 
 // Subscribe nyilvántartásba vesz egy feliratkozást. Bármikor hívható: ha épp
@@ -135,7 +133,6 @@ func (s *SocketClient) Unsubscribe(key string) {
 	s.mu.Unlock()
 }
 
-// Subscriptions a nyilvántartott feliratkozások kulcsai.
 func (s *SocketClient) Subscriptions() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -374,7 +371,6 @@ func (s *SocketClient) handleReply(msg phoenixMessage) (string, bool) {
 	return subscriptionID, true
 }
 
-// handleData továbbítja a subscription payloadot a hívónak.
 func (s *SocketClient) handleData(ctx context.Context, msg phoenixMessage) {
 	key, ok := s.topicKey[msg.Topic]
 	if !ok {

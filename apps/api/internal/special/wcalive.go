@@ -58,7 +58,6 @@ type graphQLResponse struct {
 	Errors []graphQLError  `json:"errors"`
 }
 
-// query lefuttat egy GraphQL lekérdezést és a data mezőt out-ba dekódolja.
 func (c *LiveClient) query(ctx context.Context, doc string, variables map[string]any, out any) error {
 	body, err := json.Marshal(graphQLRequest{Query: doc, Variables: variables})
 	if err != nil {
@@ -169,7 +168,7 @@ func (c *LiveClient) GetCompetition(ctx context.Context, liveCompetitionID int) 
 
 // RoundQuery a kör teljes pillanatképe. Szándékosan ugyanazokat a mezőket kéri,
 // mint a RoundSubscription, hogy az induló állapot és az élő frissítés azonos
-// alakú legyen, és ugyanaz a detectDNFs dolgozhassa fel.
+// alakú legyen és ugyanaz a feldolgozás (snapshotResults) kezelhesse mindkettőt.
 const RoundQuery = `query Round($id: ID!) {
   round(id: $id) {
     id
@@ -292,7 +291,6 @@ const competitionInfoQuery = `query CompetitionInfo($id: ID!) {
   }
 }`
 
-// GetCompetitionInfo a verseny alapadatait kéri le (körök nélkül).
 func (c *LiveClient) GetCompetitionInfo(ctx context.Context, liveCompetitionID int) (*Competition, error) {
 	var data struct {
 		Competition *liveCompetition `json:"competition"`

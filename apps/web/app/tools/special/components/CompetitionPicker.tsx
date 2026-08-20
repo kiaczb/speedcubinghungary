@@ -20,7 +20,6 @@ type CompetitionPickerProps = {
   onSelect: (competition: Competition) => void;
 };
 
-/** Ma és a verseny dátuma alapján: fut-e éppen a verseny. */
 function isOngoing(competition: Competition, today: string): boolean {
   return competition.startDate <= today && today <= competition.endDate;
 }
