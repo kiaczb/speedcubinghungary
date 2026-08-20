@@ -17,7 +17,7 @@ const UnofficialSection = () => {
           title="Budapest Special"
           links={[
             {
-              href: "#events",
+              href: "/tools/special",
               label: "Megnyitás",
               icon: <FaGlobe className="h-4 w-4" />,
             },
@@ -26,7 +26,7 @@ const UnofficialSection = () => {
           <p>
             Itt érhetők el a Special végződésű versenyek eredményei. A
             versenyeken az összes versenyszám idejének összege számít
-            versenyzőnként.
+            versenyzőnként. Az élő verseny eredményei a WCA Live-ról érkeznek.
           </p>
         </ToolCard>
 

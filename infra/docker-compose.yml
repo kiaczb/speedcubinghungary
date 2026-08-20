@@ -47,6 +47,10 @@ services:
       DB_NAME: ${DB_NAME}
       JWT_SECRET: ${JWT_SECRET}
       LOG_LEVEL: ${LOG_LEVEL}
+      # WCA Live DNF watcher. Optional — the API falls back to the public
+      # instance with the watcher on, so both default to empty here to keep
+      # the stack warning-free when the env file doesn't set them.
+      WCA_LIVE_URL: ${WCA_LIVE_URL:-}
     volumes:
       # Uploaded post images. A named volume so they survive image rebuilds and
       # `up --build` deploys. Mounted at /data/uploads (NOT /app/uploads) because
