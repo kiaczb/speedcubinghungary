@@ -15,19 +15,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// fakeLiveSocket a WCA Live Phoenix/Absinthe drótformátumát utánozza:
-// phx_join a "__absinthe__:control" topicra, "doc" push a lekérdezéssel,
-// amire subscriptionId jön vissza, majd "subscription:data" broadcast.
 type fakeLiveSocket struct {
 	server *httptest.Server
 
-	mu          sync.Mutex
-	docQueries  []string
-	connections int
-	// dropAfterDoc: az első feliratkozás után bontjuk a kapcsolatot, hogy az
-	// újracsatlakozást tesztelhessük.
+	mu           sync.Mutex
+	docQueries   []string
+	connections  int
 	dropAfterDoc bool
-	broadcast    chan string // subscriptionId -> küldjünk rá adatot
+	broadcast    chan string
 }
 
 func newFakeLiveSocket(t *testing.T) *fakeLiveSocket {
@@ -82,7 +77,6 @@ func newFakeLiveSocket(t *testing.T) *fakeLiveSocket {
 				f.reply(ctx, conn, msg, map[string]any{"subscriptionId": subscriptionID})
 
 				if drop {
-					// Kapcsolatvesztés szimulálása.
 					conn.CloseNow()
 					return
 				}
@@ -116,7 +110,6 @@ func (f *fakeLiveSocket) reply(ctx context.Context, conn *websocket.Conn, msg ph
 	_ = conn.Write(ctx, websocket.MessageText, frame)
 }
 
-// push egy subscription:data broadcastot küld a megadott topicra.
 func (f *fakeLiveSocket) push(ctx context.Context, conn *websocket.Conn, topic string, data any) error {
 	frame, err := json.Marshal([]any{nil, nil, topic, eventSubscriptionData, map[string]any{
 		"subscriptionId": topic,
@@ -149,7 +142,6 @@ func TestSocketURL(t *testing.T) {
 }
 
 func TestPhoenixMessageUnmarshal(t *testing.T) {
-	// A broadcastokban a join_ref és a ref null — ezt is kezelnünk kell.
 	var msg phoenixMessage
 	require.NoError(t, json.Unmarshal(
 		[]byte(`[null,null,"__absinthe__:doc:global:X","subscription:data",{"result":{"data":{"roundUpdated":{"id":"1"}}}}]`),
@@ -161,18 +153,12 @@ func TestPhoenixMessageUnmarshal(t *testing.T) {
 	assert.Equal(t, eventSubscriptionData, msg.Event)
 	assert.Contains(t, string(msg.Payload), "roundUpdated")
 
-	// Rossz hosszúságú keretet ne fogadjunk el.
 	assert.Error(t, json.Unmarshal([]byte(`["1","2","topic"]`), &phoenixMessage{}))
 }
 
-// Teljes menet: csatlakozás → join → doc → subscriptionId → adat megérkezik a
-// hívó kulcsával.
 func TestSocketClient_DeliversSubscriptionData(t *testing.T) {
 	fake := newFakeLiveSocket(t)
 
-	// A broadcasthoz kell egy második kapcsolat a szerver oldaláról; egyszerűbb,
-	// ha a fake maga küldi az adatot ugyanazon a kapcsolaton — ehhez a
-	// handlerben tartjuk a conn-t.
 	var (
 		mu       sync.Mutex
 		liveConn *websocket.Conn
@@ -210,7 +196,6 @@ func TestSocketClient_DeliversSubscriptionData(t *testing.T) {
 				topic := "__absinthe__:doc:global:" + payload.Variables["id"].(string)
 				fake.reply(ctx, conn, msg, map[string]any{"subscriptionId": topic})
 
-				// Az Absinthe a feliratkozás után küldi az első adatot.
 				_ = fake.push(ctx, conn, topic, map[string]any{
 					"roundUpdated": map[string]any{"id": "147464"},
 				})
@@ -253,7 +238,6 @@ func TestSocketClient_DeliversSubscriptionData(t *testing.T) {
 	mu.Unlock()
 }
 
-// Ugyanazzal a kulccsal kétszer feliratkozva csak egy doc megy ki.
 func TestSocketClient_SubscribeIsIdempotent(t *testing.T) {
 	fake := newFakeLiveSocket(t)
 	client := NewSocketClient(fake.baseURL())
@@ -269,7 +253,6 @@ func TestSocketClient_SubscribeIsIdempotent(t *testing.T) {
 
 	go client.Run(ctx)
 
-	// Várjuk meg, amíg a doc kimegy.
 	require.Eventually(t, func() bool {
 		_, queries := fake.stats()
 		return len(queries) >= 1
@@ -282,8 +265,6 @@ func TestSocketClient_SubscribeIsIdempotent(t *testing.T) {
 	assert.Contains(t, queries[0], "roundUpdated")
 }
 
-// Kapcsolatvesztés után újracsatlakozunk, a feliratkozás magától újramegy, és
-// az onConnect ismét lefut — ez indítja a teljes állapot újralekérdezését.
 func TestSocketClient_ReconnectsAndResubscribes(t *testing.T) {
 	fake := newFakeLiveSocket(t)
 
@@ -307,7 +288,6 @@ func TestSocketClient_ReconnectsAndResubscribes(t *testing.T) {
 	client.Subscribe("round:42", RoundSubscription, map[string]any{"id": "42"})
 	go client.Run(ctx)
 
-	// Az első backoff 2s, tehát a második csatlakozásra várni kell.
 	require.Eventually(t, func() bool {
 		connections, queries := fake.stats()
 		return connections >= 2 && len(queries) >= 2
@@ -319,8 +299,6 @@ func TestSocketClient_ReconnectsAndResubscribes(t *testing.T) {
 		"minden újracsatlakozás után újra le kell kérdezni a teljes állapotot")
 }
 
-// Feliratkozás nélkül nem nyitunk kapcsolatot a WCA Live felé; amint jön egy
-// feliratkozás, azonnal csatlakozunk.
 func TestSocketClient_DoesNotConnectWithoutSubscriptions(t *testing.T) {
 	fake := newFakeLiveSocket(t)
 	client := NewSocketClient(fake.baseURL())

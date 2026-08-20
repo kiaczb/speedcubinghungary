@@ -39,13 +39,11 @@ func TestSnapshotResults(t *testing.T) {
 				Attempts: attempts(696, AttemptDNF, 674),
 				Person:   livePerson{RegistrantID: ptr(7), WCAID: "2020TEST01", Name: "Teszt Elek"},
 			},
-			// Üres eredmény: a versenyző még nem szerepelt — kihagyjuk.
 			{
 				ID:       "102",
 				Attempts: nil,
 				Person:   livePerson{RegistrantID: ptr(8), Name: "Még Nem Volt"},
 			},
-			// Rajtszám nélküli személy: kihagyjuk.
 			{
 				ID:       "103",
 				Attempts: attempts(500),
@@ -69,8 +67,6 @@ func TestSnapshotResults(t *testing.T) {
 	assert.Equal(t, 60000, *snapshots[0].TimeLimitCs)
 }
 
-// Ugyanaz a pillanatkép kétszer feldolgozva ugyanazt adja — ezen áll az, hogy a
-// duplikált és sorrenden kívüli események ártalmatlanok.
 func TestSnapshotResults_IsDeterministic(t *testing.T) {
 	round := liveRound{
 		TimeLimit: &liveTimeLimit{Centiseconds: 60000},
@@ -84,12 +80,10 @@ func TestSnapshotResults_IsDeterministic(t *testing.T) {
 	assert.Equal(t, snapshotResults(identity333r1(), round), snapshotResults(identity333r1(), round))
 }
 
-// Limit nélküli versenyszám (333fm, 333mbf): nincs felső korlát.
 func TestAttemptBound_NoLimit(t *testing.T) {
 	assert.Nil(t, attemptBound(nil, nil, []int{AttemptDNF}, 0))
 }
 
-// Kísérletenkénti limitnél a korlát maga a limit, függetlenül a korábbiaktól.
 func TestAttemptBound_PerAttemptLimit(t *testing.T) {
 	bound := attemptBound(ptr(60000), nil, []int{1000, AttemptDNF}, 1)
 
@@ -97,7 +91,6 @@ func TestAttemptBound_PerAttemptLimit(t *testing.T) {
 	assert.Equal(t, 60000, *bound)
 }
 
-// Kumulatív limitnél a korábbi SIKERES kísérletek idejét levonjuk (A1a).
 func TestAttemptBound_CumulativeSubtractsEarlierAttempts(t *testing.T) {
 	bound := attemptBound(ptr(60000), []string{"333bf-r1"}, []int{20000, 15000, AttemptDNF}, 2)
 
@@ -105,8 +98,6 @@ func TestAttemptBound_CumulativeSubtractsEarlierAttempts(t *testing.T) {
 	assert.Equal(t, 25000, *bound)
 }
 
-// A korábbi DNF eltelt idejét a WCA Live nem adja meg; 0-nak véve a korlát
-// biztosan nem lesz kisebb a valóságosnál.
 func TestAttemptBound_CumulativeIgnoresEarlierDNF(t *testing.T) {
 	bound := attemptBound(ptr(60000), []string{"333bf-r1"}, []int{AttemptDNF, AttemptDNF}, 1)
 
@@ -114,7 +105,6 @@ func TestAttemptBound_CumulativeIgnoresEarlierDNF(t *testing.T) {
 	assert.Equal(t, 60000, *bound)
 }
 
-// A keret nem mehet negatívba.
 func TestAttemptBound_CumulativeClampsAtZero(t *testing.T) {
 	bound := attemptBound(ptr(10000), []string{"333bf-r1"}, []int{9000, 6000, AttemptDNF}, 2)
 

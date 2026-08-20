@@ -13,8 +13,6 @@ import (
 const (
 	waitTimeout = 2 * time.Second
 	waitTick    = 10 * time.Millisecond
-	// Annyi ideig figyeljük, hogy NEM történik meg valami. Rövid, mert a
-	// munkamenet leállása azonnali lenne, nem időzített.
 	neverWindow = 150 * time.Millisecond
 )
 
@@ -22,9 +20,6 @@ func newTestTracker(liveURL string) *Tracker {
 	return NewTracker(NewLiveClient(liveURL), NewSocketClient(liveURL), NewBroadcaster())
 }
 
-// A Special pontszáma minden versenyszám összege, az oldalt viszont tipikusan
-// verseny KÖZBEN nyitják meg. A már lezárult versenyszámoknak (a reggeli 2x2)
-// ezért ugyanúgy be kell kerülniük, nem csak a megnyitás után nyíló köröknek.
 func TestTracker_LoadsAlreadyFinishedEvents(t *testing.T) {
 	server := fakeWCALive(t,
 		fakeRound{id: "1", eventID: "222", number: 1, results: []liveResult{
@@ -49,8 +44,6 @@ func TestTracker_LoadsAlreadyFinishedEvents(t *testing.T) {
 		"a figyelés megkezdése előtt lezárult versenyszám is kell")
 }
 
-// A második lekérdezés a memóriából jön: a WCA Live-ot nem szólítjuk meg
-// minden egyes kérésnél.
 func TestTracker_CachesBetweenRequests(t *testing.T) {
 	server := fakeWCALive(t, fakeRound{
 		id: "1", eventID: "333", number: 1,
@@ -62,7 +55,6 @@ func TestTracker_CachesBetweenRequests(t *testing.T) {
 	first, err := tracker.Results(context.Background(), testCompetition())
 	require.NoError(t, err)
 
-	// A hamis szervert leállítjuk: ha most is lekérdezne, hibát kapnánk.
 	server.Close()
 
 	second, err := tracker.Results(context.Background(), testCompetition())
@@ -70,8 +62,6 @@ func TestTracker_CachesBetweenRequests(t *testing.T) {
 	assert.Equal(t, first, second)
 }
 
-// Másik verseny adatát nem adjuk vissza a korábbi gyorsítótárból: a versenyt a
-// néző választja, egyszerre több is nyitva lehet.
 func TestTracker_CacheIsScopedToCompetition(t *testing.T) {
 	server := fakeWCALive(t, fakeRound{
 		id: "1", eventID: "333", number: 1,
@@ -93,8 +83,6 @@ func TestTracker_CacheIsScopedToCompetition(t *testing.T) {
 	assert.Error(t, err, "másik versenyhez újra kell kérdezni")
 }
 
-// A feliratkozás nézőhöz kötött: az első nézőnél indul, az utolsó után leáll.
-// Ez váltja ki a korábbi, folyamatosan futó háttérfigyelőt.
 func TestTracker_SubscribesOnlyWhileViewersArePresent(t *testing.T) {
 	server := fakeWCALive(t, fakeRound{
 		id: "147464", eventID: "333", number: 1,
@@ -118,7 +106,6 @@ func TestTracker_SubscribesOnlyWhileViewersArePresent(t *testing.T) {
 	}, waitTimeout, waitTick, "az utolsó néző távozásakor le kell állni")
 }
 
-// Több néző: a munkamenet az UTOLSÓ távozásáig él.
 func TestTracker_SessionOutlivesFirstViewer(t *testing.T) {
 	server := fakeWCALive(t, fakeRound{
 		id: "147464", eventID: "333", number: 1,
@@ -147,8 +134,6 @@ func TestTracker_SessionOutlivesFirstViewer(t *testing.T) {
 	}, waitTimeout, waitTick)
 }
 
-// A nézet lezárása többször is hívható (a defer és egy korai visszatérés is
-// meghívhatja) — a számláló nem csúszhat el.
 func TestTracker_CloseViewerIsIdempotent(t *testing.T) {
 	server := fakeWCALive(t, fakeRound{
 		id: "147464", eventID: "333", number: 1,
@@ -162,8 +147,6 @@ func TestTracker_CloseViewerIsIdempotent(t *testing.T) {
 	second, err := tracker.AddViewer(testCompetition())
 	require.NoError(t, err)
 
-	// Előbb megvárjuk a feliratkozást, különben a "még nincs" állapotot
-	// néznénk "már leállt"-nak.
 	require.Eventually(t, func() bool {
 		return len(tracker.socket.Subscriptions()) == 1
 	}, waitTimeout, waitTick)
@@ -181,8 +164,6 @@ func TestTracker_CloseViewerIsIdempotent(t *testing.T) {
 	}, waitTimeout, waitTick)
 }
 
-// Csak arra a versenyre iratkozunk fel, amit tényleg néz valaki — a
-// memóriában tartott, de nézetlen verseny köreiért nem tartunk kapcsolatot.
 func TestTracker_SubscribesOnlyToWatchedCompetitions(t *testing.T) {
 	tracker := newTestTracker("http://example.invalid")
 
@@ -200,8 +181,6 @@ func TestTracker_SubscribesOnlyToWatchedCompetitions(t *testing.T) {
 	assert.Equal(t, []string{subscriptionKey(147464)}, tracker.socket.Subscriptions())
 }
 
-// A versenyt bárki megnyithatja, ezért felső korlát van a párhuzamos
-// figyelésen: a nézetlen versenyek kiesnek, a nézetteket viszont nem dobjuk el.
 func TestTracker_CapsConcurrentlyTrackedCompetitions(t *testing.T) {
 	tracker := newTestTracker("http://example.invalid")
 
@@ -217,7 +196,6 @@ func TestTracker_CapsConcurrentlyTrackedCompetitions(t *testing.T) {
 	_, err := tracker.entry(testCompetition())
 	assert.ErrorIs(t, err, ErrTooManyCompetitions, "minden helyet néző foglal")
 
-	// Amint egy verseny nézők nélkül marad, a helyére bejöhet a következő.
 	tracker.competitions["Verseny0"].viewers = 0
 
 	_, err = tracker.entry(testCompetition())

@@ -7,21 +7,10 @@ import (
 	"github.com/google/uuid"
 )
 
-// Repository a tárolás. Szándékosan kicsi: a hivatalos eredmény a WCA Live-é
-// (lásd tracker.go), ide CSAK az kerül, amit a WCA Live nem tud megmondani —
-// a DNF solve tényleges hossza.
-//
-// A "melyik versenyt nézzük" kérdés NEM ide tartozik: a versenyt a néző
-// választja ki kérésenként (lásd Competition), ezért nincs aktív verseny.
-// A special_competitions tábla ma már csak a rögzített idők szülője: sor
-// kizárólag akkor keletkezik, ha ember rögzített időt.
 type Repository interface {
-	// EnsureCompetition felveszi (vagy frissíti) a versenyt, hogy a rögzített
-	// idők idegen kulcsa mutathasson rá.
 	EnsureCompetition(c Competition, userID int) error
 
 	ListRecordedTimes(competitionWCAID string) ([]RecordedTime, error)
-	// A kulcs a WCA Live result id-ja és a kísérlet sorszáma, ezért ismételve is idempotens.
 	SetElapsed(competitionWCAID string, liveResultID, attemptNumber, elapsedCs int, note string, userID int, now time.Time) error
 	DeleteElapsed(liveResultID, attemptNumber int) error
 }
@@ -34,9 +23,6 @@ func NewPostgresRepository(db *sql.DB) *PostgresRepository {
 	return &PostgresRepository{db: db}
 }
 
-// EnsureCompetition felveszi a versenyt, ha még nem ismerjük. A verseny
-// alapadatait a WCA Live-tól kapjuk, ezért ütközéskor frissítjük őket (a nevet
-// vagy a dátumot a szervező menet közben is javíthatja).
 func (r *PostgresRepository) EnsureCompetition(c Competition, userID int) error {
 	_, err := r.db.Exec(`
 		INSERT INTO special_competitions
@@ -95,9 +81,6 @@ func (r *PostgresRepository) ListRecordedTimes(competitionWCAID string) ([]Recor
 	return recorded, rows.Err()
 }
 
-// A (live_result_id, attempt_number) UNIQUE index az idempotencia kulcsa: a
-// WCA Live result id-ja globálisan egyedi (verseny + kör + versenyző), a
-// kísérlet sorszámával együtt pontosan egy kísérletet azonosít.
 func (r *PostgresRepository) SetElapsed(
 	competitionWCAID string,
 	liveResultID, attemptNumber, elapsedCs int,
@@ -122,7 +105,6 @@ func (r *PostgresRepository) SetElapsed(
 	return err
 }
 
-// Nem hiba, ha nem volt ilyen sor — a cél állapot (nincs rögzített idő) így is teljesül.
 func (r *PostgresRepository) DeleteElapsed(liveResultID, attemptNumber int) error {
 	_, err := r.db.Exec(`
 		DELETE FROM special_dnf_attempts

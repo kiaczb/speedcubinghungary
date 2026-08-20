@@ -10,8 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// A ?competition= és a ?round= paraméter végponttól végpontig:
-// URL → handler → szűrt riport.
 func TestHandler_GetReport_QueryParams(t *testing.T) {
 	server := fakeWCALive(t,
 		fakeRound{id: "1", eventID: "333", number: 1, results: []liveResult{
@@ -57,7 +55,6 @@ func TestHandler_GetReport_QueryParams(t *testing.T) {
 		assert.Equal(t, http.StatusBadRequest, rec.Code)
 	})
 
-	// A versenyt a néző választja: nélküle nincs mit megjeleníteni.
 	t.Run("verseny nélkül 400", func(t *testing.T) {
 		rec, _ := get("/special/report?round=1")
 		assert.Equal(t, http.StatusBadRequest, rec.Code)
@@ -69,7 +66,6 @@ func TestHandler_GetReport_QueryParams(t *testing.T) {
 	})
 }
 
-// A verseny-választó végpontja: keresés nélkül a magyar versenyeket adja.
 func TestHandler_GetCompetitions(t *testing.T) {
 	server := fakeWCALive(t)
 	handler := NewHandler(newTestService(new(mockRepo), server.URL, NewBroadcaster()))
@@ -99,7 +95,6 @@ func TestParseRoundParam(t *testing.T) {
 		assert.Equal(t, 2, *value)
 	})
 
-	// A WCIF körsorszáma 1-alapú.
 	for _, invalid := range []string{"0", "-1", "abc", "1.5"} {
 		t.Run("érvénytelen: "+invalid, func(t *testing.T) {
 			_, err := parseRoundParam(invalid)

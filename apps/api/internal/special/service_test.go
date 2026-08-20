@@ -41,7 +41,6 @@ func (m *mockRepo) DeleteElapsed(liveResultID, attemptNumber int) error {
 	return m.Called(liveResultID, attemptNumber).Error(0)
 }
 
-// fakeRound egy kör a hamis WCA Live példányban.
 type fakeRound struct {
 	id        string
 	eventID   string
@@ -58,8 +57,6 @@ func result(id string, registrantID int, name string, atts []liveAttempt) liveRe
 	}
 }
 
-// fakeWCALive a WCA Live HTTP oldalát utánozza: /link/ átirányítás + GraphQL
-// (competition és round lekérdezés).
 func fakeWCALive(t *testing.T, rounds ...fakeRound) *httptest.Server {
 	t.Helper()
 
@@ -84,9 +81,6 @@ func fakeWCALive(t *testing.T, rounds ...fakeRound) *httptest.Server {
 
 		w.Header().Set("Content-Type", "application/json")
 
-		// A verseny-választó lekérdezése. A tényleges szűrést (keresőszó,
-		// dátum) a WCA Live végzi; itt csak a drótformátum számít, plusz hogy
-		// az ország szerinti szűkítés a mi oldalunkon történik.
 		if strings.Contains(req.Query, "competitions(filter:") {
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"data": map[string]any{"competitions": []any{
@@ -112,8 +106,6 @@ func fakeWCALive(t *testing.T, rounds ...fakeRound) *httptest.Server {
 		}
 
 		if strings.Contains(req.Query, "competition(id:") {
-			// A versenyszámokat esemény szerint csoportosítjuk, ahogy a
-			// WCA Live is teszi.
 			events := make(map[string][]any)
 			order := make([]string, 0)
 			for _, round := range rounds {
@@ -185,10 +177,8 @@ func newTestService(repo Repository, liveURL string, broadcaster *Broadcaster) *
 	return NewService(repo, client, tracker, broadcaster)
 }
 
-// testCompetitionID a hamis WCA Live-on létező verseny azonosítója.
 const testCompetitionID = "SpeedcubingHungary2026"
 
-// testCompetition az az alak, amit a feloldás a hamis WCA Live-tól kap.
 func testCompetition() Competition {
 	return Competition{
 		CompetitionWCAID:  testCompetitionID,
@@ -199,8 +189,6 @@ func testCompetition() Competition {
 	}
 }
 
-// A numerikus WCA Live id SOHA nem a klienstől jön: a WCA verseny-azonosítót a
-// WCA Live /link/ átirányításából oldjuk fel.
 func TestService_ResolveCompetition(t *testing.T) {
 	server := fakeWCALive(t)
 
@@ -215,8 +203,6 @@ func TestService_ResolveCompetition_Validation(t *testing.T) {
 	server := fakeWCALive(t)
 	service := newTestService(new(mockRepo), server.URL, NewBroadcaster())
 
-	// Az azonosító a WCA Live URL-jébe kerül, és kérésenként a kliens adja —
-	// a nem betű-szám alakot meg se próbáljuk feloldani.
 	for _, invalid := range []string{"", "   ", "../competitions/1", "Speedcubing Hungary", "a/b"} {
 		t.Run("érvénytelen: "+invalid, func(t *testing.T) {
 			_, err := service.ResolveCompetition(context.Background(), invalid)
@@ -231,8 +217,6 @@ func TestService_ResolveCompetition_Validation(t *testing.T) {
 	})
 }
 
-// A feloldás két WCA Live kérés, ezért gyorsítótárazzuk: a második hívás már
-// nem szólítja meg a szolgáltatást.
 func TestService_ResolveCompetition_Caches(t *testing.T) {
 	server := fakeWCALive(t)
 	service := newTestService(new(mockRepo), server.URL, NewBroadcaster())
@@ -247,8 +231,6 @@ func TestService_ResolveCompetition_Caches(t *testing.T) {
 	assert.Equal(t, testCompetition(), competition)
 }
 
-// A választó alapból a magyar versenyeket kínálja; keresésre viszont bármelyik
-// WCA Live-on futó verseny elérhető.
 func TestService_Competitions(t *testing.T) {
 	server := fakeWCALive(t)
 	service := newTestService(new(mockRepo), server.URL, NewBroadcaster())
@@ -268,7 +250,6 @@ func TestService_Competitions(t *testing.T) {
 	})
 }
 
-// A sorrend: előbb a most futó verseny, utána a közelgő, végül a lezárt.
 func TestSortCompetitions(t *testing.T) {
 	competitions := []Competition{
 		{CompetitionWCAID: "Regi", StartDate: "2026-07-01", EndDate: "2026-07-01"},
@@ -290,8 +271,6 @@ func TestService_RecordElapsed(t *testing.T) {
 	server := fakeWCALive(t)
 
 	repo := new(mockRepo)
-	// A verseny sora csak a rögzítéskor keletkezik — ez a rögzített idő
-	// idegen kulcsának szülője.
 	repo.On("EnsureCompetition", testCompetition(), 7).Return(nil)
 	repo.On("SetElapsed", testCompetitionID, 900, 2, 3742, "bíró jegyezte", 7).Return(nil)
 
@@ -305,8 +284,6 @@ func TestService_RecordElapsed(t *testing.T) {
 	repo.AssertExpectations(t)
 }
 
-// null elapsedCs: az admin visszavonja a bejegyzést, a sor törlődik. Ehhez a
-// WCA Live-ot sem kell megszólítani — a kulcs önmagában azonosít.
 func TestService_RecordElapsed_DeletesOnNil(t *testing.T) {
 	repo := new(mockRepo)
 	repo.On("DeleteElapsed", 900, 2).Return(nil)
@@ -321,8 +298,6 @@ func TestService_RecordElapsed_DeletesOnNil(t *testing.T) {
 	repo.AssertNotCalled(t, "SetElapsed", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
 
-// A rögzítés után értesítjük a megnyitott felületeket (SSE) — de csak azokat,
-// akik EZT a versenyt nézik.
 func TestService_RecordElapsed_NotifiesSubscribers(t *testing.T) {
 	repo := new(mockRepo)
 	repo.On("DeleteElapsed", 900, 2).Return(nil)
@@ -377,8 +352,6 @@ func TestService_RecordElapsed_Validation(t *testing.T) {
 	})
 }
 
-// A riport a WCA Live friss eredményeiből és a saját rögzített időkből áll
-// össze — a hivatalos eredményt nem tároljuk.
 func TestService_GetReport(t *testing.T) {
 	server := fakeWCALive(t, fakeRound{
 		id: "147464", eventID: "333bf", number: 1,
@@ -405,7 +378,6 @@ func TestService_GetReport(t *testing.T) {
 	require.Len(t, competitor.Rounds[0].Attempts, 3)
 	assert.Equal(t, 23742, competitor.UsedCs)
 
-	// Az írás kulcsa a WCA Live result id-ja + a kísérlet sorszáma.
 	assert.Equal(t, 900, competitor.Rounds[0].LiveResultID)
 
 	dnfAttempt := competitor.Rounds[0].Attempts[1]
@@ -417,8 +389,6 @@ func TestService_GetReport(t *testing.T) {
 	assert.Equal(t, 36258, competitor.Budgets[0].RemainingCs)
 }
 
-// A kör-szűrő MINDEN versenyszám adott sorszámú körére szűkít (1 → 333-r1 +
-// 222-r1), és az összesítés is csak azokból számol.
 func TestService_GetReport_FiltersByRoundNumber(t *testing.T) {
 	server := fakeWCALive(t,
 		fakeRound{id: "1", eventID: "333", number: 1, results: []liveResult{
@@ -449,10 +419,8 @@ func TestService_GetReport_FiltersByRoundNumber(t *testing.T) {
 			[]string{"333-r1", "222-r1"},
 			[]string{rounds[0].RoundWCIFID, rounds[1].RoundWCIFID},
 		)
-		// Az összesítés is csak a szűrt körökből: 1000 + 500.
 		assert.Equal(t, 1500, report.Competitors[0].UsedCs)
 
-		// A választható körök a TELJES halmazból jönnek, nem szűkülnek.
 		assert.Equal(t, []int{1, 2}, report.AvailableRounds)
 		require.NotNil(t, report.Round)
 		assert.Equal(t, 1, *report.Round)
@@ -479,8 +447,6 @@ func TestService_GetReport_FiltersByRoundNumber(t *testing.T) {
 	})
 }
 
-// Ismeretlen versenyre nem kérdezünk le semmit: a feloldás megbukik, mielőtt a
-// tárolóhoz nyúlnánk.
 func TestService_GetReport_UnknownCompetition(t *testing.T) {
 	server := fakeWCALive(t)
 	repo := new(mockRepo)

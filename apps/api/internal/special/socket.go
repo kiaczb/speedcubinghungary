@@ -15,15 +15,6 @@ import (
 	"github.com/coder/websocket"
 )
 
-// A WCA Live subscription NEM graphql-ws: Phoenix csatornákon fut
-// (absinthe_phoenix 2.0.3). A drótformátum a Phoenix v2 szerializáló tömbje:
-//
-//	[join_ref, ref, topic, event, payload]
-//
-// A menet: phx_join a "__absinthe__:control" topicra, majd "doc" push a
-// lekérdezéssel, amire a szerver {"subscriptionId": "__absinthe__:doc:..."}
-// választ ad. Az adat ezután azon a topicon, "subscription:data" eseményként
-// érkezik (absinthe_phoenix Endpoint.publish_subscription).
 const (
 	absintheControlTopic  = "__absinthe__:control"
 	phoenixTopic          = "phoenix"
@@ -33,26 +24,19 @@ const (
 	eventHeartbeat        = "heartbeat"
 	eventSubscriptionData = "subscription:data"
 
-	// A Phoenix websocket transport alapértelmezett timeoutja 60s, ezért
-	// ennél sűrűbben kell életjelet küldeni.
 	heartbeatInterval = 25 * time.Second
 
 	reconnectMinDelay = 2 * time.Second
 	reconnectMaxDelay = 60 * time.Second
 
-	// Ennél hosszabb kapcsolatot egészségesnek tekintünk, és a következő
-	// szakadás után újra a legrövidebb várakozással próbálkozunk.
 	healthySessionDuration = time.Minute
 
-	// Amikor nincs mit figyelni, ilyen sűrűn nézzük meg, hogy jött-e feliratkozás.
 	idleCheckInterval = 30 * time.Second
 )
 
-// SubscriptionEvent egy megérkezett subscription payload. A Key az a kulcs,
-// amivel a hívó feliratkozott — így nem kell az Absinthe topicokkal bajlódnia.
 type SubscriptionEvent struct {
 	Key  string
-	Data json.RawMessage // a GraphQL "data" objektum
+	Data json.RawMessage
 }
 
 type subscriptionSpec struct {
@@ -60,28 +44,20 @@ type subscriptionSpec struct {
 	variables map[string]any
 }
 
-// SocketClient EGYETLEN WebSocket kapcsolatot tart fenn a WCA Live felé, és
-// azon multiplexeli az összes feliratkozást (a Phoenix csatornák eleve erre
-// valók). Automatikusan újracsatlakozik, és minden kapcsolódás után magától
-// újraküldi a nyilvántartott feliratkozásokat.
 type SocketClient struct {
 	url    string
 	events chan SubscriptionEvent
 
-	// onConnect minden (újra)csatlakozás UTÁN fut le, a feliratkozások
-	// újraküldését követően — itt kell a hívónak teljes állapotot lekérdeznie,
-	// hogy a szünet alatt kimaradt eseményeket behozza.
 	onConnect func()
 
 	mu      sync.Mutex
-	specs   map[string]subscriptionSpec // key -> feliratkozás
-	pending chan struct{}               // jelzés: változott a specs
+	specs   map[string]subscriptionSpec
+	pending chan struct{}
 
-	// A következő mezők csak az aktív session goroutine-ból íródnak.
 	conn     *websocket.Conn
 	writeMu  sync.Mutex
 	ref      int
-	topicKey map[string]string // absinthe topic -> key
+	topicKey map[string]string
 	sentKeys map[string]bool
 }
 
@@ -94,7 +70,6 @@ func NewSocketClient(baseURL string) *SocketClient {
 	}
 }
 
-// socketURL a HTTP alap-URL-ből a Phoenix websocket végpontot képzi.
 func socketURL(baseURL string) string {
 	if baseURL == "" {
 		baseURL = DefaultWCALiveURL
@@ -109,9 +84,6 @@ func (s *SocketClient) Events() <-chan SubscriptionEvent { return s.events }
 
 func (s *SocketClient) SetOnConnect(fn func()) { s.onConnect = fn }
 
-// Subscribe nyilvántartásba vesz egy feliratkozást. Bármikor hívható: ha épp
-// van élő kapcsolat, azonnal kimegy, ha nincs, a következő csatlakozáskor.
-// Ugyanazzal a kulccsal kétszer hívva nem keletkezik két feliratkozás.
 func (s *SocketClient) Subscribe(key, query string, variables map[string]any) {
 	s.mu.Lock()
 	if _, exists := s.specs[key]; exists {
@@ -124,9 +96,6 @@ func (s *SocketClient) Subscribe(key, query string, variables map[string]any) {
 	s.notify()
 }
 
-// Unsubscribe kivesz egy feliratkozást a nyilvántartásból. A meglévő
-// kapcsolaton nem mondjuk le külön: a kör lezárása után a WCA Live úgysem küld
-// többet, a következő újracsatlakozáskor pedig már nem megy ki újra.
 func (s *SocketClient) Unsubscribe(key string) {
 	s.mu.Lock()
 	delete(s.specs, key)
@@ -147,18 +116,14 @@ func (s *SocketClient) Subscriptions() []string {
 func (s *SocketClient) notify() {
 	select {
 	case s.pending <- struct{}{}:
-	default: // már van függő jelzés, elég egy
+	default:
 	}
 }
 
-// Run a kapcsolatot tartó ciklus: blokkol, amíg a context él. Kapcsolatvesztés
-// után exponenciálisan növekvő várakozással próbálkozik újra.
 func (s *SocketClient) Run(ctx context.Context) {
 	delay := reconnectMinDelay
 
 	for ctx.Err() == nil {
-		// Ha nincs figyelt kör, nem tartunk nyitva kapcsolatot a WCA Live felé
-		// — a szolgáltatást önkéntesek üzemeltetik, ne terheljük fölöslegesen.
 		if len(s.Subscriptions()) == 0 {
 			select {
 			case <-ctx.Done():
@@ -176,8 +141,6 @@ func (s *SocketClient) Run(ctx context.Context) {
 			return
 		}
 
-		// Egy hosszan élt kapcsolat után a szakadás valószínűleg egyszeri —
-		// ilyenkor ne örököljük a korábbi hosszú várakozást.
 		if time.Since(startedAt) >= healthySessionDuration {
 			delay = reconnectMinDelay
 		}
@@ -201,24 +164,18 @@ func (s *SocketClient) Run(ctx context.Context) {
 	}
 }
 
-// session egy teljes kapcsolat élettartama: csatlakozás, csatorna-join,
-// feliratkozások kiküldése, majd olvasás a kapcsolat végéig.
 func (s *SocketClient) session(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	dialCtx, dialCancel := context.WithTimeout(ctx, 15*time.Second)
 	conn, _, err := websocket.Dial(dialCtx, s.url, &websocket.DialOptions{
-		// Origin fejlécet szándékosan nem küldünk: a Phoenix check_origin
-		// az Origin nélküli kéréseket átengedi, a WCA Live domainjét
-		// hamisítani viszont nem akarjuk.
 		HTTPHeader: http.Header{},
 	})
 	dialCancel()
 	if err != nil {
 		return fmt.Errorf("dial: %w", err)
 	}
-	// A kör-pillanatképek nagyok lehetnek (több száz eredmény).
 	conn.SetReadLimit(8 << 20)
 	defer conn.CloseNow()
 
@@ -291,7 +248,6 @@ func (s *SocketClient) session(ctx context.Context) error {
 					continue
 				}
 				if subscriptionID == "" && !joined {
-					// Ez a phx_join nyugtája: innentől mehetnek a doc-ok.
 					joined = true
 					log.Printf("[special] joined %s", absintheControlTopic)
 					s.syncSubscriptions(ctx)
@@ -307,8 +263,6 @@ func (s *SocketClient) session(ctx context.Context) error {
 	}
 }
 
-// syncSubscriptions kiküldi azokat a feliratkozásokat, amik ezen a kapcsolaton
-// még nem mentek ki.
 func (s *SocketClient) syncSubscriptions(ctx context.Context) {
 	s.mu.Lock()
 	specs := make(map[string]subscriptionSpec, len(s.specs))
@@ -332,13 +286,10 @@ func (s *SocketClient) syncSubscriptions(ctx context.Context) {
 		}
 
 		s.sentKeys[key] = true
-		// A választ ref alapján párosítjuk a kulcshoz.
 		s.topicKey["ref:"+ref] = key
 	}
 }
 
-// handleReply feldolgoz egy phx_reply-t. A visszaadott string a subscriptionId,
-// ha a válasz feliratkozásé volt.
 func (s *SocketClient) handleReply(msg phoenixMessage) (string, bool) {
 	var reply struct {
 		Status   string `json:"status"`
@@ -374,7 +325,6 @@ func (s *SocketClient) handleReply(msg phoenixMessage) (string, bool) {
 func (s *SocketClient) handleData(ctx context.Context, msg phoenixMessage) {
 	key, ok := s.topicKey[msg.Topic]
 	if !ok {
-		// Ismeretlen topic: nem a mi feliratkozásunk (vagy már leiratkoztunk).
 		return
 	}
 
@@ -406,7 +356,6 @@ func (s *SocketClient) sendWithRef(ctx context.Context, topic, event string, pay
 	s.ref++
 	ref := strconv.Itoa(s.ref)
 
-	// join_ref-nek végig "1"-et használunk: egyetlen csatornát tartunk nyitva.
 	frame, err := json.Marshal([]any{"1", ref, topic, event, payload})
 	if err != nil {
 		return "", err
@@ -422,7 +371,6 @@ func (s *SocketClient) sendWithRef(ctx context.Context, topic, event string, pay
 	return ref, nil
 }
 
-// phoenixMessage a Phoenix v2 tömbös üzenetformátuma.
 type phoenixMessage struct {
 	JoinRef *string
 	Ref     *string
