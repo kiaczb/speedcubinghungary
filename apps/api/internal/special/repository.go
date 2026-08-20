@@ -20,12 +20,9 @@ type Repository interface {
 	// idők idegen kulcsa mutathasson rá.
 	EnsureCompetition(c Competition, userID int) error
 
-	// ListRecordedTimes egy verseny összes rögzített DNF-idejét adja.
 	ListRecordedTimes(competitionWCAID string) ([]RecordedTime, error)
-	// SetElapsed rögzíti egy kísérlet tényleges idejét. A kulcs a WCA Live
-	// result id-ja és a kísérlet sorszáma, ezért ismételve is idempotens.
+	// A kulcs a WCA Live result id-ja és a kísérlet sorszáma, ezért ismételve is idempotens.
 	SetElapsed(competitionWCAID string, liveResultID, attemptNumber, elapsedCs int, note string, userID int, now time.Time) error
-	// DeleteElapsed törli a rögzített időt (az admin visszavonja a bejegyzést).
 	DeleteElapsed(liveResultID, attemptNumber int) error
 }
 
@@ -56,7 +53,6 @@ func (r *PostgresRepository) EnsureCompetition(c Competition, userID int) error 
 	return err
 }
 
-// ListRecordedTimes egy verseny összes rögzített DNF-idejét adja vissza.
 func (r *PostgresRepository) ListRecordedTimes(competitionWCAID string) ([]RecordedTime, error) {
 	rows, err := r.db.Query(`
 		SELECT live_result_id, attempt_number, elapsed_cs,
@@ -99,8 +95,6 @@ func (r *PostgresRepository) ListRecordedTimes(competitionWCAID string) ([]Recor
 	return recorded, rows.Err()
 }
 
-// SetElapsed rögzíti egy DNF kísérlet TÉNYLEGES idejét.
-//
 // A (live_result_id, attempt_number) UNIQUE index az idempotencia kulcsa: a
 // WCA Live result id-ja globálisan egyedi (verseny + kör + versenyző), a
 // kísérlet sorszámával együtt pontosan egy kísérletet azonosít.
@@ -128,8 +122,7 @@ func (r *PostgresRepository) SetElapsed(
 	return err
 }
 
-// DeleteElapsed törli a rögzített időt. Nem hiba, ha nem volt ilyen sor — a
-// cél állapot (nincs rögzített idő) így is teljesül.
+// Nem hiba, ha nem volt ilyen sor — a cél állapot (nincs rögzített idő) így is teljesül.
 func (r *PostgresRepository) DeleteElapsed(liveResultID, attemptNumber int) error {
 	_, err := r.db.Exec(`
 		DELETE FROM special_dnf_attempts

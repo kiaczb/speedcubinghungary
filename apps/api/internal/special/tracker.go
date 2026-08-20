@@ -79,7 +79,6 @@ type Tracker struct {
 	sessionDone chan struct{}
 }
 
-// trackedCompetition egy nézett verseny állapota.
 type trackedCompetition struct {
 	competition Competition
 
@@ -293,7 +292,6 @@ func (t *Tracker) evictLocked() {
 	}
 }
 
-// cachedResults a memóriában lévő pillanatképet adja, ha az friss.
 func (t *Tracker) cachedResults(entry *trackedCompetition) ([]ResultSnapshot, bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -496,7 +494,6 @@ func (t *Tracker) refresh(ctx context.Context) {
 	}
 }
 
-// handleEvent egy roundUpdated payloadot dolgoz fel.
 func (t *Tracker) handleEvent(event SubscriptionEvent) {
 	roundID, err := roundIDFromKey(event.Key)
 	if err != nil {

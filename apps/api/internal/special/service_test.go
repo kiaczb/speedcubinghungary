@@ -14,7 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// mockRepo a Repository testify mockja.
 type mockRepo struct {
 	mock.Mock
 }
@@ -180,7 +179,6 @@ func fakeWCALive(t *testing.T, rounds ...fakeRound) *httptest.Server {
 	return server
 }
 
-// newTestService összeköti a mockolt tárolót a hamis WCA Live-val.
 func newTestService(repo Repository, liveURL string, broadcaster *Broadcaster) *Service {
 	client := NewLiveClient(liveURL)
 	tracker := NewTracker(client, NewSocketClient(liveURL), broadcaster)

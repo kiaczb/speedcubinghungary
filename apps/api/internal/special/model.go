@@ -89,8 +89,6 @@ type ResultSnapshot struct {
 	CumulativeRoundIDs []string
 }
 
-// --- Versenyzői nézet ---
-
 // CompetitorAttempt egy kísérlet a versenyzői nézetben.
 type CompetitorAttempt struct {
 	AttemptNumber int `json:"attemptNumber"`

@@ -44,7 +44,6 @@ func BuildCompetitors(results []ResultSnapshot, recorded []RecordedTime) []Compe
 
 	competitors := make([]Competitor, 0, len(byRegistrant))
 	for _, competitor := range byRegistrant {
-		// A körök stabil sorrendben: esemény, majd kör száma.
 		sort.Slice(competitor.Rounds, func(i, j int) bool {
 			if competitor.Rounds[i].EventID != competitor.Rounds[j].EventID {
 				return competitor.Rounds[i].EventID < competitor.Rounds[j].EventID
