@@ -4,50 +4,51 @@ import ToolCard from "../ToolCard";
 
 const UnofficialSection = () => {
   return (
-    <div>
-      <h2 className="text-3xl">Nem hivatalos eredmények</h2>
-      <div className="flex flex-wrap justify-center items-start gap-10">
+    <section>
+      <h2 className="text-xl font-bold text-foreground">
+        Nem hivatalos eredmények
+      </h2>
+      <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+        Alternatív pontszámítások és összesítők a WCA hivatalos helyezésein túl.
+      </p>
+
+      <div className="mt-6 grid grid-cols-1 items-stretch gap-5 md:grid-cols-2">
         <ToolCard
           title="Budapest Special"
           links={[
             {
-              href: "#events",
-              label: "Visit",
-              icon: <FaGlobe className="w-5 h-5 shrink-0" />,
+              href: "/tools/special",
+              label: "Megnyitás",
+              icon: <FaGlobe className="h-4 w-4" />,
             },
           ]}
         >
-          <div>
-            <p>
-              Ezen az oldalon érhetőek el a Special végződésű versenyek
-              eredményei. A versenyeken az összes versenyszám idejének összege
-              található emberenként
-            </p>
-          </div>
+          <p>
+            Itt érhetők el a Special végződésű versenyek eredményei. A
+            versenyeken az összes versenyszám idejének összege számít
+            versenyzőnként. Az élő verseny eredményei a WCA Live-ról érkeznek.
+          </p>
         </ToolCard>
 
         <ToolCard
           title="Hungarian All-Rounder"
           links={[
             {
-              href: "https://allrounderpoints.vercel.app/",
-              label: "Visit",
-              icon: <FaGlobe className="w-5 h-5 shrink-0" />,
+              href: "/tools/allrounder",
+              label: "Megnyitás",
+              icon: <FaGlobe className="h-4 w-4" />,
             },
           ]}
         >
-          <div>
-            <p>
-              A Hungarian All-Rounder egy állomásokból álló versenysorozat,
-              melyen (a WCA-helyezéseken felül) a versenyzők összesített
-              eredményeit is díjazzuk. Az egyes állomások külön-külön
-              WCA-versenyekként funkcionálnak, ezért mindig külön kell rájuk
-              regisztrálni.
-            </p>
-          </div>
+          <p>
+            A Hungarian All-Rounder egy állomásokból álló versenysorozat, melyen
+            a WCA-helyezéseken felül a versenyzők összesített eredményeit is
+            díjazzuk. Az egyes állomások külön-külön WCA-versenyekként
+            funkcionálnak, ezért mindig külön kell rájuk regisztrálni.
+          </p>
         </ToolCard>
       </div>
-    </div>
+    </section>
   );
 };
 

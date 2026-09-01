@@ -7,14 +7,21 @@ import (
 
 // Config holds all environment configuration
 type Config struct {
-	Deployment       string
-	FrontendURL      string
-	DatabaseURL      string
-	JWTSecret        string
-	WCAClientID      string
-	WCAClientSecret  string
-	WCARedirectURI   string
-	LogLevel         string
+	Deployment      string
+	FrontendURL     string
+	DatabaseURL     string
+	JWTSecret       string
+	WCAClientID     string
+	WCAClientSecret string
+	WCARedirectURI  string
+	LogLevel        string
+	// UploadDir a feltöltött képek könyvtára a konténerben. Ide egy named volume
+	// van csatolva (lásd infra/docker-compose.yml), hogy a fájlok túléljék a
+	// konténer újraépítését. Nem kötelező env — az alapértelmezés a szokásos út.
+	UploadDir string
+	// WCALiveURL a WCA Live példány alap-URL-je (GraphQL + Phoenix socket).
+	// Nem kötelező env; teszteléshez lehet saját példányra állítani.
+	WCALiveURL string
 }
 
 // Load loads and validates environment variables
@@ -28,6 +35,8 @@ func Load() (*Config, error) {
 		WCAClientSecret: getEnv("WCA_CLIENT_SECRET", ""),
 		WCARedirectURI:  getEnv("WCA_REDIRECT_URI", ""),
 		LogLevel:        getEnv("LOG_LEVEL", "info"),
+		UploadDir:       getEnv("UPLOAD_DIR", "/data/uploads"),
+		WCALiveURL:      getEnv("WCA_LIVE_URL", "https://live.worldcubeassociation.org"),
 	}
 
 	// Validate required variables
@@ -41,12 +50,12 @@ func Load() (*Config, error) {
 // Validate checks that all required variables are set
 func (c *Config) Validate() error {
 	required := map[string]string{
-		"DATABASE_URL":     c.DatabaseURL,
-		"JWT_SECRET":       c.JWTSecret,
-		"WCA_CLIENT_ID":    c.WCAClientID,
+		"DATABASE_URL":      c.DatabaseURL,
+		"JWT_SECRET":        c.JWTSecret,
+		"WCA_CLIENT_ID":     c.WCAClientID,
 		"WCA_CLIENT_SECRET": c.WCAClientSecret,
-		"WCA_REDIRECT_URI": c.WCARedirectURI,
-		"FRONTEND_URL":     c.FrontendURL,
+		"WCA_REDIRECT_URI":  c.WCARedirectURI,
+		"FRONTEND_URL":      c.FrontendURL,
 	}
 
 	var missing []string

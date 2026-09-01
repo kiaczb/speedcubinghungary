@@ -2,16 +2,15 @@ import React from "react";
 
 type BadgeProps = {
   label: string;
+  /** Tailwind osztályok a tónushoz (háttér + szöveg + ring), lásd `badgeMap`. */
   color: string;
   className?: string;
 };
 
-const Badge: React.FC<BadgeProps> = ({ label, color, className }) => {
+const Badge: React.FC<BadgeProps> = ({ label, color, className = "" }) => {
   return (
     <span
-      className={`inline-block px-2 py-1 text-white text-xs font-bold rounded ${color} ${
-        className || ""
-      }`}
+      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide ring-1 ring-inset ${color} ${className}`}
     >
       {label}
     </span>

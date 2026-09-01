@@ -1,63 +1,65 @@
 import Link from "next/link";
 import React from "react";
-import { FaEnvelope, FaFacebook, FaGlobe } from "react-icons/fa";
+import { CONTACT_ITEMS, NAV_LINKS, SITE_DESCRIPTION } from "../lib/site";
 
 const Footer = () => {
   return (
-    <footer className="bg-gray-800 text-white py-6">
-      <div className="max-w-6xl mx-auto px-4 grid grid-cols-1 md:grid-cols-3 gap-8 text-center md:text-left">
-        <div>
-          <h1 className="font-bold text-2xl mb-2">Speedcubing Hungary</h1>
-          <p className="text-sm md:text-base">
-            A Speedcubing Hungary Egyesület célja a kockázás népszerűsítése és
-            WCA regionális szervezetként hivatalos WCA versenyek szervezése.
+    <footer className="border-t border-line bg-surface-inverse text-white">
+      <div className="mx-auto w-full max-w-6xl px-5 py-10 sm:px-8 lg:px-12">
+        <div className="grid grid-cols-1 gap-8 md:grid-cols-[1.5fr_1fr_1fr]">
+          <div>
+            <h2 className="text-lg font-bold tracking-tight">
+              Speedcubing Hungary
+            </h2>
+            <p className="mt-3 max-w-sm text-sm leading-relaxed text-white/60">
+              {SITE_DESCRIPTION}
+            </p>
+          </div>
+
+          <div>
+            <h2 className="font-mono text-xs font-medium uppercase tracking-[0.18em] text-white/40">
+              Oldalak
+            </h2>
+            <ul className="mt-4 space-y-2.5">
+              {NAV_LINKS.map((link) => (
+                <li key={link.href}>
+                  <Link
+                    href={link.href}
+                    className="text-sm text-white/70 transition-colors duration-200 ease-smooth hover:text-white"
+                  >
+                    {link.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div>
+            <h2 className="font-mono text-xs font-medium uppercase tracking-[0.18em] text-white/40">
+              Elérhetőség
+            </h2>
+            <ul className="mt-4 space-y-2.5">
+              {CONTACT_ITEMS.map(({ icon: Icon, label, href }) => (
+                <li key={label}>
+                  <a
+                    href={href}
+                    className="group inline-flex items-center gap-2.5 text-sm text-white/70 transition-colors duration-200 ease-smooth hover:text-white"
+                  >
+                    <Icon className="h-4 w-4 shrink-0 text-white/40 transition-colors duration-200 ease-smooth group-hover:text-white/70" />
+                    <span>{label}</span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+
+        <div className="mt-8 border-t border-white/10 pt-5">
+          <p className="font-mono text-xs text-white/40">
+            © {new Date().getFullYear()} Speedcubing Hungary. Minden jog
+            fenntartva.
           </p>
         </div>
-
-        <div>
-          <h1 className="font-bold text-xl mb-2">Quick Links</h1>
-          <ul className="space-y-1">
-            <li>
-              <Link href="/tools">Tools</Link>
-            </li>
-            <li>
-              <Link href="/about">About</Link>
-            </li>
-            <li>
-              <Link href="/contact">Contact</Link>
-            </li>
-            <li>
-              <Link href="/blog">Blog</Link>
-            </li>
-          </ul>
-        </div>
-
-        <div>
-          <h1 className="font-bold text-xl mb-2">Contact info</h1>
-          <ul className="space-y-2">
-            <li className="flex items-center justify-center md:justify-start gap-3 whitespace-nowrap">
-              <FaEnvelope className="w-5 h-5 shrink-0" />
-              <span>info@speedcubinghungary.hu</span>
-            </li>
-
-            <li className="flex items-center justify-center md:justify-start gap-3 whitespace-nowrap">
-              <FaGlobe className="w-5 h-5 shrink-0" />
-              <span>www.speedcubinghungary.hu</span>
-            </li>
-
-            <li className="flex items-center justify-center md:justify-start gap-3 whitespace-nowrap">
-              <FaFacebook className="w-5 h-5 shrink-0" />
-              <span>SpeedcubingHungary</span>
-            </li>
-          </ul>
-        </div>
-      </div>
-
-      <div className="mt-6 text-center text-sm">
-        <p>
-          &copy; {new Date().getFullYear()} Speedcubing Hungary. All rights
-          reserved.
-        </p>
       </div>
     </footer>
   );

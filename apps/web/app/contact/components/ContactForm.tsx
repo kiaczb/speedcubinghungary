@@ -1,64 +1,57 @@
 import React from "react";
+import Button from "@/app/components/ui/Button";
+import Field, { controlClass } from "@/app/components/ui/Field";
 
+// TODO: az űrlapnak nincs backendje — a küldés nincs bekötve.
 const ContactForm = () => {
   return (
-    <div>
-      <form className="flex flex-col gap-4">
-        <div>
-          <label className="block text-gray-700 font-medium mb-2">
-            Your Name
-          </label>
-          <input
-            type="text"
-            id="name"
-            className="w-full p-4 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-300"
-            placeholder="Enter your name"
-          />
-        </div>
+    <form className="flex flex-col gap-5">
+      <Field label="Neved" htmlFor="contact-name">
+        <input
+          type="text"
+          id="contact-name"
+          name="name"
+          autoComplete="name"
+          className={controlClass}
+          placeholder="Kiss Anna"
+        />
+      </Field>
 
-        <div>
-          <label className="block text-gray-700 font-medium mb-2">
-            Your Email
-          </label>
-          <input
-            type="email"
-            id="email"
-            className="w-full p-4 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-300"
-            placeholder="Enter your email"
-          />
-        </div>
+      <Field label="E-mail-címed" htmlFor="contact-email">
+        <input
+          type="email"
+          id="contact-email"
+          name="email"
+          autoComplete="email"
+          className={controlClass}
+          placeholder="anna@example.com"
+        />
+      </Field>
 
-        <div>
-          <label className="block text-gray-700 font-medium mb-2">
-            Subject
-          </label>
-          <input
-            type="text"
-            id="subject"
-            className="w-full p-4 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-300"
-            placeholder="What is this regarding?"
-          />
-        </div>
+      <Field label="Tárgy" htmlFor="contact-subject">
+        <input
+          type="text"
+          id="contact-subject"
+          name="subject"
+          className={controlClass}
+          placeholder="Miben segíthetünk?"
+        />
+      </Field>
 
-        <div>
-          <label className="block text-gray-700 font-medium mb-2">
-            Your Message
-          </label>
-          <textarea
-            id="message"
-            className="w-full p-4 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-300"
-            placeholder="Write your message here..."
-          ></textarea>
-        </div>
+      <Field label="Üzeneted" htmlFor="contact-message">
+        <textarea
+          id="contact-message"
+          name="message"
+          rows={6}
+          className={`${controlClass} resize-y`}
+          placeholder="Írd le, mivel kereshetünk meg…"
+        />
+      </Field>
 
-        <button
-          type="submit"
-          className="w-full bg-black text-white font-semibold py-4 px-6 rounded-xl text-lg transition duration-300 shadow-lg hover:shadow-xl"
-        >
-          Send Message
-        </button>
-      </form>
-    </div>
+      <Button type="submit" size="lg" fullWidth>
+        Üzenet küldése
+      </Button>
+    </form>
   );
 };
 

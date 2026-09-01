@@ -1,4 +1,3 @@
-// components/Sections/Main/QuickToolsSection.jsx
 import Link from "next/link";
 import {
   FaListAlt,
@@ -10,84 +9,90 @@ import {
   FaChevronRight,
 } from "react-icons/fa";
 import Section from "./Section";
+import Card from "../../Cards/Card";
+
+const TOOLS = [
+  {
+    title: "Versenynaptár",
+    description: "Tervezett és közelgő versenyek egy helyen",
+    meta: "Naptár",
+    icon: FaCalendarAlt,
+    href: "/calendar",
+  },
+  {
+    title: "Eredmények",
+    description: "Korábbi versenyek hivatalos eredményei",
+    meta: "Archívum",
+    icon: FaTrophy,
+    href: "/results",
+  },
+  {
+    title: "Ranglista",
+    description: "Országos és regionális rangsorok",
+    meta: "Statisztika",
+    icon: FaChartLine,
+    href: "/rankings",
+  },
+  {
+    title: "Útmutató",
+    description: "Lépésről lépésre az első versenyedig",
+    meta: "Kezdőknek",
+    icon: FaQuestionCircle,
+    href: "/guide",
+  },
+  {
+    title: "Csapatunk",
+    description: "Ismerd meg a szervezőcsapatot",
+    meta: "Egyesület",
+    icon: FaUserFriends,
+    href: "/team",
+  },
+  {
+    title: "Jelentkezés",
+    description: "Nevezés a következő versenyre",
+    meta: "Regisztráció",
+    icon: FaListAlt,
+    href: "/registration",
+  },
+];
 
 const QuickToolsSection = () => {
-  const tools = [
-    {
-      title: "Versenynaptár",
-      description: "Tervezett és közelgő versenyek egy helyen",
-      meta: "Naptár",
-      icon: <FaCalendarAlt className="text-lg" />,
-      href: "/calendar",
-    },
-    {
-      title: "Eredmények",
-      description: "Korábbi versenyek hivatalos eredményei",
-      meta: "Archívum",
-      icon: <FaTrophy className="text-lg" />,
-      href: "/results",
-    },
-    {
-      title: "Ranglista",
-      description: "Országos és regionális rangsorok",
-      meta: "Statisztika",
-      icon: <FaChartLine className="text-lg" />,
-      href: "/rankings",
-    },
-    {
-      title: "Útmutató",
-      description: "Lépésről lépésre az első versenyedig",
-      meta: "Kezdőknek",
-      icon: <FaQuestionCircle className="text-lg" />,
-      href: "/guide",
-    },
-    {
-      title: "Csapatunk",
-      description: "Ismerd meg a szervezőcsapatot",
-      meta: "Egyesület",
-      icon: <FaUserFriends className="text-lg" />,
-      href: "/team",
-    },
-    {
-      title: "Jelentkezés",
-      description: "Nevezés a következő versenyre",
-      meta: "Regisztráció",
-      icon: <FaListAlt className="text-lg" />,
-      href: "/registration",
-    },
-  ];
-
   return (
     <Section
+      eyebrow="Gyors elérés"
       title="Eszközök"
-      // subtitle="Gyors hozzáférés a legfontosabb funkciókhoz egy helyen."
+      subtitle="A leggyakrabban használt oldalak egy helyen."
       left={true}
     >
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {tools.map((tool, index) => (
-          <Link key={index} href={tool.href} className="block h-full">
-            <div className="flex h-full flex-col rounded-2xl border border-gray-200 bg-white p-5 transition-shadow duration-200 hover:shadow-md">
+        {TOOLS.map(({ icon: Icon, ...tool }) => (
+          <Link
+            key={tool.href}
+            href={tool.href}
+            className="group rounded-card focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground"
+          >
+            <Card interactive padding="lg" className="h-full">
               <div className="flex items-center justify-between">
-                <div className="flex h-11 w-11 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-gray-600">
-                  {tool.icon}
+                <div className="flex h-11 w-11 items-center justify-center rounded-control border border-line bg-surface-muted text-muted-foreground transition-colors duration-200 ease-smooth group-hover:border-foreground group-hover:bg-foreground group-hover:text-background">
+                  <Icon className="h-4 w-4" />
                 </div>
-                <span className="text-xs font-medium uppercase tracking-wide text-gray-400">
+                <span className="font-mono text-xs font-medium uppercase tracking-[0.14em] text-subtle-foreground">
                   {tool.meta}
                 </span>
               </div>
 
-              <div className="mt-4">
-                <h3 className="font-semibold text-gray-900">{tool.title}</h3>
-                <p className="mt-1 text-sm leading-relaxed text-gray-500">
-                  {tool.description}
-                </p>
-              </div>
+              <h3 className="mt-5 font-semibold text-foreground">
+                {tool.title}
+              </h3>
+              <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
+                {tool.description}
+              </p>
 
-              <div className="mt-4 flex items-center gap-1.5 text-sm font-medium text-gray-700">
-                <span>Megnyitás</span>
-                <FaChevronRight className="h-3 w-3 text-gray-400" />
-              </div>
-            </div>
+              <span className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-foreground">
+                Megnyitás
+                <FaChevronRight className="h-2.5 w-2.5 text-subtle-foreground transition-transform duration-200 ease-smooth group-hover:translate-x-0.5" />
+              </span>
+            </Card>
           </Link>
         ))}
       </div>

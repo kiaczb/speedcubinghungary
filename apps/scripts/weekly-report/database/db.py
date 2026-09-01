@@ -31,7 +31,10 @@ DB_CONFIG = {
 #                stand-alone `persons` table.
 #  - `records` : world/continental/national records (region, event_id,
 #                single, average).
-REQUIRED_TABLES = ("users", "records")
+#  - `posts`   : the site's news posts. The weekly report is published here as
+#                a regular post (tag 'report'), so it reuses the existing Post
+#                listing/detail UI instead of a parallel content system.
+REQUIRED_TABLES = ("users", "records", "posts")
 
 
 def _connect(row_factory=None):
@@ -144,6 +147,50 @@ def upsert_record(region, event_id, single, average):
             conn.commit()
     except Exception:
         logger.exception("Record upsert failed (%s - %s)", region, event_id)
+
+
+def insert_weekly_report_post(post_id, title, content, report_week, replace=False):
+    """Publishes the weekly report into the shared `posts` table.
+
+    Idempotent: `posts.report_week` is UNIQUE, so a second run for the same week
+    conflicts instead of creating a duplicate.
+
+    replace=False (default, used by cron): DO NOTHING — the week's first report
+    wins and re-runs leave it untouched.
+    replace=True (manual/test runs, `main.py --force`): DO UPDATE — the week's
+    report is overwritten with the fresh content. Still exactly one post per week.
+
+    Returns True when a row was inserted or updated.
+
+    Unlike the upserts above this deliberately does NOT swallow exceptions — a
+    failed publish must abort the job loudly instead of silently skipping the
+    week's report.
+    """
+    # Két teljes, statikus lekérdezés — nem építünk SQL-t stringből.
+    replace_query = """
+        INSERT INTO posts (id, tag, title, content, report_week)
+        VALUES (%s, 'report', %s, %s, %s)
+        ON CONFLICT (report_week) DO UPDATE SET
+            title = EXCLUDED.title,
+            content = EXCLUDED.content,
+            updated_at = NOW()
+    """
+    keep_query = """
+        INSERT INTO posts (id, tag, title, content, report_week)
+        VALUES (%s, 'report', %s, %s, %s)
+        ON CONFLICT (report_week) DO NOTHING
+    """
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                replace_query if replace else keep_query,
+                (post_id, title, content, report_week),
+            )
+            written = cur.rowcount == 1
+        conn.commit()
+
+    return written
 
 
 def get_all_records():

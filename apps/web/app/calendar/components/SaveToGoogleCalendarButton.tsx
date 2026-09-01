@@ -1,6 +1,7 @@
 import { FaRegCalendarPlus } from "react-icons/fa";
 import { UpcomingCompetition } from "../types";
 import { buildGoogleCalendarUrl } from "../lib/googleCalendar";
+import Button from "@/app/components/ui/Button";
 
 type Props = {
   competition: UpcomingCompetition;
@@ -8,15 +9,15 @@ type Props = {
 
 const SaveToGoogleCalendarButton = ({ competition }: Props) => {
   return (
-    <a
+    <Button
       href={buildGoogleCalendarUrl(competition)}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+      external
+      variant="secondary"
+      size="sm"
+      icon={<FaRegCalendarPlus className="h-3.5 w-3.5 text-subtle-foreground" />}
     >
-      <FaRegCalendarPlus className="h-4 w-4 text-gray-500" />
-      <span>Mentés Google Naptárba</span>
-    </a>
+      Mentés Google Naptárba
+    </Button>
   );
 };
 

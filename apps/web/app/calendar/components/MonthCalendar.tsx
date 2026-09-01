@@ -21,6 +21,12 @@ type Props = {
 
 const MAX_CHIPS = 2;
 
+const AgendaNote = ({ children }: { children: React.ReactNode }) => (
+  <p className="rounded-card border border-dashed border-line-strong bg-surface px-4 py-6 text-center text-sm text-muted-foreground">
+    {children}
+  </p>
+);
+
 const MonthCalendar = ({ competitions }: Props) => {
   const eventMap = useMemo(() => buildEventMap(competitions), [competitions]);
   const today = useMemo(() => new Date(), []);
@@ -45,7 +51,9 @@ const MonthCalendar = ({ competitions }: Props) => {
   };
   const goToToday = () => {
     setViewMonth(new Date(today.getFullYear(), today.getMonth(), 1));
-    setSelectedDate(new Date(today.getFullYear(), today.getMonth(), today.getDate()));
+    setSelectedDate(
+      new Date(today.getFullYear(), today.getMonth(), today.getDate()),
+    );
   };
 
   const monthLabel = viewMonth.toLocaleDateString("hu-HU", {
@@ -57,18 +65,20 @@ const MonthCalendar = ({ competitions }: Props) => {
     ? getCompetitionsForDay(eventMap, selectedDate)
     : [];
 
+  const navButtonClass =
+    "inline-flex h-9 w-9 items-center justify-center rounded-control border border-line text-muted-foreground transition-colors duration-200 ease-smooth hover:border-line-strong hover:bg-surface-muted hover:text-foreground";
+
   return (
     <div className="flex flex-col gap-6">
-      {/* Month header + navigation */}
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold capitalize text-gray-900">
+        <h2 className="text-lg font-semibold capitalize text-foreground">
           {monthLabel}
         </h2>
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={goToToday}
-            className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+            className="rounded-control border border-line px-3 py-1.5 text-sm font-medium text-foreground transition-colors duration-200 ease-smooth hover:border-line-strong hover:bg-surface-muted"
           >
             Ma
           </button>
@@ -76,37 +86,34 @@ const MonthCalendar = ({ competitions }: Props) => {
             type="button"
             onClick={goToPreviousMonth}
             aria-label="Előző hónap"
-            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 text-gray-600 transition-colors hover:bg-gray-50"
+            className={navButtonClass}
           >
-            <FaChevronLeft className="h-3.5 w-3.5" />
+            <FaChevronLeft className="h-3 w-3" />
           </button>
           <button
             type="button"
             onClick={goToNextMonth}
             aria-label="Következő hónap"
-            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 text-gray-600 transition-colors hover:bg-gray-50"
+            className={navButtonClass}
           >
-            <FaChevronRight className="h-3.5 w-3.5" />
+            <FaChevronRight className="h-3 w-3" />
           </button>
         </div>
       </div>
 
-      {/* Calendar grid */}
-      <div className="overflow-hidden rounded-2xl border border-gray-200 bg-gray-200">
-        {/* Weekday header */}
-        <div className="grid grid-cols-7 gap-px bg-gray-200">
+      <div className="overflow-hidden rounded-card border border-line bg-line">
+        <div className="grid grid-cols-7 gap-px bg-line">
           {WEEKDAY_LABELS.map((label) => (
             <div
               key={label}
-              className="bg-gray-50 px-1 py-2 text-center text-xs font-medium uppercase tracking-wide text-gray-400"
+              className="bg-surface-muted px-1 py-2.5 text-center font-mono text-[10px] font-medium uppercase tracking-[0.14em] text-subtle-foreground"
             >
               {label}
             </div>
           ))}
         </div>
 
-        {/* Day cells */}
-        <div className="grid grid-cols-7 gap-px bg-gray-200">
+        <div className="grid grid-cols-7 gap-px bg-line">
           {matrix.flat().map((date) => {
             const dayComps = getCompetitionsForDay(eventMap, date);
             const inMonth = isSameMonth(date, viewMonth);
@@ -121,6 +128,12 @@ const MonthCalendar = ({ competitions }: Props) => {
                 key={toDateKey(date)}
                 role="button"
                 tabIndex={0}
+                aria-pressed={isSelected}
+                aria-label={date.toLocaleDateString("hu-HU", {
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                })}
                 onClick={() => setSelectedDate(new Date(date))}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
@@ -128,33 +141,29 @@ const MonthCalendar = ({ competitions }: Props) => {
                     setSelectedDate(new Date(date));
                   }
                 }}
-                className={`relative min-h-14 cursor-pointer p-1.5 text-left transition-colors sm:min-h-28 ${
-                  inMonth ? "bg-white hover:bg-gray-50" : "bg-gray-50"
-                } ${isSelected ? "ring-2 ring-inset ring-gray-900" : ""}`}
+                className={`relative min-h-14 cursor-pointer p-1.5 text-left transition-colors duration-200 ease-smooth focus-visible:z-10 sm:min-h-28 ${
+                  inMonth ? "bg-surface hover:bg-surface-muted" : "bg-surface-muted/60"
+                } ${isSelected ? "ring-2 ring-inset ring-foreground" : ""}`}
               >
-                {/* Day number + mobile indicator */}
                 <div className="flex items-center justify-between">
                   <span
-                    className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs sm:h-7 sm:w-7 sm:text-sm ${
+                    className={`tabular inline-flex h-6 w-6 items-center justify-center rounded-full font-mono text-xs sm:h-7 sm:w-7 sm:text-sm ${
                       isToday
-                        ? "bg-gray-900 font-semibold text-white"
+                        ? "bg-brand-red font-semibold text-white"
                         : inMonth
-                          ? "text-gray-900"
-                          : "text-gray-300"
+                          ? "text-foreground"
+                          : "text-subtle-foreground/50"
                     }`}
                   >
                     {date.getDate()}
                   </span>
                   {hasComps && (
-                    <span className="sm:hidden">
-                      <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-gray-900 px-1 text-[10px] font-semibold text-white">
-                        {dayComps.length}
-                      </span>
+                    <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-foreground px-1 font-mono text-[10px] font-semibold text-background sm:hidden">
+                      {dayComps.length}
                     </span>
                   )}
                 </div>
 
-                {/* Desktop competition chips */}
                 {hasComps && (
                   <div className="mt-1 hidden flex-col gap-1 sm:flex">
                     {dayComps.slice(0, MAX_CHIPS).map((competition) => (
@@ -165,13 +174,13 @@ const MonthCalendar = ({ competitions }: Props) => {
                         rel="noopener noreferrer"
                         onClick={(e) => e.stopPropagation()}
                         title={competition.name}
-                        className="truncate rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-700 transition-colors hover:bg-gray-200"
+                        className="truncate rounded border-l-2 border-brand-red bg-surface-muted px-1.5 py-0.5 text-xs text-foreground transition-colors duration-200 ease-smooth hover:bg-line"
                       >
                         {competition.name}
                       </a>
                     ))}
                     {dayComps.length > MAX_CHIPS && (
-                      <span className="px-1 text-xs text-gray-400">
+                      <span className="px-1 text-xs text-subtle-foreground">
                         +{dayComps.length - MAX_CHIPS} további
                       </span>
                     )}
@@ -183,11 +192,10 @@ const MonthCalendar = ({ competitions }: Props) => {
         </div>
       </div>
 
-      {/* Selected day agenda */}
       <div>
         {selectedDate ? (
           <>
-            <h3 className="mb-3 text-sm font-semibold capitalize text-gray-900">
+            <h3 className="mb-3 text-sm font-semibold capitalize text-foreground">
               {selectedDate.toLocaleDateString("hu-HU", {
                 year: "numeric",
                 month: "long",
@@ -205,15 +213,13 @@ const MonthCalendar = ({ competitions }: Props) => {
                 ))}
               </div>
             ) : (
-              <p className="rounded-2xl border border-dashed border-gray-300 bg-white px-4 py-6 text-center text-sm text-gray-500">
-                Ezen a napon nincs verseny.
-              </p>
+              <AgendaNote>Ezen a napon nincs verseny.</AgendaNote>
             )}
           </>
         ) : (
-          <p className="rounded-2xl border border-dashed border-gray-300 bg-white px-4 py-6 text-center text-sm text-gray-500">
+          <AgendaNote>
             Válassz egy napot a versenyek megtekintéséhez.
-          </p>
+          </AgendaNote>
         )}
       </div>
     </div>

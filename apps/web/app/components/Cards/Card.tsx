@@ -1,33 +1,48 @@
-import Image from "next/image";
 import React from "react";
 
-type CardProps = {
-  imageUrl?: string;
-  imageClass?: string;
-  children: React.ReactNode;
-  className?: string; // extra osztályok átadása
+type CardVariant = "elevated" | "inverse";
+type CardPadding = "none" | "md" | "lg";
+
+const VARIANTS: Record<CardVariant, string> = {
+  elevated: "bg-surface border border-line shadow-card",
+  inverse: "bg-surface-inverse text-white border border-white/10 shadow-panel",
 };
 
-const Card = ({ children, imageUrl, imageClass, className }: CardProps) => {
-  return (
-    <div
-      className={`rounded-2xl shadow-xl text-center w-full ${className || ""}`}
-    >
-      {imageUrl && (
-        <div className={`flex justify-center mb-2 ${imageClass || ""}`}>
-          <Image
-            src={imageUrl}
-            alt="image"
-            width={150}
-            height={100}
-            className=" rounded-t-lg"
-          />
-        </div>
-      )}
+const PADDINGS: Record<CardPadding, string> = {
+  none: "",
+  md: "p-5",
+  lg: "p-6",
+};
 
-      <div className="flex flex-col justify-between flex-1">{children}</div>
-    </div>
-  );
+type CardProps = {
+  variant?: CardVariant;
+  padding?: CardPadding;
+  /** Hoverre megemeli a kártyát — csak kattintható kártyákon használd. */
+  interactive?: boolean;
+  className?: string;
+  children: React.ReactNode;
+};
+
+const Card = ({
+  variant = "elevated",
+  padding = "none",
+  interactive = false,
+  className = "",
+  children,
+}: CardProps) => {
+  const classes = [
+    "rounded-card w-full",
+    VARIANTS[variant],
+    PADDINGS[padding],
+    interactive
+      ? "transition-[box-shadow,transform,border-color] duration-200 ease-smooth hover:-translate-y-0.5 hover:shadow-card-hover hover:border-line-strong"
+      : "",
+    className,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return <div className={classes}>{children}</div>;
 };
 
 export default Card;

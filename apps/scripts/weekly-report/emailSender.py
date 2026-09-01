@@ -1,61 +1,49 @@
+import logging
 import smtplib
-import os
 from email.mime.text import MIMEText
-from jinja2 import Environment, FileSystemLoader
-from competitionCount import GetImportantCompetitors
-from delegatesCount import GetImportantDelegates
-from utils import ConvertResult, ConvertDate, FlagEmoji
-from config import emailFrom, emailTo, emailSubject, emailCode, SCRIPT_DIR
+from utils import ConvertResult, ConvertDate
+from templating import html_environment
+from config import emailFrom, emailTo, emailSubject, emailCode
 
-templates_path = os.path.join(SCRIPT_DIR, 'templates')
-environment = Environment(loader=FileSystemLoader(templates_path))
+logger = logging.getLogger(__name__)
 
-environment.filters['flag_emoji'] = FlagEmoji
+def WriteEmail(report_data):
+    """Elküldi a riportot e-mailben.
 
-def WriteEmail(competitionsWithHungarians):
-    count_competitors = GetImportantCompetitors()
-    count_delegates = GetImportantDelegates()
-    
-    html_content = RenderHtmlEmail(competitionsWithHungarians, count_competitors, count_delegates)
-    
-    SendEmail(html_content)
+    A riport adatait NEM itt állítjuk elő: a hívó adja át (lásd reportData.py),
+    mert ugyanazt az adathalmazt használja a weboldalra kerülő Post is.
+    """
+    SendEmail(RenderHtmlEmail(report_data))
 
-def RenderHtmlEmail(competitionsWithHungarians, count_competitors, count_delegates):
-    template = environment.get_template('competitions.html')
-    excludedHungarianCompetitions = []
-    for comp in competitionsWithHungarians:
-        if not comp.isHungarian:
-            excludedHungarianCompetitions.append(comp)
-        else:
-            recorders = []
-            for person in comp.CompetitorWithRecords:
-                if person.Records:
-                    recorders.append(person)
-            comp.CompetitorWithRecords = recorders
-            if recorders:
-                excludedHungarianCompetitions.append(comp)
+def RenderHtmlEmail(report_data):
+    template = html_environment.get_template('competitions.html')
 
     return template.render(
-        competitions=excludedHungarianCompetitions,
-        count_competitors=count_competitors,
-        delegate_milestones=count_delegates,
         convert_date=ConvertDate,
-        convert_result=ConvertResult
+        convert_result=ConvertResult,
+        **report_data
     )
 def SendEmail(html_body):
+    """Elküldi a riportot e-mailben.
+
+    Sikertelen küldésnél a hibát logoljuk ÉS továbbdobjuk — a job álljon le
+    hibával (lásd main.py + a hívási sorrend ott), ne jelentsen csendben
+    sikert, ha az email valójában nem ment el. (Korábban a kivétel csak
+    print()-elve lett elnyelve, a job pedig "sikeresként" futott tovább.)
+    """
     msg = MIMEText(html_body, 'html', 'utf-8')
     msg['From'] = f"Bonsz <{emailFrom}>"
     msg['To'] = emailTo
     msg['Subject'] = emailSubject
 
     server = smtplib.SMTP("smtp.gmail.com", 587)
-    server.starttls()
-
     try:
+        server.starttls()
         server.login(emailFrom, emailCode)
         server.sendmail(emailFrom, emailTo, msg.as_string())
-       # server.sendmail(emailFrom, emailToBeni, msg.as_string())
-    except Exception as e:
-        print(f"Email failed to send: {str(e)}")
+        logger.info("Email elküldve (%s -> %s).", emailFrom, emailTo)
+    except Exception:
+        logger.exception("Email küldése sikertelen.")
+        raise
     finally:
         server.quit()

@@ -9,23 +9,20 @@ import {
 import { UpcomingCompetition } from "../types";
 import CompetitionList from "./CompetitionList";
 import MonthCalendar from "./MonthCalendar";
-import StateMessage from "./StateMessage";
+import StateMessage from "@/app/components/ui/StateMessage";
+import { clientApiUrl } from "@/app/lib/api";
 
 type Status = "loading" | "error" | "success";
 type ViewMode = "list" | "calendar";
 
-function getApiBaseUrl(): string {
-  return process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
-}
-
 const CardSkeleton = () => (
-  <div className="flex animate-pulse flex-col gap-5 rounded-2xl border border-gray-200 bg-white p-5 sm:flex-row sm:gap-6">
-    <div className="h-16 w-16 shrink-0 rounded-xl bg-gray-100" />
+  <div className="flex animate-pulse flex-col gap-5 rounded-card border border-line bg-surface p-5 sm:flex-row sm:gap-6">
+    <div className="h-16 w-16 shrink-0 rounded-control bg-surface-muted" />
     <div className="flex flex-1 flex-col gap-3">
-      <div className="h-5 w-2/3 rounded bg-gray-100" />
-      <div className="h-4 w-1/3 rounded bg-gray-100" />
-      <div className="h-4 w-1/2 rounded bg-gray-100" />
-      <div className="mt-1 h-9 w-48 rounded-lg bg-gray-100" />
+      <div className="h-5 w-2/3 rounded bg-surface-muted" />
+      <div className="h-4 w-1/3 rounded bg-surface-muted" />
+      <div className="h-4 w-1/2 rounded bg-surface-muted" />
+      <div className="mt-1 h-9 w-48 rounded-control bg-surface-muted" />
     </div>
   </div>
 );
@@ -38,30 +35,34 @@ const ViewToggle = ({
   onChange: (view: ViewMode) => void;
 }) => {
   const baseClass =
-    "inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors";
-  const activeClass = "bg-gray-900 text-white";
-  const inactiveClass = "text-gray-600 hover:text-gray-900";
+    "inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors duration-200 ease-smooth";
+  const activeClass = "bg-foreground text-background shadow-card";
+  const inactiveClass =
+    "text-muted-foreground hover:bg-surface-muted hover:text-foreground";
+
+  const options: { value: ViewMode; label: string; icon: React.ReactNode }[] = [
+    { value: "list", label: "Lista", icon: <FaListUl className="h-3 w-3" /> },
+    {
+      value: "calendar",
+      label: "Naptár",
+      icon: <FaRegCalendarAlt className="h-3 w-3" />,
+    },
+  ];
 
   return (
-    <div className="inline-flex rounded-lg border border-gray-200 bg-white p-1">
-      <button
-        type="button"
-        onClick={() => onChange("list")}
-        aria-pressed={view === "list"}
-        className={`${baseClass} ${view === "list" ? activeClass : inactiveClass}`}
-      >
-        <FaListUl className="h-3.5 w-3.5" />
-        Lista
-      </button>
-      <button
-        type="button"
-        onClick={() => onChange("calendar")}
-        aria-pressed={view === "calendar"}
-        className={`${baseClass} ${view === "calendar" ? activeClass : inactiveClass}`}
-      >
-        <FaRegCalendarAlt className="h-3.5 w-3.5" />
-        Naptár
-      </button>
+    <div className="inline-flex rounded-control border border-line bg-surface p-1">
+      {options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          onClick={() => onChange(option.value)}
+          aria-pressed={view === option.value}
+          className={`${baseClass} ${view === option.value ? activeClass : inactiveClass}`}
+        >
+          {option.icon}
+          {option.label}
+        </button>
+      ))}
     </div>
   );
 };
@@ -77,7 +78,7 @@ const CalendarView = () => {
     const fetchCompetitions = async () => {
       setStatus("loading");
       try {
-        const res = await fetch(`${getApiBaseUrl()}/competitions/upcoming`, {
+        const res = await fetch(`${clientApiUrl()}/competitions/upcoming`, {
           signal: controller.signal,
         });
         if (!res.ok) throw new Error(`Request failed: ${res.status}`);
@@ -124,7 +125,17 @@ const CalendarView = () => {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex justify-end">
+      <div className="flex items-center justify-between gap-4">
+        <p className="text-sm text-muted-foreground">
+          {status === "success" && (
+            <>
+              <span className="tabular font-mono font-medium text-foreground">
+                {competitions.length}
+              </span>{" "}
+              közelgő verseny
+            </>
+          )}
+        </p>
         <ViewToggle view={view} onChange={setView} />
       </div>
       {content}

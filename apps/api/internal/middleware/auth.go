@@ -20,7 +20,7 @@ type UserClaims struct {
 	UserID int    `json:"user_id"`
 	WCAID  string `json:"wca_id"`
 	Name   string `json:"name"`
-	//AvatarURL string   `json:"avatarURL"`
+	AvatarURL string `json:"avatarURL"`
 	Roles []types.Role `json:"roles"` // RBAC miatt string
 	jwt.RegisteredClaims
 }
@@ -68,16 +68,6 @@ func GetUserFromContext(r *http.Request) *UserClaims {
 		return nil
 	}
 	return user
-}
-
-// AuthMiddleware is deprecated - use AuthMiddlewareWithConfig instead
-// Kept for backward compatibility
-func AuthMiddleware(next http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			http.Error(w, "AuthMiddleware deprecated: use AuthMiddlewareWithConfig", http.StatusInternalServerError)
-		})
-	}(next)
 }
 
 // RBACMiddleware ellenőrzi, hogy a user rendelkezik-e a szükséges szereppel

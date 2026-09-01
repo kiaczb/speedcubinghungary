@@ -1,79 +1,58 @@
 import { Competition } from "@/app/types";
-import Card from "../Cards/Card";
-import { FaCalendarAlt } from "react-icons/fa";
-import RemainingDays from "./RemainingDays";
+import { FaCalendarAlt, FaMapMarkerAlt } from "react-icons/fa";
 
-async function getPosts(): Promise<Competition[]> {
-  const res = await fetch(
-    `https://www.worldcubeassociation.org/api/v0/competitions?sort=start_date&start=${new Date().toISOString().split('T')[0]}&country_iso2=HU`,
-  );
-  if (!res.ok) throw new Error("Hírek lekérése sikertelen");
-  return res.json();
+async function getNextCompetition(): Promise<Competition | null> {
+  const today = new Date().toISOString().split("T")[0];
+
+  try {
+    const res = await fetch(
+      `https://www.worldcubeassociation.org/api/v0/competitions?sort=start_date&start=${today}&country_iso2=HU`,
+    );
+    if (!res.ok) return null;
+
+    const competitions: Competition[] = await res.json();
+    return competitions?.[0] ?? null;
+  } catch (error) {
+    console.error("Közelgő versenyek lekérése sikertelen:", error);
+    return null;
+  }
 }
 
 const UpcomingEvent = async () => {
-  const competitions = await getPosts();
-
-  if (!competitions || competitions.length === 0) {
-    return (
-      <div className="relative w-full max-w-sm sm:max-w-md mb-20 lg:my-0 lg:mr-10">
-        <Card className="bg-gray-800/90 text-white mx-auto lg:mx-0 p-6">
-          <div className="text-center space-y-3">
-            {/* Főcím - szürke, kisebb, nagybetűs */}
-            <div>
-              <h3 className="text-sm md:text-md font-semibold text-gray-400 uppercase tracking-widest mb-1">
-                Következő verseny
-              </h3>
-              <div className="w-16 h-0.5 bg-gray-600 mx-auto"></div>
-            </div>
-
-            {/* Verseny neve - fehér, nagy, félkövér */}
-            <h4 className="text-2xl md:text-3xl lg:text-4xl font-bold text-white leading-tight">
-              Nincs Közelgő verseny
-            </h4>
-
-            {/* Dátum és helyszín - tagolt megjelenítés */}
-          </div>
-        </Card>
-      </div>
-    );
-  }
-  // amíg nem töltődik az adat
-
-  // Most már van adat, hozzáférhetsz például az első versenyhez:
-  const nextCompetition = competitions[0];
+  const next = await getNextCompetition();
 
   return (
-    <div className="relative w-full max-w-sm sm:max-w-md mb-20 lg:my-0 lg:mr-10">
-      <Card className="bg-gray-800/90 text-white mx-auto lg:mx-0 p-6">
-        <div className="text-center space-y-3">
-          {/* Főcím - szürke, kisebb, nagybetűs */}
-          <div>
-            <h3 className="text-sm md:text-md font-semibold text-gray-400 uppercase tracking-widest mb-1">
-              Következő verseny
-            </h3>
-            <div className="w-16 h-0.5 bg-gray-600 mx-auto"></div>
-          </div>
+    <div className="w-full max-w-sm shrink-0 rounded-card border border-line-strong bg-surface p-6 shadow-card sm:max-w-md sm:p-7">
+      <p className="font-mono text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+        Következő verseny
+      </p>
 
-          {/* Verseny neve - fehér, nagy, félkövér */}
-          <h4 className="text-2xl md:text-3xl lg:text-4xl font-bold text-white leading-tight">
-            {nextCompetition["name"]}
-          </h4>
-
-          {/* Dátum és helyszín - tagolt megjelenítés */}
-          <div className="pt-2 space-y-2">
-            <div className="flex items-center justify-center gap-2 text-gray-300">
-              <FaCalendarAlt className="text-gray-400" />
-              <span className="font-medium">{nextCompetition.date_range}</span>
+      <div className="mt-4">
+        {next ? (
+          <>
+            <p className="text-2xl font-bold leading-snug text-foreground sm:text-3xl">
+              {next.name}
+            </p>
+            <div className="mt-3 flex flex-col gap-1.5 text-sm text-muted-foreground">
+              <span className="flex items-center gap-2">
+                <FaCalendarAlt className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                <span className="tabular">{next.date_range}</span>
+              </span>
+              <span className="flex items-center gap-2">
+                <FaMapMarkerAlt className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                <span>
+                  {[next.city, next.country_iso2].filter(Boolean).join(", ")}
+                </span>
+              </span>
             </div>
-            <div className="flex items-center justify-center gap-2 text-gray-300">
-              <span className="text-gray-400">📍</span>
-              <span>{`${nextCompetition.city}, ${nextCompetition.country_iso2}`}</span>
-            </div>
-          </div>
-        </div>
-        <RemainingDays days={Math.ceil((new Date(nextCompetition.start_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24))} />
-      </Card>
+          </>
+        ) : (
+          <p className="text-sm leading-relaxed text-muted-foreground">
+            Nincs meghirdetett verseny. Amint kiírunk egyet, itt jelenik meg
+            elsőként.
+          </p>
+        )}
+      </div>
     </div>
   );
 };

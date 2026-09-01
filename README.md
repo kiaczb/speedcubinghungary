@@ -120,10 +120,11 @@ database starts empty — migrations are schema-only and contain no seed data.
 
 ## Secrets & configuration
 
-All configuration is environment-driven. **No secrets or environment-specific
-values are committed** — only the `.env*.example` templates are tracked; every
-real `.env` file (root `.env.dev`/`.env.test`/`.env.prod` and the Python job's
-`apps/scripts/weekly-report/.env`) is git-ignored.
+All configuration is environment-driven. **One env file per environment, shared by
+the whole stack** — there are no per-app `.env` files. Only the `.env*.example`
+templates are tracked; the real root `.env.dev`/`.env.test`/`.env.prod` are
+git-ignored, and the Python weekly-report job reads the same root file (not a
+separate one).
 
 - **Development:** copy `.env.dev.example` → `.env.dev` locally.
 - **Test / Production:** by design, the real `.env.test` / `.env.prod` live
@@ -140,10 +141,48 @@ templates and map them in `infra/docker-compose.yml`.
 
 ## Weekly report job (`apps/scripts/weekly-report`)
 
-A Python job that reads the shared Postgres and emails a weekly report over SMTP.
-It is **not** part of the always-on stack — it runs on demand. There are two ways
-to run it; both read the same env vars, and neither is scheduled yet (wire up a
-host cron / systemd timer when you want it to run automatically).
+A Python job that reads the shared Postgres and, in a single run:
+
+1. builds the weekly report from the WCA API + the shared database,
+2. emails it over SMTP (`EMAIL_TO`),
+3. **publishes it as a regular Post** on the site (`post_tag = 'report'`).
+
+Step 3 deliberately reuses the existing Post system rather than adding a parallel
+content store, so the report inherits the normal listing (`/posts`), the detail
+page (`/posts/<id>`) and the badge rendering with no extra UI.
+
+The report post stores its data as **JSON** (`reportPayload.py`) and the site
+renders it with a dedicated, styled component (`WeeklyReportView`) — competition
+cards, result chips, milestones. Normal (admin) posts are Markdown; only the
+report uses the structured payload, selected by `tag === "report"`. **Every**
+Hungarian-interest competitor is listed, not just record-setters (those without a
+record show as a name only).
+
+**Reported period:** the job queries a **rolling 7-day window** (run time − 1 week
+… run time), not a calendar week. The post title shows exactly that window.
+
+**Idempotency:** `posts.report_week` (the Monday of the week the job ran in) is
+`UNIQUE` and the insert is `ON CONFLICT DO NOTHING`, so running the job twice in
+the same week never creates a second report post. The job is therefore safe to
+retry and safe to trigger manually.
+
+**Manual / test runs** — two flags, never used by cron:
+
+```bash
+python main.py --skip-email        # no SMTP, useful for repeated local testing
+python main.py --force             # overwrite this week's report with fresh content
+python main.py --force --skip-email
+```
+
+Without `--force` a re-run leaves the week's existing report untouched; with it
+the post is rewritten in place (still exactly one post per week).
+
+The e-mail is sent **after** the post is stored, and a send failure aborts the job
+with a logged error and a non-zero exit code — the post and records are already
+persisted at that point, so they are never lost to an SMTP outage.
+
+It is **not** part of the always-on stack — it runs on demand or from cron. Both
+run paths below read the same env vars.
 
 ### Containerized (recommended on the servers)
 
@@ -167,19 +206,63 @@ config is shared. Inside compose the job reaches the DB over the internal networ
 
 ### Standalone (local, no Docker)
 
+Uses the **same root `.env.dev`** as the rest of the stack — no per-app `.env`.
+`config.py` detects it isn't in a container and connects to the DB on
+`localhost:5432` (which the dev compose exposes), so start the DB first.
+
 ```bash
+docker compose -f infra/docker-compose.yml -f infra/docker-compose.dev.yml \
+  --env-file .env.dev up -d db          # DB reachable on localhost:5432
+
 cd apps/scripts/weekly-report
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env     # git-ignored; fill in real values, never commit it
-python main.py
+python main.py                          # ENV defaults to dev; ENV=test for .env.test
 ```
 
-`config.py` loads a local `.env` (via `python-dotenv`) when present and validates
-required variables fail-fast — mirroring `apps/api/internal/config/config.go`. In
-the container no `.env` is baked in (see `.dockerignore`); the values arrive from
-the environment instead. All sensitive values (`EMAIL_FROM`, `EMAIL_TO`,
-`EMAIL_APP_PASSWORD`, `DATABASE_URL` / `DB_*`) come from the environment, never
-from hardcoded literals. In a test/staging context, point `EMAIL_TO` at a fixed
-test inbox so real recipients are never emailed. If a real credential was ever
-pasted into a tracked file, rotate it.
+### Scheduling (cron)
+
+The project has no in-app scheduler, so the existing cron approach is used. A
+wrapper script (`infra/cron/weekly-report.sh`) runs the containerized job with the
+right Compose files, so the crontab entry stays a one-liner:
+
+```bash
+chmod +x infra/cron/weekly-report.sh
+crontab -e
+# every Monday at 08:00, staging:
+0 8 * * 1 ENV=test /srv/speedcubinghungary-DEV/speedcubinghungary/infra/cron/weekly-report.sh >> /var/log/schu-weekly-report.log 2>&1
+```
+
+`ENV` selects the environment (`dev` / `test` / `prod`) and therefore the Compose
+override + `.env.<ENV>` file. Because publishing is idempotent per week, a missed
+run can simply be re-triggered by hand:
+
+```bash
+ENV=test infra/cron/weekly-report.sh
+```
+
+### Tests
+
+```bash
+cd apps/scripts/weekly-report
+pip install -r requirements-dev.txt
+python -m pytest
+```
+
+Covered: the weekly idempotency key, the title showing the actual queried window,
+and the JSON payload (valid JSON, results + milestones, and that every competitor
+is included — not just record-setters). CI runs these on every push
+(`Scripts (weekly-report tests)` job).
+
+### Configuration
+
+`config.py` reads the shared root `.env.<ENV>` (`ENV` selects it, default `dev`)
+via `python-dotenv` and validates required variables fail-fast — mirroring
+`apps/api/internal/config/config.go`. It detects whether it runs in a container
+(`/.dockerenv`): in a container it uses the root file's `DB_HOST=db` /
+`DATABASE_URL`; on the host it ignores `DATABASE_URL` and connects to
+`localhost:5432` instead (the container-internal `db` host isn't reachable there).
+In the container the root file isn't copied in, so `python-dotenv` no-ops and the
+values arrive from the compose `--env-file`. All sensitive values come from the
+environment, never from hardcoded literals. In a test/staging context, point
+`EMAIL_TO` at a fixed test inbox so real recipients are never emailed.

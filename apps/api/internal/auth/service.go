@@ -85,11 +85,11 @@ func (s *service) LoginCallback(code string) (string, error) {
 	}
 
 	type WCAUser struct {
-		ID    int    `json:"id"`
-		WCAID string `json:"wca_id"`
-		Name  string `json:"name"`
-		Email string `json:"email"`
-		// Avatar WCAAvatar `json:"avatar"`
+		ID     int       `json:"id"`
+		WCAID  string    `json:"wca_id"`
+		Name   string    `json:"name"`
+		Email  string    `json:"email"`
+		Avatar WCAAvatar `json:"avatar"`
 	}
 	type wcaMeResponse struct {
 		Me WCAUser `json:"me"`
@@ -105,10 +105,11 @@ func (s *service) LoginCallback(code string) (string, error) {
 	// 3️⃣ DB check / create
 	// 3️⃣ DB Upsert (Létrehozás vagy frissítés egy lépésben)
 	user, err := s.repo.Upsert(&User{
-		WCAID: wcaUser.WCAID,
-		Name:  wcaUser.Name,
-		Email: wcaUser.Email,
-		Roles: []types.Role{types.ROLE_USER}, // Ez csak új usernél lesz használva
+		WCAID:     wcaUser.WCAID,
+		Name:      wcaUser.Name,
+		Email:     wcaUser.Email,
+		AvatarURL: wcaUser.Avatar.URL,
+		Roles:     []types.Role{types.ROLE_USER}, // Ez csak új usernél lesz használva
 	})
 	if err != nil {
 		return "", err
@@ -116,11 +117,11 @@ func (s *service) LoginCallback(code string) (string, error) {
 
 	// 4️⃣ Saját JWT
 	claims := UserClaims{
-		UserID: user.ID,
-		WCAID:  user.WCAID,
-		Name:   user.Name,
-		// AvatarURL: user.AvatarURL,
-		Roles: user.Roles,
+		UserID:    user.ID,
+		WCAID:     user.WCAID,
+		Name:      user.Name,
+		AvatarURL: user.AvatarURL,
+		Roles:     user.Roles,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
 		},
