@@ -76,7 +76,10 @@ func fakeWCALive(t *testing.T, rounds ...fakeRound) *httptest.Server {
 			return
 		}
 
-		var req graphQLRequest
+		var req struct {
+			Query     string         `json:"query"`
+			Variables map[string]any `json:"variables"`
+		}
 		_ = json.NewDecoder(r.Body).Decode(&req)
 
 		w.Header().Set("Content-Type", "application/json")

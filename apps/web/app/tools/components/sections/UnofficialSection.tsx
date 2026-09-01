@@ -34,7 +34,7 @@ const UnofficialSection = () => {
           title="Hungarian All-Rounder"
           links={[
             {
-              href: "https://allrounderpoints.vercel.app/",
+              href: "/tools/allrounder",
               label: "Megnyitás",
               icon: <FaGlobe className="h-4 w-4" />,
             },
