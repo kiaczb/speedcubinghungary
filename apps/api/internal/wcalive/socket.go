@@ -1,4 +1,4 @@
-package special
+package wcalive
 
 import (
 	"context"
@@ -72,7 +72,7 @@ func NewSocketClient(baseURL string) *SocketClient {
 
 func socketURL(baseURL string) string {
 	if baseURL == "" {
-		baseURL = DefaultWCALiveURL
+		baseURL = DefaultURL
 	}
 	url := strings.TrimSuffix(baseURL, "/")
 	url = strings.Replace(url, "https://", "wss://", 1)
@@ -146,9 +146,9 @@ func (s *SocketClient) Run(ctx context.Context) {
 		}
 
 		if err != nil {
-			log.Printf("[special] socket disconnected: %v (reconnecting in %s)", err, delay)
+			log.Printf("[wcalive] socket disconnected: %v (reconnecting in %s)", err, delay)
 		} else {
-			log.Printf("[special] socket closed (reconnecting in %s)", delay)
+			log.Printf("[wcalive] socket closed (reconnecting in %s)", delay)
 		}
 
 		select {
@@ -184,7 +184,7 @@ func (s *SocketClient) session(ctx context.Context) error {
 	s.topicKey = make(map[string]string)
 	s.sentKeys = make(map[string]bool)
 
-	log.Printf("[special] socket connected to %s", s.url)
+	log.Printf("[wcalive] socket connected to %s", s.url)
 
 	frames := make(chan phoenixMessage, 32)
 	readErr := make(chan error, 1)
@@ -198,7 +198,7 @@ func (s *SocketClient) session(ctx context.Context) error {
 			}
 			var msg phoenixMessage
 			if err := json.Unmarshal(data, &msg); err != nil {
-				log.Printf("[special] dropping unparseable frame: %v", err)
+				log.Printf("[wcalive] dropping unparseable frame: %v", err)
 				continue
 			}
 			select {
@@ -249,7 +249,7 @@ func (s *SocketClient) session(ctx context.Context) error {
 				}
 				if subscriptionID == "" && !joined {
 					joined = true
-					log.Printf("[special] joined %s", absintheControlTopic)
+					log.Printf("[wcalive] joined %s", absintheControlTopic)
 					s.syncSubscriptions(ctx)
 					if s.onConnect != nil {
 						go s.onConnect()
@@ -281,7 +281,7 @@ func (s *SocketClient) syncSubscriptions(ctx context.Context) {
 			"variables": spec.variables,
 		})
 		if err != nil {
-			log.Printf("[special] failed to send subscription %s: %v", key, err)
+			log.Printf("[wcalive] failed to send subscription %s: %v", key, err)
 			return
 		}
 
@@ -302,7 +302,7 @@ func (s *SocketClient) handleReply(msg phoenixMessage) (string, bool) {
 	}
 
 	if reply.Status != "ok" {
-		log.Printf("[special] control reply not ok: %s", string(msg.Payload))
+		log.Printf("[wcalive] control reply not ok: %s", string(msg.Payload))
 		return "", false
 	}
 
@@ -315,7 +315,7 @@ func (s *SocketClient) handleReply(msg phoenixMessage) (string, bool) {
 		if key, ok := s.topicKey["ref:"+*msg.Ref]; ok {
 			delete(s.topicKey, "ref:"+*msg.Ref)
 			s.topicKey[subscriptionID] = key
-			log.Printf("[special] subscribed %s", key)
+			log.Printf("[wcalive] subscribed %s", key)
 		}
 	}
 
@@ -334,7 +334,7 @@ func (s *SocketClient) handleData(ctx context.Context, msg phoenixMessage) {
 		} `json:"result"`
 	}
 	if err := json.Unmarshal(msg.Payload, &payload); err != nil {
-		log.Printf("[special] dropping malformed subscription payload for %s: %v", key, err)
+		log.Printf("[wcalive] dropping malformed subscription payload for %s: %v", key, err)
 		return
 	}
 

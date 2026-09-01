@@ -52,7 +52,9 @@ speedcubinghungary/
 │   │       ├── auth/        # WCA OAuth login, JWT minting, /me, /logout, users table
 │   │       ├── post/        # news posts CRUD (Postgres-backed)
 │   │       ├── competition/ # WCA API proxy for upcoming Hungarian competitions
+│   │       ├── allrounder/  # Hungarian All-Rounder: cached WCA results + live leg + scoring
 │   │       ├── special/     # Budapest Special: live WCA Live results + recorded DNF times
+│   │       ├── wcalive/     # shared WCA Live transport (GraphQL, Phoenix socket, broadcaster)
 │   │       ├── middleware/  # JSON content-type, JWT auth, RBAC
 │   │       ├── config/      # env var loading + validation (fail-fast)
 │   │       ├── db/          # Postgres connection (pgx stdlib driver)
@@ -96,6 +98,21 @@ vertical slice**: `model.go` (types) → `repository.go` (data access) → `serv
   attempt. Owns `special_competitions` and `special_dnf_attempts`. The
   competition is chosen **by the viewer**, per request (`?competition=<wcaId>`);
   there is no server-side "tracked competition" and no admin selection. See §18.
+- `allrounder`: **Hungarian All-Rounder** — the season-long point standings of the
+  competition series. Finished legs' official WCA results are **cached in
+  Postgres** (`allrounder_syncs` + `allrounder_results`); the **currently running
+  leg comes from WCA Live**, live, because official results only exist after the
+  delegate uploads them. Both sources feed the *same* scoring, which runs
+  server-side. The series definition (which competitions, points per position,
+  how many results count) lives in **code**, `series.go`. See §19.
+- `wcalive`: the **shared WCA Live transport** — GraphQL client +
+  `ResolveCompetitionID`, the Phoenix/Absinthe `SocketClient`, and the keyed
+  `Broadcaster`. Used by both `special` and `allrounder`. ⚠️ Only transport lives
+  here: the **GraphQL queries stay in the feature packages**, because they ask
+  for different things (`special` wants attempts + time limits, `allrounder`
+  wants `ranking`), and one combined query would hit WCA Live's complexity
+  limit. Each feature owns its own `SocketClient` instance — two websockets is
+  cheaper than sharing one session lifecycle.
 
 ---
 
@@ -103,7 +120,7 @@ vertical slice**: `model.go` (types) → `repository.go` (data access) → `serv
 
 | Layer     | Stack |
 | --------- | ----- |
-| Frontend  | Next.js **16.2.7** (App Router, Turbopack default), React **19.2.4**, TypeScript 5, Tailwind CSS **v4** (`@tailwindcss/postcss`), `react-icons`. Node 22. |
+| Frontend  | Next.js **16.2.7** (App Router, Turbopack default), React **19.2.4**, TypeScript 5, Tailwind CSS **v4** (`@tailwindcss/postcss`), `react-icons`, `@cubing/icons` (WCA event icon font, ~13 KB, imported only by `/tools/allrounder`). Node 22. |
 | Backend   | Go **1.25.5**, `go-chi/chi/v5` (router), `go-chi/cors`, `golang-jwt/jwt/v5`, `golang-migrate/migrate/v4`, `jackc/pgx/v5` (via `stdlib` driver) + `lib/pq` (for `pq.Array`), `google/uuid`, `coder/websocket` (WCA Live subscriptions). Tests: `stretchr/testify` + `DATA-DOG/go-sqlmock`. |
 | Scripts   | Python 3.11+ (weekly-report), Jinja-style HTML templates, SMTP email. `requirements.txt` at `apps/scripts/weekly-report/`. |
 | Data      | PostgreSQL **17**. |
@@ -350,8 +367,12 @@ those three tables `live_*` → `special_*`; **column** names keep the `live_`
 prefix on purpose — those are genuine WCA Live identifiers),
 `000008_simplify_special_tracking` (drops `special_results` and every derived
 column off `special_dnf_attempts` — official results are no longer stored, §18)
-and `000009_special_competition_per_viewer` (drops `special_competitions.active`
-— the viewer picks the competition, so there is no active one, §18).
+`000009_special_competition_per_viewer` (drops `special_competitions.active`
+— the viewer picks the competition, so there is no active one, §18) and
+`000010_add_allrounder_results` (the All-Rounder WCA results cache, see §19) and
+`000011_add_allrounder_competition_dates` (nullable `start_date`/`end_date`/
+`live_competition_id` on `allrounder_syncs` — this is what bounds when we open a
+WCA Live connection for a leg, §19).
 Applied automatically on API startup via
 `migrate.New("file:///migrations", cfg.DatabaseURL)` (the prod image bakes
 `db/migrations` to `/migrations`).
@@ -393,6 +414,19 @@ special_dnf_attempts(id UUID PK, competition_wca_id → special_competitions,
         elapsed_cs INT NOT NULL,   -- a solve TÉNYLEGES ideje — EMBERI megfigyelés
         elapsed_note, recorded_by → users(id), recorded_at,
         UNIQUE (live_result_id, attempt_number))   -- idempotencia-kulcs
+
+-- 000010: Hungarian All-Rounder (§19). A WCA hivatalos eredményeinek
+-- GYORSÍTÓTÁRA — nem forrás. A versenysorozat konfigurációja (melyik verseny
+-- melyik évadhoz tartozik, pontozás) KÓDBAN van: internal/allrounder/series.go.
+allrounder_syncs(competition_wca_id TEXT PK, fetched_at TIMESTAMPTZ,
+        result_count INT, last_error TEXT NULL, ...)  -- versenyenkénti szinkron-állapot;
+                                    -- eredmény nélküli (jövőbeli) versenynek is van sora
+
+allrounder_results(competition_wca_id → allrounder_syncs, ordinal INT,
+        wca_id, name, event_id, round_type_id, pos INT, best INT,
+        PRIMARY KEY (competition_wca_id, ordinal))
+-- ⚠️ Az `ordinal` a WCA API válaszTÖMBJÉBEN elfoglalt hely, és a pontszámítás
+-- SORRENDFÜGGŐ (§19) — nem dekoráció, hanem a számítás bemenete.
 ```
 
 Notes / current state:
@@ -427,6 +461,9 @@ chi router in `internal/router/router.go`. Global middleware: `middleware.JSON`
 | GET  | `/uploads/*` | public | static file server over `cfg.UploadDir` (post images) |
 | DELETE | `/posts` | JWT + `admin` | `post.DeletePosts` (body `{ids:[]}`) |
 | GET  | `/competitions/upcoming` | public | `competition.GetUpcoming` (HU only) |
+| GET  | `/allrounder/standings` | public | `allrounder.GetStandings` — a whole season's point standings in one payload (rules + competitions + people). `?year=` is optional; a **missing, unknown or malformed** year falls back to the default season, so there is no error branch — the response's `year` says which one you got |
+| POST | `/allrounder/refresh` | JWT + `admin` | `allrounder.Refresh` — re-fetches the season from the WCA API ignoring the cache TTLs. Admin-only because it generates upstream traffic |
+| GET  | `/allrounder/stream` | public | `allrounder.StreamUpdates` (**SSE**: data-less `update` event whenever the running leg changes on WCA Live; `?year=` optional). Opens successfully even when no leg is running. An open stream is what keeps the WCA Live subscription alive (§19) |
 | GET  | `/login/callback` | public | `auth.LoginCallback` (WCA OAuth redirect target) |
 | GET  | `/me` | JWT | `auth.Me` |
 | POST | `/logout` | JWT | `auth.Logout` |
@@ -589,6 +626,8 @@ links in `app/layout.tsx` if needed. **Read the Next 16 docs first** (§3 warnin
   nothing. Needs a route handler or a mail service.
 - `/results`, `/rankings`, `/guide`, `/team`, `/registration` are linked from
   `QuickToolsSection` but **no such routes exist yet** (they 404).
+- ~~The Hungarian All-Rounder tool card links out to `allrounderpoints.vercel.app`~~
+  — **resolved**: the app is integrated at `/tools/allrounder`, see §19.
 - `auth/service.go` / `auth/handler.go` bypass the `config` struct and read env
   directly (§9).
 - `competition_count` / `delegated_count` / `records` are defined but not populated
@@ -620,6 +659,9 @@ links in `app/layout.tsx` if needed. **Read the Next 16 docs first** (§3 warnin
 - Competition data is fetched live from WCA on every `/competitions/upcoming`
   request with no caching, paginating up to 20 pages (10s HTTP timeout). If this
   becomes hot, add caching rather than hammering WCA.
+- All-Rounder results are the opposite case and a good precedent: a whole
+  season's WCA results are cached in Postgres with per-competition TTLs, and the
+  scoring runs server-side. Cold season ~2.5 s, warm ~50 ms. See §19.
 - Posts list queries are unpaginated (`GetAll` returns everything); `/posts/latest`
   is capped at 3. Fine at current scale; revisit if `posts` grows large.
 - DB access opens a single `*sql.DB` pool (default pool settings). No explicit
@@ -948,6 +990,176 @@ WCA_LIVE_SMOKE=HungarianAllRounder62026 go test ./internal/special -run Smoke -v
 SMOKE_DATABASE_URL="postgres://…" SMOKE_USER_ID=<users.id> \
   WCA_LIVE_SMOKE=HungarianAllRounder62026 go test ./internal/special -run Smoke -v
 ```
+
+---
+
+## 19. Hungarian All-Rounder (`internal/allrounder` + `/tools/allrounder`)
+
+The season-long point standings of the Hungarian All-Rounder series. Each leg is
+its own WCA competition; a competitor's season score is the sum of the points
+earned for their placements. Ported from the standalone `allrounderpoints`
+Next.js app (previously hosted on Vercel) — the frontend `ToolCard` now links to
+the internal route, not the external site.
+
+### What moved where
+
+The original fetched **every leg's full results from the WCA API in the browser
+on every page load** (~100 KB × 10–12 legs) and scored them client-side. Now:
+
+- The WCA results are **cached in Postgres** (`allrounder_results`, §7) and the
+  scoring runs in Go. The page is a **Server Component** doing one fetch.
+- `next-intl` (hu/en), `heap-js`, `next-themes` and `react-loading-skeleton` were
+  **dropped**: the site is Hungarian-only, the scoring left the browser, and dark
+  mode comes from the design tokens. Only `@cubing/icons` came along.
+
+### ⚠️ There are TWO scoring implementations, and that is deliberate
+
+**`ComputeStandingsByRound` (points.go) is the current one. Use it for anything
+new.** `ComputeStandingsLegacy` exists only to keep already-published seasons
+frozen. `Series.LegacyScoring` selects between them (true for 2024/2025).
+
+**The modern path is round-structured and source-agnostic.** Its input is
+`[]CompetitionRounds` (rounds.go): event → round → placements sorted by
+position. Both sources normalize into it — `RoundsFromResults` for the cached
+WCA API rows, `roundResultsFromLive` for WCA Live. Two rules, stated explicitly
+rather than emerging from array order:
+
+1. Per (competitor, event) the **latest round in which they scored** counts;
+   whoever DNF'd the final (or fell outside the scoring cut there) drops back to
+   their earlier round's placement.
+2. An invalid result (`best <= 0`) earns nothing and **shifts nothing**.
+
+*Verified:* the same leg scored from WCA Live and from the official WCA API
+gives **identical standings** (AllRounder6 2026: 36 competitors, zero
+difference). That is what makes the live merge safe — the numbers do not jump
+when the delegate finally uploads.
+
+### ⚠️ What the WCA API result array actually looks like
+
+Measured across all seven uploaded 2026 legs. Two of these contradict what this
+document used to claim:
+
+- (event, round-type) blocks **are** contiguous ✓
+- round types within an event **are** ascending ✓
+- ⚠️ the array is grouped **round-type-major, not event-major** — every first
+  round, *then* every final (`333/1, 333oh/c, …, 333/f, pyram/f`)
+- ⚠️ **within a round the rows are NOT sorted by position** (AllRounder2 `555/c`
+  arrives 8, 25, 15, 13, 23, …). AllRounder6 happened to be sorted, which is
+  what made this easy to miss.
+
+Because of the last point, **any order-dependent rule rests on WCA
+serialization accident**. That is the whole reason the scoring was moved onto
+the round structure.
+
+**The legacy path's bug, for the record.** `ComputeStandingsLegacy` reads the
+flat array backwards and counts invalid results into `invalidResultCount`,
+which past position 20 rewrites the points index. Since rows inside a round are
+unordered, that count is essentially arbitrary, and it awards **inverted**
+points at the tail — measured on AllRounder6 2026 `sq1`: 21st place 3 points,
+20th place 1 point, tying the 21st with the 18th. The original
+`utils/pointCalculator.ts` had the same bug, which is why the two agreed when
+the port was validated. Fixing it changes the 2026 season by 4 competitors and
+1–3 points each (one rank swap, 41↔42).
+
+**Do not "fix" `ComputeStandingsLegacy`.** 2024 and 2025 are closed and
+published; reproducing the announced result is the job. The cached
+`allrounder_results.ordinal` is what freezes them — that is the only remaining
+reason the column is load-bearing. New seasons must leave `LegacyScoring` false.
+
+### The series config lives in code, not the DB
+
+`series.go` holds the seasons (competition ids + labels, points table, counting
+results, podium count) — the direct port of `utils/competitionIds.ts`. It changes
+about once a year, and keeping it next to the scoring rules is what makes both
+readable. **The DB holds only what was downloaded from WCA.** Adding a leg =
+one entry in `series.go`; the next request downloads and caches it.
+
+### Cache freshness
+
+`allrounder_syncs` records the last attempt per competition; `needsSync`
+(service.go) decides staleness:
+
+| state | TTL | why |
+| --- | --- | --- |
+| never synced | — | always fetch |
+| has results | 7 days | WCA results are final once uploaded |
+| no results yet | 6 hours | the leg is upcoming, or not uploaded yet |
+| last attempt failed | 15 min | retry soon, but don't hammer |
+
+Rules that matter:
+
+- **A failed fetch never empties the table.** `MarkSyncFailed` only touches the
+  sync row; the previously cached results keep serving. A whole-season wipe from
+  one bad upstream response would be the worst possible failure mode.
+- **A 404 means "no results yet" only if there were none before.** The WCA API
+  404s for a competition whose results are not uploaded, so that is the normal
+  state of a future leg — but a 404 for a leg that *already had* results is far
+  more likely an upstream glitch, and is treated as a failure instead.
+- Sync errors are **not fatal to the request**: whatever is cached is still
+  scored and returned. Ten legs cached and one unreachable still renders.
+- The sync runs on a **detached context** (`context.WithoutCancel` + a 2 min
+  timeout). Otherwise a viewer navigating away mid-fetch would abort it and
+  write a failure that suppresses retries for 15 minutes.
+- A per-season mutex serialises refreshes, and the computed standings are held
+  in memory for 5 min. Cold start (nothing cached) measured at ~2.5 s for a
+  12-leg season; warm ~50 ms. ⚠️ **While a leg is live the standings cache is
+  bypassed**, otherwise the page would show a 5-minute-old live score.
+- Syncing a leg also fetches `/competitions/{id}` for its dates. Its failure is
+  deliberately non-fatal: results are what matter, dates only gate live
+  tracking. A 404 there is normal — `series.go` carries planned ids for legs the
+  WCA does not know yet.
+
+### The live leg
+
+The running leg has no official results yet (they appear when the delegate
+uploads), so it comes from **WCA Live** and is merged into the same scoring as
+an ordinary `CompetitionRounds` with `Live: true`.
+
+- **Which leg is live**: no official results (`result_count == 0`), dates known,
+  and today is inside the competition day ±24 h (`liveGrace`). Nothing switches
+  it off explicitly — the official results arriving is what makes it stop
+  qualifying.
+- **The dates are what bound WCA Live traffic.** Without them we would probe
+  every unpublished leg (including months-away ones, and ids the WCA does not
+  know) on every page load.
+- `LiveTracker` (tracker.go) is a **single-competition** version of the special
+  tracker — the series decides which leg runs, so the viewer-chosen multi-
+  competition machinery is not needed. The lifecycle is the same: the WCA Live
+  socket exists **only while an SSE stream is open**. No background watcher.
+- `GET /allrounder/stream?year=` opens even when no leg is running (it just
+  stays quiet), so a competition starting mid-session lights up on its own.
+- ⚠️ **WCA Live gives `best: 0` / `ranking: null` for a competitor who has not
+  started.** `0` is not negative, so a bare `best < 0` filter would award them
+  points for their position. `roundResultsFromLive` drops those, plus rows
+  without a `wcaId`.
+- Live points are provisional by nature (rankings churn mid-round, a delegate
+  can edit, the official upload can differ) — `Standings.Live` exists so the UI
+  says so. Don't remove that notice.
+
+### Frontend notes
+
+`/tools/allrounder` (colocated `components/lib/types`), Server Component:
+
+- The season is in the URL (`?year=`), so the page is shareable. `YearPicker` is
+  keyed on the season in `page.tsx` so a Back navigation resets its local state.
+- The table's **identity column is one frozen cell** holding rank + name +
+  total. One cell, not three, because several sticky columns would need their
+  `left` offsets to match the rendered widths pixel for pixel. The table is
+  `border-separate` on purpose: with `border-collapse` the browsers do not carry
+  borders along with sticky cells.
+- The admin-only `RefreshButton` POSTs `/allrounder/refresh`; the server checks
+  the role independently, the client check is UX only.
+- `LiveBanner` is the only client component that matters for live updates: it
+  holds the SSE stream open and calls **`router.refresh()`** on `update`, so the
+  *same* Server Component recomputes the table. The scoring never reaches the
+  browser, and there is no second fetch path. It mounts even without a running
+  leg (that's what keeps the stream open); it just renders nothing.
+
+⚠️ **Dev container note:** `@cubing/icons` was added to `apps/web/package.json`,
+but the dev override mounts `web_node_modules` as a named volume — a new
+dependency needs `docker compose … exec web npm install` **and a `web` container
+restart** (the Next dev server caches the failed resolution). Test/prod rebuild
+the image, so `npm ci` handles it there.
 
 ## Instructions for Claude
 

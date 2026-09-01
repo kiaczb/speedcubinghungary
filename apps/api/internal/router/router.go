@@ -4,12 +4,13 @@ package router
 import (
 	"database/sql"
 	"net/http"
+	"speedcubinghungary/internal/allrounder"
 	"speedcubinghungary/internal/auth"
 	"speedcubinghungary/internal/competition"
 	"speedcubinghungary/internal/config"
-	"speedcubinghungary/internal/special"
 	"speedcubinghungary/internal/middleware"
 	"speedcubinghungary/internal/post"
+	"speedcubinghungary/internal/special"
 	"speedcubinghungary/internal/types"
 
 	"github.com/go-chi/chi/v5"
@@ -17,11 +18,12 @@ import (
 )
 
 // New összeállítja a HTTP routert.
-//
-// A specialHandler kívülről érkezik, mert a WCA Live tracker (main.go) és a
-// HTTP réteg UGYANAZT a Broadcastert kell hogy használja — különben az élő
-// frissítésekről nem értesülnének a megnyitott felületek.
-func New(db *sql.DB, cfg *config.Config, specialHandler *special.Handler) *chi.Mux {
+func New(
+	db *sql.DB,
+	cfg *config.Config,
+	specialHandler *special.Handler,
+	allrounderHandler *allrounder.Handler,
+) *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(middleware.JSON)
 
@@ -67,6 +69,9 @@ func New(db *sql.DB, cfg *config.Config, specialHandler *special.Handler) *chi.M
 
 	r.Get("/competitions/upcoming", competitionHandler.GetUpcoming)
 
+	r.Get("/allrounder/standings", allrounderHandler.GetStandings)
+	r.Get("/allrounder/stream", allrounderHandler.StreamUpdates)
+
 	// Budapest Special: WCA Live alapú eredménytábla a DNF-ek tényleges idejével.
 	//
 	// A versenyt a NÉZŐ választja ki (?competition=), nincs szerveroldali
@@ -83,6 +88,7 @@ func New(db *sql.DB, cfg *config.Config, specialHandler *special.Handler) *chi.M
 		r.Use(middleware.RBACMiddleware(types.ROLE_ADMIN))
 
 		r.Put("/special/results/{liveResultId}/attempts/{attemptNumber}/elapsed", specialHandler.RecordElapsed)
+		r.Post("/allrounder/refresh", allrounderHandler.Refresh)
 	})
 	//Auth feature
 	authRepo := auth.NewPostgresRepository(db)

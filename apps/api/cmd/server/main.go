@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net/http"
+	"speedcubinghungary/internal/allrounder"
 	"speedcubinghungary/internal/config"
 	"speedcubinghungary/internal/db"
 	"speedcubinghungary/internal/router"
@@ -55,8 +56,24 @@ func main() {
 		special.NewService(specialRepo, liveClient, specialTracker, specialBroadcaster),
 	)
 
-	// 4. Create router with config
-	r := router.New(dbConn, cfg, specialHandler)
+	// 4. Hungarian All-Rounder
+	allrounderLiveClient := allrounder.NewLiveClient(cfg.WCALiveURL)
+	allrounderBroadcaster := allrounder.NewBroadcaster()
+	allrounderTracker := allrounder.NewLiveTracker(
+		allrounderLiveClient,
+		allrounder.NewSocketClient(cfg.WCALiveURL),
+		allrounderBroadcaster,
+	)
+	allrounderHandler := allrounder.NewHandler(allrounder.NewService(
+		allrounder.NewPostgresRepository(dbConn),
+		allrounder.NewWCAClient(),
+		allrounderLiveClient,
+		allrounderTracker,
+		allrounderBroadcaster,
+	))
+
+	// 5. Create router with config
+	r := router.New(dbConn, cfg, specialHandler, allrounderHandler)
 
 	log.Printf("Server started on :8080 (mode: %s)", cfg.Deployment)
 	log.Fatal(http.ListenAndServe("0.0.0.0:8080", r))

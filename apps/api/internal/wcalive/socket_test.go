@@ -1,4 +1,4 @@
-package special
+package wcalive
 
 import (
 	"context"
@@ -14,6 +14,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+const testSubscriptionDoc = `subscription RoundUpdated($id: ID!) { roundUpdated(id: $id) { id } }`
 
 type fakeLiveSocket struct {
 	server *httptest.Server
@@ -216,7 +218,7 @@ func TestSocketClient_DeliversSubscriptionData(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	client.Subscribe("round:147464", RoundSubscription, map[string]any{"id": "147464"})
+	client.Subscribe("round:147464", testSubscriptionDoc, map[string]any{"id": "147464"})
 	go client.Run(ctx)
 
 	select {
@@ -245,9 +247,9 @@ func TestSocketClient_SubscribeIsIdempotent(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	client.Subscribe("round:1", RoundSubscription, map[string]any{"id": "1"})
-	client.Subscribe("round:1", RoundSubscription, map[string]any{"id": "1"})
-	client.Subscribe("round:1", RoundSubscription, map[string]any{"id": "1"})
+	client.Subscribe("round:1", testSubscriptionDoc, map[string]any{"id": "1"})
+	client.Subscribe("round:1", testSubscriptionDoc, map[string]any{"id": "1"})
+	client.Subscribe("round:1", testSubscriptionDoc, map[string]any{"id": "1"})
 
 	assert.Len(t, client.Subscriptions(), 1)
 
@@ -285,7 +287,7 @@ func TestSocketClient_ReconnectsAndResubscribes(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
-	client.Subscribe("round:42", RoundSubscription, map[string]any{"id": "42"})
+	client.Subscribe("round:42", testSubscriptionDoc, map[string]any{"id": "42"})
 	go client.Run(ctx)
 
 	require.Eventually(t, func() bool {
@@ -312,7 +314,7 @@ func TestSocketClient_DoesNotConnectWithoutSubscriptions(t *testing.T) {
 	connections, _ := fake.stats()
 	assert.Zero(t, connections, "üres feliratkozás-listával nem csatlakozunk")
 
-	client.Subscribe("round:7", RoundSubscription, map[string]any{"id": "7"})
+	client.Subscribe("round:7", testSubscriptionDoc, map[string]any{"id": "7"})
 
 	require.Eventually(t, func() bool {
 		connections, queries := fake.stats()
@@ -323,8 +325,8 @@ func TestSocketClient_DoesNotConnectWithoutSubscriptions(t *testing.T) {
 func TestSocketClient_Unsubscribe(t *testing.T) {
 	client := NewSocketClient("http://example.invalid")
 
-	client.Subscribe("round:1", RoundSubscription, map[string]any{"id": "1"})
-	client.Subscribe("round:2", RoundSubscription, map[string]any{"id": "2"})
+	client.Subscribe("round:1", testSubscriptionDoc, map[string]any{"id": "1"})
+	client.Subscribe("round:2", testSubscriptionDoc, map[string]any{"id": "2"})
 	require.Len(t, client.Subscriptions(), 2)
 
 	client.Unsubscribe("round:1")
