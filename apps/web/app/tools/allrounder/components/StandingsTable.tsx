@@ -1,5 +1,6 @@
 import EventChips from "./EventChips";
-import type { EventResult, PersonStandings, SeriesCompetition } from "../types";
+import { groupByCompetition, medalAccentClass, medalForRank, medalTextClass } from "../lib/results";
+import type { PersonStandings, SeriesCompetition } from "../types";
 
 type StandingsTableProps = {
   competitions: SeriesCompetition[];
@@ -11,33 +12,17 @@ type StandingsTableProps = {
 // böngészők nem viszik magukkal a szegélyt a ragadós (sticky) cellákkal, így
 // vízszintes görgetéskor szétesne a rács.
 const HEAD_CELL =
-  "sticky top-0 border-b border-line bg-surface-muted px-2.5 py-2.5 sm:px-3 " +
+  "sticky top-0 border-b border-line bg-surface-muted px-3 py-2.5 " +
   "text-xs font-semibold uppercase tracking-wide text-muted-foreground";
 
 
 const FROZEN =
   "sticky left-0 border-r border-line " +
-  "w-44 min-w-44 max-w-44 sm:w-56 sm:min-w-56 sm:max-w-56";
+  "w-56 min-w-56 max-w-56";
 
-const BODY_CELL = "border-b border-line px-2.5 py-2 sm:px-3";
+const BODY_CELL = "border-b border-line px-3 py-2";
 const ROW_HOVER =
   "transition-colors duration-200 ease-smooth group-hover:bg-surface-muted";
-
-/** Egy versenyző beszámító eredményei állomásonként csoportosítva. */
-function groupByCompetition(results: EventResult[]): Map<string, EventResult[]> {
-  const grouped = new Map<string, EventResult[]>();
-
-  for (const result of results) {
-    const existing = grouped.get(result.competitionWcaId);
-    if (existing) {
-      existing.push(result);
-    } else {
-      grouped.set(result.competitionWcaId, [result]);
-    }
-  }
-
-  return grouped;
-}
 
 const StandingsTable = ({
   competitions,
@@ -45,7 +30,6 @@ const StandingsTable = ({
   podiumCount,
 }: StandingsTableProps) => {
   return (
-   
     <div className="relative max-h-[75vh] overflow-auto overscroll-contain rounded-card border border-line bg-surface">
       <table className="min-w-full border-separate border-spacing-0 text-sm">
         <thead>
@@ -73,6 +57,7 @@ const StandingsTable = ({
           {people.map((person, index) => {
             const rank = index + 1;
             const isPodium = rank <= podiumCount;
+            const medal = medalForRank(rank);
             const byCompetition = groupByCompetition(person.results);
 
             return (
@@ -82,26 +67,33 @@ const StandingsTable = ({
                   className={`${BODY_CELL} ${FROZEN} ${ROW_HOVER} relative z-10 bg-surface text-left font-normal`}
                 >
                   {/* A díjazott helyezéseket a sor bal szélén futó vonal jelöli:
-                      abszolút pozícióban, hogy ne tolja el a cella tartalmát. */}
+                      abszolút pozícióban, hogy ne tolja el a cella tartalmát.
+                      Az 1–3. hely arany/ezüst/bronz, a többi díjazott hely
+                      semleges zöld — a `podiumCount` a szoros dobogónál
+                      nagyobb is lehet. */}
                   {isPodium && (
                     <span
-                      className="absolute inset-y-0 left-0 w-0.5 bg-brand-green"
+                      className={`absolute inset-y-0 left-0 w-0.5 ${
+                        medal ? medalAccentClass(medal) : "bg-brand-green"
+                      }`}
                       aria-hidden
                     />
                   )}
 
-                  <div className="flex items-center gap-2 sm:gap-2.5">
+                  <div className="flex items-center gap-2.5">
                     <span
-                      className={`tabular w-5 shrink-0 text-right font-mono text-xs sm:w-6 ${
-                        isPodium
-                          ? "font-semibold text-foreground"
-                          : "text-muted-foreground"
+                      className={`tabular w-6 shrink-0 text-right font-mono text-xs ${
+                        medal
+                          ? `font-semibold ${medalTextClass(medal)}`
+                          : isPodium
+                            ? "font-semibold text-foreground"
+                            : "text-muted-foreground"
                       }`}
                     >
                       {rank}
                     </span>
                     <span
-                      className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground sm:text-sm"
+                      className="min-w-0 flex-1 truncate text-sm font-medium text-foreground"
                       title={person.name}
                     >
                       {person.name}
