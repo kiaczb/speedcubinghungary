@@ -6,6 +6,7 @@ import { serverApiUrl } from "@/app/lib/api";
 import LiveBanner from "./components/LiveBanner";
 import RefreshButton from "./components/RefreshButton";
 import RulesModal from "./components/RulesModal";
+import StandingsList from "./components/StandingsList";
 import StandingsTable from "./components/StandingsTable";
 import YearPicker from "./components/YearPicker";
 import type { Standings } from "./types";
@@ -98,20 +99,40 @@ export default async function AllRounderPage({
                   description="Ennek az évadnak még egyetlen állomásáról sem érkezett hivatalos WCA-eredmény."
                 />
               ) : (
-                <StandingsTable
-                  competitions={standings.competitions}
-                  people={standings.people}
-                  podiumCount={standings.podiumCount}
-                />
+                <>
+                  {/* Mobilon lista, `md` felett táblázat. Egy évad 12 állomása
+                      vízszintesen nem fér ki egy telefonra, a rács pedig csak
+                      akkor olvasható, ha az állomások egymás mellett látszanak
+                      — ezért két külön nézet, nem egy zsugorított táblázat. A
+                      lista összecsukott állapotban nem rendeli ki az
+                      eredményeket, így a kettős DOM sem drága. */}
+                  <div className="md:hidden">
+                    <StandingsList
+                      competitions={standings.competitions}
+                      people={standings.people}
+                      podiumCount={standings.podiumCount}
+                    />
+                  </div>
+
+                  <div className="hidden md:block">
+                    <StandingsTable
+                      competitions={standings.competitions}
+                      people={standings.people}
+                      podiumCount={standings.podiumCount}
+                    />
+                  </div>
+                </>
               )}
             </div>
 
             <div className="mt-4 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2 text-xs leading-relaxed text-muted-foreground">
               <p className="max-w-3xl">
-                Egy cellában a versenyző adott állomáson szerzett, beszámító
-                eredményei állnak: a versenyszám ikonja és a helyezése. A
-                zölddel jelölt első {standings.podiumCount} helyezettet a
-                sorozat végén díjazzuk.
+                Minden versenyzőnél az állomásonként szerzett, beszámító
+                eredményei állnak: a versenyszám ikonja és a helyezése.
+                Telefonon a versenyző sorára koppintva nyílik ki az
+                állomásonkénti bontás. A sorozat végén az első{" "}
+                {standings.podiumCount} helyezettet díjazzuk — őket a sor bal
+                szélén futó vonal jelöli.
               </p>
 
               {standings.updatedAt && (

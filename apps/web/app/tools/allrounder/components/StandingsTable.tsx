@@ -1,5 +1,6 @@
 import EventChips from "./EventChips";
-import type { EventResult, PersonStandings, SeriesCompetition } from "../types";
+import { groupByCompetition, medalAccentClass, medalForRank, medalTextClass } from "../lib/results";
+import type { PersonStandings, SeriesCompetition } from "../types";
 
 type StandingsTableProps = {
   competitions: SeriesCompetition[];
@@ -14,40 +15,14 @@ const HEAD_CELL =
   "sticky top-0 border-b border-line bg-surface-muted px-3 py-2.5 " +
   "text-xs font-semibold uppercase tracking-wide text-muted-foreground";
 
-// Helyezés + név + pont EGY cellában, és ez a cella marad a helyén vízszintes
-// görgetéskor. Egy 12 állomásos évadban enélkül nem lehetne megmondani, kinek
-// az eredményeit nézzük — és épp a végösszeg csúszna ki elsőként a képből.
-// Azért egyetlen cella, mert több ragadós oszlopnál a `left` eltolásoknak
-// pixelre egyezniük kellene az oszlopszélességekkel.
+
 const FROZEN =
   "sticky left-0 border-r border-line " +
-  "min-w-[13.5rem] max-w-[17rem] sm:min-w-[15rem]";
+  "w-56 min-w-56 max-w-56";
 
 const BODY_CELL = "border-b border-line px-3 py-2";
 const ROW_HOVER =
   "transition-colors duration-200 ease-smooth group-hover:bg-surface-muted";
-
-const rankChipClass = (isPodium: boolean) =>
-  "tabular inline-flex min-w-7 shrink-0 justify-center rounded-full px-2 py-0.5 font-mono text-xs font-semibold " +
-  (isPodium
-    ? "bg-brand-green/15 text-brand-green ring-1 ring-inset ring-brand-green/30"
-    : "text-muted-foreground");
-
-/** Egy versenyző beszámító eredményei állomásonként csoportosítva. */
-function groupByCompetition(results: EventResult[]): Map<string, EventResult[]> {
-  const grouped = new Map<string, EventResult[]>();
-
-  for (const result of results) {
-    const existing = grouped.get(result.competitionWcaId);
-    if (existing) {
-      existing.push(result);
-    } else {
-      grouped.set(result.competitionWcaId, [result]);
-    }
-  }
-
-  return grouped;
-}
 
 const StandingsTable = ({
   competitions,
@@ -55,7 +30,7 @@ const StandingsTable = ({
   podiumCount,
 }: StandingsTableProps) => {
   return (
-    <div className="max-h-[75vh] overflow-auto rounded-card border border-line bg-surface">
+    <div className="relative max-h-[75vh] overflow-auto overscroll-contain rounded-card border border-line bg-surface">
       <table className="min-w-full border-separate border-spacing-0 text-sm">
         <thead>
           <tr>
@@ -81,19 +56,46 @@ const StandingsTable = ({
         <tbody>
           {people.map((person, index) => {
             const rank = index + 1;
+            const isPodium = rank <= podiumCount;
+            const medal = medalForRank(rank);
             const byCompetition = groupByCompetition(person.results);
 
             return (
               <tr key={person.wcaId} className="group">
                 <th
                   scope="row"
-                  className={`${BODY_CELL} ${FROZEN} ${ROW_HOVER} z-10 bg-surface text-left font-normal`}
+                  className={`${BODY_CELL} ${FROZEN} ${ROW_HOVER} relative z-10 bg-surface text-left font-normal`}
                 >
+                  {/* A díjazott helyezéseket a sor bal szélén futó vonal jelöli:
+                      abszolút pozícióban, hogy ne tolja el a cella tartalmát.
+                      Az 1–3. hely arany/ezüst/bronz, a többi díjazott hely
+                      semleges zöld — a `podiumCount` a szoros dobogónál
+                      nagyobb is lehet. */}
+                  {isPodium && (
+                    <span
+                      className={`absolute inset-y-0 left-0 w-0.5 ${
+                        medal ? medalAccentClass(medal) : "bg-brand-green"
+                      }`}
+                      aria-hidden
+                    />
+                  )}
+
                   <div className="flex items-center gap-2.5">
-                    <span className={rankChipClass(rank <= podiumCount)}>
+                    <span
+                      className={`tabular w-6 shrink-0 text-right font-mono text-xs ${
+                        medal
+                          ? `font-semibold ${medalTextClass(medal)}`
+                          : isPodium
+                            ? "font-semibold text-foreground"
+                            : "text-muted-foreground"
+                      }`}
+                    >
                       {rank}
                     </span>
-                    <span className="min-w-0 flex-1 truncate font-medium text-foreground">
+                    <span
+                      className="min-w-0 flex-1 truncate text-sm font-medium text-foreground"
+                      title={person.name}
+                    >
                       {person.name}
                     </span>
                     <span className="tabular shrink-0 font-mono font-semibold text-foreground">
