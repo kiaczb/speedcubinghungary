@@ -110,8 +110,8 @@ export default async function AllRounderPage({
               <p className="max-w-3xl">
                 Egy cellában a versenyző adott állomáson szerzett, beszámító
                 eredményei állnak: a versenyszám ikonja és a helyezése. A
-                zölddel jelölt első {standings.podiumCount} helyezettet a
-                sorozat végén díjazzuk.
+                sorozat végén az első {standings.podiumCount} helyezettet
+                díjazzuk — őket a sor bal szélén futó vonal jelöli.
               </p>
 
               {standings.updatedAt && (

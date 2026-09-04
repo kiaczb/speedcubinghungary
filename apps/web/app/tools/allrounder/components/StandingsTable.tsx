@@ -11,27 +11,17 @@ type StandingsTableProps = {
 // böngészők nem viszik magukkal a szegélyt a ragadós (sticky) cellákkal, így
 // vízszintes görgetéskor szétesne a rács.
 const HEAD_CELL =
-  "sticky top-0 border-b border-line bg-surface-muted px-3 py-2.5 " +
+  "sticky top-0 border-b border-line bg-surface-muted px-2.5 py-2.5 sm:px-3 " +
   "text-xs font-semibold uppercase tracking-wide text-muted-foreground";
 
-// Helyezés + név + pont EGY cellában, és ez a cella marad a helyén vízszintes
-// görgetéskor. Egy 12 állomásos évadban enélkül nem lehetne megmondani, kinek
-// az eredményeit nézzük — és épp a végösszeg csúszna ki elsőként a képből.
-// Azért egyetlen cella, mert több ragadós oszlopnál a `left` eltolásoknak
-// pixelre egyezniük kellene az oszlopszélességekkel.
+
 const FROZEN =
   "sticky left-0 border-r border-line " +
-  "min-w-[13.5rem] max-w-[17rem] sm:min-w-[15rem]";
+  "w-44 min-w-44 max-w-44 sm:w-56 sm:min-w-56 sm:max-w-56";
 
-const BODY_CELL = "border-b border-line px-3 py-2";
+const BODY_CELL = "border-b border-line px-2.5 py-2 sm:px-3";
 const ROW_HOVER =
   "transition-colors duration-200 ease-smooth group-hover:bg-surface-muted";
-
-const rankChipClass = (isPodium: boolean) =>
-  "tabular inline-flex min-w-7 shrink-0 justify-center rounded-full px-2 py-0.5 font-mono text-xs font-semibold " +
-  (isPodium
-    ? "bg-brand-green/15 text-brand-green ring-1 ring-inset ring-brand-green/30"
-    : "text-muted-foreground");
 
 /** Egy versenyző beszámító eredményei állomásonként csoportosítva. */
 function groupByCompetition(results: EventResult[]): Map<string, EventResult[]> {
@@ -55,7 +45,8 @@ const StandingsTable = ({
   podiumCount,
 }: StandingsTableProps) => {
   return (
-    <div className="max-h-[75vh] overflow-auto rounded-card border border-line bg-surface">
+   
+    <div className="relative max-h-[75vh] overflow-auto overscroll-contain rounded-card border border-line bg-surface">
       <table className="min-w-full border-separate border-spacing-0 text-sm">
         <thead>
           <tr>
@@ -81,19 +72,38 @@ const StandingsTable = ({
         <tbody>
           {people.map((person, index) => {
             const rank = index + 1;
+            const isPodium = rank <= podiumCount;
             const byCompetition = groupByCompetition(person.results);
 
             return (
               <tr key={person.wcaId} className="group">
                 <th
                   scope="row"
-                  className={`${BODY_CELL} ${FROZEN} ${ROW_HOVER} z-10 bg-surface text-left font-normal`}
+                  className={`${BODY_CELL} ${FROZEN} ${ROW_HOVER} relative z-10 bg-surface text-left font-normal`}
                 >
-                  <div className="flex items-center gap-2.5">
-                    <span className={rankChipClass(rank <= podiumCount)}>
+                  {/* A díjazott helyezéseket a sor bal szélén futó vonal jelöli:
+                      abszolút pozícióban, hogy ne tolja el a cella tartalmát. */}
+                  {isPodium && (
+                    <span
+                      className="absolute inset-y-0 left-0 w-0.5 bg-brand-green"
+                      aria-hidden
+                    />
+                  )}
+
+                  <div className="flex items-center gap-2 sm:gap-2.5">
+                    <span
+                      className={`tabular w-5 shrink-0 text-right font-mono text-xs sm:w-6 ${
+                        isPodium
+                          ? "font-semibold text-foreground"
+                          : "text-muted-foreground"
+                      }`}
+                    >
                       {rank}
                     </span>
-                    <span className="min-w-0 flex-1 truncate font-medium text-foreground">
+                    <span
+                      className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground sm:text-sm"
+                      title={person.name}
+                    >
                       {person.name}
                     </span>
                     <span className="tabular shrink-0 font-mono font-semibold text-foreground">
