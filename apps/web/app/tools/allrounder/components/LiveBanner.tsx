@@ -17,16 +17,39 @@ const LiveBanner = ({ year, live }: LiveBannerProps) => {
   const [, startRefresh] = useTransition();
 
   useEffect(() => {
-    const source = new EventSource(`${clientApiUrl()}/allrounder/stream?year=${year}`, {
-      withCredentials: true,
-    });
+    let source: EventSource | null = null;
 
-    source.addEventListener("ready", () => setConnected(true));
-    source.addEventListener("update", () => startRefresh(() => router.refresh()));
-    source.onerror = () => setConnected(false);
+    const connect = () => {
+      source = new EventSource(`${clientApiUrl()}/allrounder/stream?year=${year}`, {
+        withCredentials: true,
+      });
+
+      source.addEventListener("ready", () => setConnected(true));
+      source.addEventListener("update", () => startRefresh(() => router.refresh()));
+      source.onerror = () => setConnected(false);
+    };
+
+    // Mobil böngészők a háttérbe került lapot felfüggesztik/limitálják, ami a
+    // meglévő EventSource kapcsolatot megszakíthatja anélkül, hogy az `onerror`
+    // lefutna. A komponens ilyenkor is bent marad a DOM-ban (nincs újbóli
+    // mountolás), tehát semmi nem indítaná újra a kapcsolatot — a lap
+    // visszatérésekor ezért zárjuk és nyitjuk újra kézzel, és egyúttal
+    // azonnal frissítünk is, hogy a kiesett idő alatti változás ne maradjon
+    // észrevétlen a következő `update` eseményig.
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== "visible") return;
+
+      source?.close();
+      connect();
+      startRefresh(() => router.refresh());
+    };
+
+    connect();
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
-      source.close();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      source?.close();
       setConnected(false);
     };
   }, [year, router]);
