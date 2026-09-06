@@ -738,6 +738,15 @@ links in `app/layout.tsx` if needed. **Read the Next 16 docs first** (§3 warnin
   (`http.DetectContentType`), never from the client's Content-Type header, and the
   stored filename is a generated UUID — the client's filename is discarded to
   prevent path traversal. Limit is 5 MiB (`post.MaxImageSize`).
+- ⚠️ The prod API image's `USER appuser` (uid 1001) can't write into a **freshly
+  created** `uploads_data` named volume — Docker creates new named volumes owned
+  by `root:root`, so the very first upload on a new environment fails with
+  `open /data/uploads/...: permission denied`. Fixed via
+  `infra/docker/api/entrypoint.sh`: the container starts as **root**, `chown -R`s
+  `UPLOAD_DIR` to `appuser`, then `su-exec`s down to `appuser` to run the server
+  (`Dockerfile` stays `ENTRYPOINT`, no more `USER appuser` line/`CMD`). This makes
+  every fresh deploy (new server, new volume) self-healing — don't revert to a
+  bare `USER appuser` + `CMD` without re-solving this.
 - Constructor naming is inconsistent across packages (`NewPostgresRepository` vs
   `postgresRepository`, `Service` interface in `auth` vs concrete struct in `post`).
   When editing a package, match **that package's** existing style.
