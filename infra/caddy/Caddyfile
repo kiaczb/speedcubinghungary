@@ -1,11 +1,4 @@
-# Reverse proxy with automatic HTTPS (Let's Encrypt).
-# Single public domain, path-routed (comes from the environment):
-#   WEB_DOMAIN  -> serves the whole site
-#   ACME_EMAIL  -> contact address for Let's Encrypt / expiry notices
-#
-# The API lives under WEB_DOMAIN/api/*; everything else is the Next.js web app.
-# Because web and api share one origin, the auth cookie is first-party and CORS
-# is a non-issue.
+
 #
 # Caddy provisions and renews a trusted cert automatically, as long as the
 # domain's public DNS points at this server and 80/443 are open.
@@ -14,8 +7,15 @@
 }
 
 {$WEB_DOMAIN} {
-	# API under /api/*. handle_path strips the /api prefix, so the Go API still
-	# sees root paths (/posts, /login/callback, /me, ...) exactly as before.
+	
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+	}
+
+
 	handle_path /api/* {
 		reverse_proxy api:8080
 	}

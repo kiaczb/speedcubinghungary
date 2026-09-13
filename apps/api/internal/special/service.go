@@ -257,7 +257,7 @@ func (s *Service) RecordElapsed(
 	}
 
 	if elapsedCs == nil {
-		if err := s.repo.DeleteElapsed(liveResultID, attemptNumber); err != nil {
+		if err := s.repo.DeleteElapsed(competitionWCAID, liveResultID, attemptNumber); err != nil {
 			return err
 		}
 		s.broadcaster.Notify(competitionWCAID)
