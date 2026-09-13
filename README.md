@@ -230,7 +230,7 @@ right Compose files, so the crontab entry stays a one-liner:
 chmod +x infra/cron/weekly-report.sh
 crontab -e
 # every Monday at 08:00, staging:
-0 8 * * 1 ENV=test /srv/speedcubinghungary-DEV/speedcubinghungary/infra/cron/weekly-report.sh >> /var/log/schu-weekly-report.log 2>&1
+0 8 * * 1 ENV=test /srv/speedcubinghungary-DEV/speedcubinghungary/infra/cron/weekly-report.sh >> /var/log/speedcubinghungary-weekly-report.log 2>&1
 ```
 
 `ENV` selects the environment (`dev` / `test` / `prod`) and therefore the Compose

@@ -545,6 +545,17 @@ root. Never commit real `.env*` files (git-ignored). Backend config is loaded an
 Other important vars:
 - DB connection (used by `db/postgres.go`): `DB_HOST`, `DB_PORT`, `DB_USER`,
   `DB_PASSWORD`, `DB_NAME` (separate from `DATABASE_URL`, which migrate uses).
+  **These are the single source of truth for the DB credentials.** The env
+  files no longer also define `POSTGRES_USER`/`POSTGRES_PASSWORD`/`POSTGRES_DB`
+  — `docker-compose.yml`'s `db` service sources those (which the `postgres`
+  image itself requires under that name) from the same `DB_USER`/`DB_PASSWORD`/
+  `DB_NAME`, i.e. `POSTGRES_USER: ${DB_USER}` etc. And `DATABASE_URL` in each
+  env file is built from these via Compose's env-file variable interpolation
+  (`postgres://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=disable`)
+  rather than being typed out separately. **Change the DB user/password/name in
+  exactly one place** (`DB_USER`/`DB_PASSWORD`/`DB_NAME` in the env file) — don't
+  reintroduce a parallel `POSTGRES_*` block or hand-type `DATABASE_URL`, both of
+  which previously had to be kept in sync by hand and could silently drift.
 - `DEPLOYMENT` (`development`/`test`/`production`) — controls cookie `Secure` +
   helpers. `LOG_LEVEL`. `NODE_ENV`.
 - `UPLOAD_DIR` — where post images are written (default `/data/uploads`). Not

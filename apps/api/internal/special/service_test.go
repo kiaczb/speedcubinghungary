@@ -37,8 +37,8 @@ func (m *mockRepo) SetElapsed(
 	return m.Called(competitionWCAID, liveResultID, attemptNumber, elapsedCs, note, userID).Error(0)
 }
 
-func (m *mockRepo) DeleteElapsed(liveResultID, attemptNumber int) error {
-	return m.Called(liveResultID, attemptNumber).Error(0)
+func (m *mockRepo) DeleteElapsed(competitionWCAID string, liveResultID, attemptNumber int) error {
+	return m.Called(competitionWCAID, liveResultID, attemptNumber).Error(0)
 }
 
 type fakeRound struct {
@@ -289,7 +289,7 @@ func TestService_RecordElapsed(t *testing.T) {
 
 func TestService_RecordElapsed_DeletesOnNil(t *testing.T) {
 	repo := new(mockRepo)
-	repo.On("DeleteElapsed", 900, 2).Return(nil)
+	repo.On("DeleteElapsed", testCompetitionID, 900, 2).Return(nil)
 
 	service := newTestService(repo, "http://example.invalid", NewBroadcaster())
 
@@ -303,7 +303,7 @@ func TestService_RecordElapsed_DeletesOnNil(t *testing.T) {
 
 func TestService_RecordElapsed_NotifiesSubscribers(t *testing.T) {
 	repo := new(mockRepo)
-	repo.On("DeleteElapsed", 900, 2).Return(nil)
+	repo.On("DeleteElapsed", testCompetitionID, 900, 2).Return(nil)
 
 	broadcaster := NewBroadcaster()
 	events, unsubscribe := broadcaster.Subscribe(testCompetitionID)

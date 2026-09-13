@@ -58,10 +58,10 @@ func TestDeleteElapsed(t *testing.T) {
 	defer db.Close()
 
 	mock.ExpectExec("DELETE FROM special_dnf_attempts").
-		WithArgs(4973030, 2).
+		WithArgs("AllRounder62026", 4973030, 2).
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
-	err = NewPostgresRepository(db).DeleteElapsed(4973030, 2)
+	err = NewPostgresRepository(db).DeleteElapsed("AllRounder62026", 4973030, 2)
 
 	assert.NoError(t, err)
 	assert.NoError(t, mock.ExpectationsWereMet())
