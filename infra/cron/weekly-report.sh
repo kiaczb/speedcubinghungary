@@ -14,7 +14,7 @@
 #   chmod +x infra/cron/weekly-report.sh
 #   crontab -e
 # majd minden hétfő 08:00-ra (teszt környezet):
-#   0 8 * * 1 ENV=test /srv/speedcubinghungary-DEV/speedcubinghungary/infra/cron/weekly-report.sh >> /var/log/schu-weekly-report.log 2>&1
+#   0 8 * * 1 ENV=test /srv/speedcubinghungary-DEV/speedcubinghungary/infra/cron/weekly-report.sh >> /var/log/speedcubinghungary-weekly-report.log 2>&1
 # éles környezetben ENV=prod és a prod deploy útvonala.
 
 set -euo pipefail
