@@ -2,6 +2,7 @@ package post
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -12,16 +13,22 @@ import (
 )
 
 const (
-	// MaxImageSize a feltölthető borítókép maximális mérete.
+	// MaxImageSize egy feltöltött kép maximális mérete.
 	MaxImageSize = 5 << 20 // 5 MiB
 
+	// MaxImages a poszthoz csatolható képek maximális száma (galéria/carousel).
+	// A frontend ugyanezt a korlátot mutatja — ha itt változik, ott is.
+	MaxImages = 10
+
 	// PublicUploadPath az az útvonal, amin az API kiszolgálja a képeket.
-	// A DB-be ezzel a prefixszel mentjük az image_path értéket.
+	// A DB-be ezzel a prefixszel mentjük az image_paths elemeit.
 	PublicUploadPath = "/uploads"
 )
 
 var (
 	ErrUnsupportedImage = errors.New("unsupported image type (allowed: jpeg, png, webp, gif)")
+	ErrTooManyImages    = fmt.Errorf("a post can have at most %d images", MaxImages)
+	ErrImageTooLarge    = fmt.Errorf("image is too large (max %d MiB)", MaxImageSize>>20)
 )
 
 // allowedImageTypes a ténylegesen elfogadott MIME típusok és a hozzájuk tartozó
@@ -34,10 +41,6 @@ var allowedImageTypes = map[string]string{
 	"image/gif":  ".gif",
 }
 
-// SaveImage kiírja a feltöltött képet az uploadDir-be egy generált néven, és
-// visszaadja a publikus útvonalát (pl. "/uploads/<uuid>.webp").
-// A kliens által küldött fájlnevet szándékosan eldobjuk: saját uuid nevet adunk,
-// így nem lehet path traversallal (../) kitörni az uploadDir-ből.
 func SaveImage(file multipart.File, uploadDir string) (string, error) {
 	// Az első 512 byte elég a típus detektálásához.
 	head := make([]byte, 512)
@@ -75,6 +78,42 @@ func SaveImage(file multipart.File, uploadDir string) (string, error) {
 	return PublicUploadPath + "/" + name, nil
 }
 
+func SaveImages(headers []*multipart.FileHeader, uploadDir string) ([]string, error) {
+	if len(headers) > MaxImages {
+		return nil, ErrTooManyImages
+	}
+
+	paths := make([]string, 0, len(headers))
+	fail := func(err error) ([]string, error) {
+		RemoveImages(paths, uploadDir)
+		return nil, err
+	}
+
+	for _, header := range headers {
+		// A méretkorlátot fájlonként a FileHeader alapján utasítjuk el: a
+		// SaveImage-beli LimitReader csak CSONKÍTANA, a túl nagy kép pedig
+		// legyen 400-as hiba, ne néma félkép.
+		if header.Size > MaxImageSize {
+			return fail(ErrImageTooLarge)
+		}
+
+		file, err := header.Open()
+		if err != nil {
+			return fail(err)
+		}
+
+		path, err := SaveImage(file, uploadDir)
+		file.Close()
+		if err != nil {
+			return fail(err)
+		}
+
+		paths = append(paths, path)
+	}
+
+	return paths, nil
+}
+
 // RemoveImage törli a publikus útvonalhoz tartozó fájlt. Akkor használjuk, ha a
 // kép már kiírásra került, de a poszt mentése elbukott — így nem marad árva
 // fájl a volume-on. filepath.Base miatt csak az uploadDir-en belül töröl.
@@ -83,4 +122,11 @@ func RemoveImage(publicPath, uploadDir string) {
 		return
 	}
 	os.Remove(filepath.Join(uploadDir, filepath.Base(publicPath)))
+}
+
+// RemoveImages a megadott publikus útvonalak fájljait törli.
+func RemoveImages(publicPaths []string, uploadDir string) {
+	for _, path := range publicPaths {
+		RemoveImage(path, uploadDir)
+	}
 }

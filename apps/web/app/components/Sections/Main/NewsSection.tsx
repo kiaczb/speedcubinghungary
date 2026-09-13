@@ -3,7 +3,7 @@ import Section from "./Section";
 import Button from "../../ui/Button";
 import { FaArrowRight } from "react-icons/fa";
 import { PostsItem } from "@/app/posts/types";
-import { postImageUrl } from "@/app/posts/lib/postImage";
+import { postCoverUrl } from "@/app/posts/lib/postImage";
 import { serverApiUrl } from "@/app/lib/api";
 
 async function getLatestPosts(): Promise<PostsItem[]> {
@@ -42,7 +42,7 @@ export default async function NewsSection() {
             <NewsCard
               key={post.id}
               post={post}
-              imageUrl={postImageUrl(post.image_path)}
+              imageUrl={postCoverUrl(post.image_paths)}
             />
           ))}
         </div>

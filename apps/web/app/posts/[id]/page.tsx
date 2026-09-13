@@ -5,8 +5,9 @@ import { FaArrowLeft } from "react-icons/fa";
 import { badgeMap, PostsItem } from "../types";
 import Badge from "@/app/components/Badge";
 import { serverApiUrl } from "@/app/lib/api";
-import { postImageUrl } from "../lib/postImage";
+import { postImageUrls } from "../lib/postImage";
 import PostContent from "../components/PostContent";
+import PostGallery from "../components/PostGallery";
 import WeeklyReportView from "../components/WeeklyReportView";
 import { parseWeeklyReport } from "../lib/report";
 
@@ -32,7 +33,7 @@ export default async function PostPage({ params }: PageProps) {
     notFound();
   }
 
-  const imageUrl = postImageUrl(post.image_path);
+  const imageUrls = postImageUrls(post.image_paths);
   const badge = badgeMap[post.tag];
 
   // A riport posztok tartalma strukturált JSON — dedikált komponens rendereli.
@@ -73,15 +74,7 @@ export default async function PostPage({ params }: PageProps) {
           </h1>
         </header>
 
-        {imageUrl && (
-          /* Sima img: a kép domainje környezetenként más — így nem kell remotePatterns. */
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img
-            src={imageUrl}
-            alt=""
-            className="mt-8 w-full rounded-panel border border-line object-cover"
-          />
-        )}
+        <PostGallery images={imageUrls} title={post.title} />
 
         <div className="mt-8 text-[15px] leading-relaxed text-foreground">
           {report ? (

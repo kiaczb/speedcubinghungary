@@ -38,5 +38,10 @@ func ValidatePost(p Post) error {
 	if len(p.Content) < 20 {
 		return ErrShortContent
 	}
+	// Biztonsági háló: a handler már a feltöltés ELŐTT elutasítja a túl sok képet
+	// (hogy ne írjunk ki fájlt feleslegesen), de a korlát itt is érvényes.
+	if len(p.ImagePaths) > MaxImages {
+		return ErrTooManyImages
+	}
 	return nil
 }

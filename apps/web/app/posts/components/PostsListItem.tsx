@@ -6,7 +6,7 @@ import Card from "@/app/components/Cards/Card";
 import Badge from "@/app/components/Badge";
 import Button from "@/app/components/ui/Button";
 import { badgeMap, PostsItem } from "../types";
-import { postImageUrl } from "../lib/postImage";
+import { postCoverUrl } from "../lib/postImage";
 import { postPreview } from "../lib/postPreview";
 import { reportSummary } from "../lib/report";
 
@@ -24,7 +24,9 @@ type Props = {
 
 const PostsListItem = ({ postsItem, checked, onToggle, isAdmin }: Props) => {
   const badge = badgeMap[postsItem.tag];
-  const imageUrl = postImageUrl(postsItem.image_path);
+  const imageUrl = postCoverUrl(postsItem.image_paths);
+  // A borítókép mellett jelezzük, ha a poszthoz több kép is tartozik.
+  const imageCount = postsItem.image_paths?.length ?? 0;
   const [editing, setEditing] = useState(false);
   // A riport tartalma JSON — összefoglalót mutatunk, nem a nyers tartalmat.
   const preview =
@@ -82,13 +84,18 @@ const PostsListItem = ({ postsItem, checked, onToggle, isAdmin }: Props) => {
             </div>
 
             {imageUrl && (
-              /* Sima img: a kép domainje környezetenként más — így nem kell remotePatterns. */
-              /* eslint-disable-next-line @next/next/no-img-element */
-              <img
-                src={imageUrl}
-                alt=""
-                className="hidden h-24 w-32 shrink-0 rounded-control object-cover sm:block"
-              />
+              <div className="relative hidden h-24 w-32 shrink-0 sm:block">
+                <img
+                  src={imageUrl}
+                  alt=""
+                  className="h-full w-full rounded-control object-cover"
+                />
+                {imageCount > 1 && (
+                  <span className="tabular absolute bottom-1 right-1 rounded-control bg-surface-inverse/75 px-1.5 py-0.5 font-mono text-[11px] text-white">
+                    {imageCount} kép
+                  </span>
+                )}
+              </div>
             )}
           </div>
 
