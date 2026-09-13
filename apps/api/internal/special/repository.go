@@ -12,7 +12,7 @@ type Repository interface {
 
 	ListRecordedTimes(competitionWCAID string) ([]RecordedTime, error)
 	SetElapsed(competitionWCAID string, liveResultID, attemptNumber, elapsedCs int, note string, userID int, now time.Time) error
-	DeleteElapsed(liveResultID, attemptNumber int) error
+	DeleteElapsed(competitionWCAID string, liveResultID, attemptNumber int) error
 }
 
 type PostgresRepository struct {
@@ -105,11 +105,11 @@ func (r *PostgresRepository) SetElapsed(
 	return err
 }
 
-func (r *PostgresRepository) DeleteElapsed(liveResultID, attemptNumber int) error {
+func (r *PostgresRepository) DeleteElapsed(competitionWCAID string, liveResultID, attemptNumber int) error {
 	_, err := r.db.Exec(`
 		DELETE FROM special_dnf_attempts
-		WHERE live_result_id = $1 AND attempt_number = $2
-	`, liveResultID, attemptNumber)
+		WHERE competition_wca_id = $1 AND live_result_id = $2 AND attempt_number = $3
+	`, competitionWCAID, liveResultID, attemptNumber)
 
 	return err
 }
