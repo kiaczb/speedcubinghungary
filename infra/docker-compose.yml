@@ -13,9 +13,12 @@ services:
   db:
     image: postgres:17
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
+      # The postgres image needs its own POSTGRES_* names for first-run init;
+      # sourced from the same DB_* values the api/weekly-report use, so there is
+      # one place (DB_USER/DB_PASSWORD/DB_NAME in the env file) to change.
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
