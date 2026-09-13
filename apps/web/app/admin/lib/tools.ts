@@ -1,5 +1,6 @@
 import {
   FaChartBar,
+  FaGraduationCap,
   FaRegNewspaper,
   FaSatelliteDish,
   FaTrophy,
@@ -35,6 +36,15 @@ export const ADMIN_TOOLS: AdminTool[] = [
       "A versenysorozat pontversenye. A táblázat publikus; adminként az évad eredményeit újra lehet tölteni a WCA API-ról.",
     href: "/tools/allrounder",
     icon: FaTrophy,
+    status: "active",
+  },
+  {
+    id: "learn",
+    title: "Algoritmusok",
+    description:
+      "A tanulófelület tartalma: versenyszámok, esetek és algoritmusok kezelése, opcionális videóval.",
+    href: "/admin/learn",
+    icon: FaGraduationCap,
     status: "active",
   },
   {

@@ -5,10 +5,15 @@ import Button from "@/app/components/ui/Button";
 import StateMessage from "@/app/components/ui/StateMessage";
 import AdminToolGrid from "./AdminToolGrid";
 
+type Props = {
+  /** Az admin-tartalom. Megadás nélkül az admin főoldal eszközrácsa. */
+  children?: React.ReactNode;
+};
+
 // Kliensoldali RBAC-kapu: a szerepkör csak a `/me`-ből (auth cookie) derül ki,
 // ezért a tartalom csak akkor renderelődik, ha ez megérkezett és admin szerepkört
 // tartalmaz. Ugyanazt a mintát követi, mint a `PostsListClient` admin-gate-je.
-export default function AdminGate() {
+export default function AdminGate({ children }: Props) {
   const { user, isLoading } = useUser();
   const isAdmin = user?.roles.includes("admin");
 
@@ -50,5 +55,5 @@ export default function AdminGate() {
     );
   }
 
-  return <AdminToolGrid />;
+  return <>{children ?? <AdminToolGrid />}</>;
 }

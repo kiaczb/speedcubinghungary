@@ -55,6 +55,7 @@ speedcubinghungary/
 │   │       ├── allrounder/  # Hungarian All-Rounder: cached WCA results + live leg + scoring
 │   │       ├── special/     # Budapest Special: live WCA Live results + recorded DNF times
 │   │       ├── wcalive/     # shared WCA Live transport (GraphQL, Phoenix socket, broadcaster)
+│   │       ├── learn/       # algorithm learning: Event → Case → Algorithm CRUD (admin writes)
 │   │       ├── middleware/  # JSON content-type, JWT auth, RBAC
 │   │       ├── config/      # env var loading + validation (fail-fast)
 │   │       ├── db/          # Postgres connection (pgx stdlib driver)
@@ -372,7 +373,9 @@ column off `special_dnf_attempts` — official results are no longer stored, §1
 `000010_add_allrounder_results` (the All-Rounder WCA results cache, see §19) and
 `000011_add_allrounder_competition_dates` (nullable `start_date`/`end_date`/
 `live_competition_id` on `allrounder_syncs` — this is what bounds when we open a
-WCA Live connection for a leg, §19).
+WCA Live connection for a leg, §19) and `000012_add_learn_algorithms`
+(`learn_events` / `learn_cases` / `learn_algorithms` — the tanulófelület
+hierarchiája, `ON DELETE CASCADE` lefelé, §20).
 Applied automatically on API startup via
 `migrate.New("file:///migrations", cfg.DatabaseURL)` (the prod image bakes
 `db/migrations` to `/migrations`).
@@ -427,6 +430,22 @@ allrounder_results(competition_wca_id → allrounder_syncs, ordinal INT,
         PRIMARY KEY (competition_wca_id, ordinal))
 -- ⚠️ Az `ordinal` a WCA API válaszTÖMBJÉBEN elfoglalt hely, és a pontszámítás
 -- SORRENDFÜGGŐ (§19) — nem dekoráció, hanem a számítás bemenete.
+
+-- 000012: algoritmus-tanulás (§20). Tisztán a saját tartalmunk — nincs benne
+-- WCA-adat, nincs külső forrás, nincs felhasználói tartalom: az egyesület
+-- (admin) viszi fel, mindenki más olvassa.
+learn_events(id UUID PK, name, description NULL, sort_order INT default 0, ...)
+
+learn_cases(id UUID PK, event_id → learn_events ON DELETE CASCADE,
+        name, description NULL, sort_order INT default 0, ...)
+
+learn_algorithms(id UUID PK, case_id → learn_cases ON DELETE CASCADE,
+        name, notation,            -- pl. "R U R' U'"
+        description NULL,
+        video_url  NULL,           -- EGY külső videó URL-je; feltöltés nincs (§20)
+        sort_order INT default 0, ...)
+-- ⚠️ `sort_order`, nem `order`: az utóbbi SQL kulcsszó. A rendezés mindenhol
+-- (sort_order, name), hogy az azonos (0) sorrendű elemek se ugráljanak.
 ```
 
 Notes / current state:
@@ -464,6 +483,12 @@ chi router in `internal/router/router.go`. Global middleware: `middleware.JSON`
 | GET  | `/allrounder/standings` | public | `allrounder.GetStandings` — a whole season's point standings in one payload (rules + competitions + people). `?year=` is optional; a **missing, unknown or malformed** year falls back to the default season, so there is no error branch — the response's `year` says which one you got |
 | POST | `/allrounder/refresh` | JWT + `admin` | `allrounder.Refresh` — re-fetches the season from the WCA API ignoring the cache TTLs. Admin-only because it generates upstream traffic |
 | GET  | `/allrounder/stream` | public | `allrounder.StreamUpdates` (**SSE**: data-less `update` event whenever the running leg changes on WCA Live; `?year=` optional). Opens successfully even when no leg is running. An open stream is what keeps the WCA Live subscription alive (§19) |
+| GET  | `/learn/events` | public | `learn.GetEvents` — versenyszámok, `caseCount`-tal |
+| GET  | `/learn/events/{id}` | public | `learn.GetEvent` — a versenyszám + esetei |
+| GET  | `/learn/cases/{id}` | public | `learn.GetCase` — az eset + a szülő versenyszám + az algoritmusok |
+| GET  | `/learn/algorithms/{id}` | public | `learn.GetAlgorithm` — a tanulónézet payloadja: szülők + az algoritmus + az eset ÖSSZES algoritmusa (`siblings`, a lapozáshoz), egyetlen kérésből |
+| GET  | `/learn/tree` | public | `learn.GetTree` — a teljes hierarchia egy kérésben (ebből épül az admin felület); 3 lekérdezés, nem szintenként N+1 |
+| POST/PUT/DELETE | `/learn/{events\|cases\|algorithms}[/{id}]` | JWT + `admin` | `learn.Create/Update/Delete*` — a PUT a szülőt is átírhatja (átmozgatás másik versenyszám/eset alá), üres `videoUrl` = a videó törlése, a DELETE 204-et ad és a gyerekek FK-kaszkáddal mennek (§20) |
 | GET  | `/login/callback` | public | `auth.LoginCallback` (WCA OAuth redirect target) |
 | GET  | `/me` | JWT | `auth.Me` |
 | POST | `/logout` | JWT | `auth.Logout` |
@@ -1169,6 +1194,76 @@ but the dev override mounts `web_node_modules` as a named volume — a new
 dependency needs `docker compose … exec web npm install` **and a `web` container
 restart** (the Next dev server caches the failed resolution). Test/prod rebuild
 the image, so `npm ci` handles it there.
+
+## 20. Algoritmus-tanulás (`internal/learn` + `/learn` + `/admin/learn`)
+
+Tanulófelület: **versenyszám → eset → algoritmus (+ opcionális videó)**. Az
+egyetlen olyan funkció, amiben **nincs külső adatforrás** — se WCA API, se WCA
+Live: a tartalmat az egyesület viszi fel, és a Postgres a forrás, nem
+gyorsítótár. Ezért itt nincs tracker, nincs SSE, nincs TTL.
+
+### Ki mit csinálhat
+
+**Az olvasás publikus, az írás kizárólag `admin`** — a meglévő JWT-cookie +
+`RBACMiddleware(types.ROLE_ADMIN)` párossal, ugyanabban a `r.Group`-mintában,
+mint a posztoknál. **Nincs felhasználói tartalom** (se feltöltés, se
+szerkesztés, se kedvencek) — ha ilyen kérés jön, az új funkció, nem ennek a
+kiterjesztése. A frontend admin-kapui (`AdminGate`, a szerkesztőgombok) csak
+kényelmi funkciók; a védelem a backendé.
+
+### Adatmodell-döntések, amiket ne írj felül
+
+- **A „versenyszám” szabad szöveg, nem a WCA event-id enum.** Tanulni nem csak
+  hivatalos versenyszámot lehet (3x3 CFOP, Roux, egykezes), és nem akarjuk a
+  tartalmat enumhoz kötni.
+- **`sort_order`, nem `order`** (SQL kulcsszó). A rendezés mindenhol
+  `(sort_order, name)`.
+- **A törlés lefelé kaszkádol** (`ON DELETE CASCADE`): versenyszám → esetek →
+  algoritmusok. A felület ezért megerősítést kér, és **kiírja, hány elem tűnik
+  el vele** — a számokat a fából számolja.
+- **A videó EGY `video_url` oszlop, nem külön tábla.** Ma egy külső link az
+  egyetlen forrás, feltöltés nincs. A bővítés helye a frontend
+  `app/learn/lib/video.ts`: a komponensek egy `VideoEmbed`-et fogyasztanak, nem
+  az URL-t — feltöltött videóhoz elég ezt a réteget (és a tárolást) cserélni.
+- A `caseCount` / `algorithmCount` **csak az olvasó válaszokban** van kitöltve;
+  a create/update válasza a beírt entitást adja vissza, számláló nélkül. Az
+  admin felület úgyis újratölti a fát mentés után.
+
+### Két hiba, ami itt könnyen visszakerül
+
+- ⚠️ **Formailag hibás id-re 404 kell, nem 500.** Az id-k UUID oszlopok, és a
+  Postgres a nem-UUID értékre típushibát dob — ezért a service `isUUID`-dal
+  szűr, mielőtt lekérdezne. A szülő (`eventId`/`caseId`) létezését is a service
+  ellenőrzi előre, hogy a hiányzó szülő 404 legyen, ne egy FK-hibából lett 500.
+- ⚠️ **A `loading.tsx` ezért van az `app/learn/(overview)/` útvonalcsoportban.**
+  A `learn` szegmensbe téve az alatta lévő oldalakra is érvényes lenne, azok
+  pedig streamelnének — a státusz már elmenne, mire a `notFound()` lefut, így a
+  „nincs ilyen” oldal **200-zal** menne ki 404 helyett (mérve). A csoport miatt
+  a vázlat csak a listára vonatkozik, a részletoldalak valódi 404-et adnak.
+  Ne told fel egy szinttel.
+
+### Felületek
+
+- **`/learn`** (kolokált `components/lib/types`, Server Component-ek): lista →
+  `/learn/events/{id}` (esetek) → `/learn/cases/{id}` (algoritmusok) →
+  `/learn/algorithms/{id}` (tanulónézet). Az útvonalak **laposak**, mert az
+  id-k globálisan egyediek, és minden oldal a szülőket is megkapja a válaszban
+  — így a morzsamenü egyetlen kérésből felépül.
+- A **tanulónézet** asztali gépen kétoszlopos (algoritmus | videó), mobilon
+  egymás alatt; **videó nélkül nincs üres keret**, az algoritmus kapja a teljes
+  szélességet. A `siblings` miatt van előre/hátra lapozás új kérés nélkül.
+  A leírás `whitespace-pre-line` sima szöveg — **nem markdown**, tehát a poszt
+  oldali `PostContent`/XSS-kérdés itt fel sem merül.
+- **`/admin/learn`**: három hasáb (versenyszám | eset | algoritmus), a
+  kiválasztás tölti a jobbra lévőt. A kiválasztott elemeket a fából
+  **származtatjuk** (nem külön másolatból), így törlés/átnevezés után sem marad
+  félreálló állapot — és nincs `setState` effectben (a React Compiler lintje
+  tiltja). Egy modal szolgálja ki mind a három szintet (`LearnEntityModal`),
+  a mezők a szinttől függenek.
+- `AdminGate` mostantól **`children`-t is fogad** (megadás nélkül az admin
+  főoldal eszközrácsát rendereli) — így örökli a `/admin/learn` ugyanazt a
+  kaput. A navigációs sáv „Algoritmusok” linkje az `app/lib/site.ts`-ben van,
+  az admin csempe az `app/admin/lib/tools.ts`-ben.
 
 ## Instructions for Claude
 

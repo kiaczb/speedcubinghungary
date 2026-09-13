@@ -8,6 +8,7 @@ import (
 	"speedcubinghungary/internal/auth"
 	"speedcubinghungary/internal/competition"
 	"speedcubinghungary/internal/config"
+	"speedcubinghungary/internal/learn"
 	"speedcubinghungary/internal/middleware"
 	"speedcubinghungary/internal/post"
 	"speedcubinghungary/internal/special"
@@ -90,6 +91,40 @@ func New(
 		r.Put("/special/results/{liveResultId}/attempts/{attemptNumber}/elapsed", specialHandler.RecordElapsed)
 		r.Post("/allrounder/refresh", allrounderHandler.Refresh)
 	})
+	// Algoritmus-tanulás: Versenyszám → Eset → Algoritmus (+ opcionális videó).
+	//
+	// Az OLVASÁS publikus — a tanulóanyag mindenkinek szól, bejelentkezés nélkül
+	// is. Az ÍRÁS kizárólag admin: nincs felhasználói tartalom, a tartalmat az
+	// egyesület viszi fel. A jogosultságot a meglévő JWT + RBAC adja, ugyanúgy,
+	// mint a posztoknál — a frontend admin-kapuja csak kényelmi funkció.
+	learnRepo := learn.NewPostgresRepository(db)
+	learnService := learn.NewService(learnRepo)
+	learnHandler := learn.NewHandler(learnService)
+
+	r.Get("/learn/events", learnHandler.GetEvents)
+	r.Get("/learn/events/{id}", learnHandler.GetEvent)
+	r.Get("/learn/cases/{id}", learnHandler.GetCase)
+	r.Get("/learn/algorithms/{id}", learnHandler.GetAlgorithm)
+	// A teljes fa egy kérésben — az admin felület ebből építkezik.
+	r.Get("/learn/tree", learnHandler.GetTree)
+
+	r.Group(func(r chi.Router) {
+		r.Use(middleware.AuthMiddlewareWithConfig(cfg))
+		r.Use(middleware.RBACMiddleware(types.ROLE_ADMIN))
+
+		r.Post("/learn/events", learnHandler.CreateEvent)
+		r.Put("/learn/events/{id}", learnHandler.UpdateEvent)
+		r.Delete("/learn/events/{id}", learnHandler.DeleteEvent)
+
+		r.Post("/learn/cases", learnHandler.CreateCase)
+		r.Put("/learn/cases/{id}", learnHandler.UpdateCase)
+		r.Delete("/learn/cases/{id}", learnHandler.DeleteCase)
+
+		r.Post("/learn/algorithms", learnHandler.CreateAlgorithm)
+		r.Put("/learn/algorithms/{id}", learnHandler.UpdateAlgorithm)
+		r.Delete("/learn/algorithms/{id}", learnHandler.DeleteAlgorithm)
+	})
+
 	//Auth feature
 	authRepo := auth.NewPostgresRepository(db)
 	authService := auth.NewService(authRepo)
