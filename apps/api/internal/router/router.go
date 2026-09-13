@@ -10,6 +10,7 @@ import (
 	"speedcubinghungary/internal/config"
 	"speedcubinghungary/internal/middleware"
 	"speedcubinghungary/internal/post"
+	"speedcubinghungary/internal/prediction"
 	"speedcubinghungary/internal/special"
 	"speedcubinghungary/internal/types"
 
@@ -68,6 +69,18 @@ func New(
 	competitionHandler := competition.NewHandler(competitionService)
 
 	r.Get("/competitions/upcoming", competitionHandler.GetUpcoming)
+
+	predictionRepo := prediction.NewPostgresRepository(db)
+	predictionService := prediction.NewService(predictionRepo, competitionService)
+	predictionHandler := prediction.NewHandler(predictionService)
+
+	r.Get("/predictions", predictionHandler.GetContests)
+
+	r.Group(func(r chi.Router) {
+		r.Use(middleware.AuthMiddlewareWithConfig(cfg))
+		r.Use(middleware.RBACMiddleware(types.ROLE_ADMIN))
+		r.Post("/predictions", predictionHandler.CreateContest)
+	})
 
 	r.Get("/allrounder/standings", allrounderHandler.GetStandings)
 	r.Get("/allrounder/stream", allrounderHandler.StreamUpdates)

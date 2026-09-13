@@ -374,7 +374,8 @@ column off `special_dnf_attempts` — official results are no longer stored, §1
 `live_competition_id` on `allrounder_syncs` — this is what bounds when we open a
 WCA Live connection for a leg, §19) and `000012_add_post_images` (replaces
 `posts.image_path` with `posts.image_paths TEXT[]` — a post is a gallery now,
-see §20; the single cover image is backfilled into a one-element array).
+see §20; the single cover image is backfilled into a one-element array) and
+`000013_add_prediction_contests` (the Tippverseny tables, see §21).
 Applied automatically on API startup via
 `migrate.New("file:///migrations", cfg.DatabaseURL)` (the prod image bakes
 `db/migrations` to `/migrations`).
@@ -433,6 +434,24 @@ allrounder_results(competition_wca_id → allrounder_syncs, ordinal INT,
         PRIMARY KEY (competition_wca_id, ordinal))
 -- ⚠️ Az `ordinal` a WCA API válaszTÖMBJÉBEN elfoglalt hely, és a pontszámítás
 -- SORRENDFÜGGŐ (§19) — nem dekoráció, hanem a számítás bemenete.
+
+-- 000013: Tippverseny (§21). Csak a LÉTREHOZÁS + LISTÁZÁS van kész — a tippek
+-- leadása és a kiértékelés még nincs megépítve. A verseny NEVE/városa/dátuma
+-- NINCS itt tárolva (nincs FK sem competition_wca_id-re) — azt a listázáskor
+-- a competition csomag adja hozzá élőben a WCA API-ból, ugyanúgy, mint a
+-- /competitions/upcoming végpontnál. A `status` (nyitott/lezárt) számított
+-- érték a prediction_deadline-ból, nem oszlop.
+prediction_contests(id UUID PK, competition_wca_id TEXT, prediction_deadline TIMESTAMPTZ,
+        created_by → users(id), created_at, updated_at)
+
+prediction_podium_events(contest_id → prediction_contests, event_id TEXT,
+        PRIMARY KEY (contest_id, event_id))  -- amikhez dobogó-tippet (1-2-3. hely) kell leadni
+
+prediction_question_type ENUM ('person','time','number')
+
+prediction_extra_questions(id UUID PK, contest_id → prediction_contests,
+        prompt TEXT, type prediction_question_type, ordinal INT)
+        -- admin szabad kérdései, pl. "Hány rekord születik?" (number)
 ```
 
 Notes / current state:
@@ -466,7 +485,9 @@ chi router in `internal/router/router.go`. Global middleware: `middleware.JSON`
 | PUT  | `/posts/{id}` | JWT + `admin` | `post.UpdatePost` (multipart or JSON; `image_order` describes the **whole** resulting gallery, see §20; without it the legacy behaviour applies — new `images` are appended and `remove_image=true` clears the gallery; 404 if the id doesn't exist) |
 | GET  | `/uploads/*` | public | static file server over `cfg.UploadDir` (post images) |
 | DELETE | `/posts` | JWT + `admin` | `post.DeletePosts` (body `{ids:[]}`) |
-| GET  | `/competitions/upcoming` | public | `competition.GetUpcoming` (HU only) |
+| GET  | `/competitions/upcoming` | public | `competition.GetUpcoming` (HU only; DTO includes `eventIds` — the WCA API's `event_ids` passed straight through, no extra request) |
+| GET  | `/predictions` | public | `prediction.GetContests` — every tippverseny, `competitionName`/`City`/`Country`/`StartDate` enriched live from `competition.Service.GetUpcomingHungarian` (not stored, see §21). `status` is computed from `predictionDeadline`, never `"evaluated"` yet |
+| POST | `/predictions` | JWT + `admin` | `prediction.CreateContest` (JSON body `{competitionId, predictionDeadline (RFC3339), podiumEventIds[], extraQuestions: [{prompt, type: "person"\|"time"\|"number"}]}`; 400 on a past deadline, an empty `podiumEventIds`, or an invalid/empty question) |
 | GET  | `/allrounder/standings` | public | `allrounder.GetStandings` — a whole season's point standings in one payload (rules + competitions + people). `?year=` is optional; a **missing, unknown or malformed** year falls back to the default season, so there is no error branch — the response's `year` says which one you got |
 | POST | `/allrounder/refresh` | JWT + `admin` | `allrounder.Refresh` — re-fetches the season from the WCA API ignoring the cache TTLs. Admin-only because it generates upstream traffic |
 | GET  | `/allrounder/stream` | public | `allrounder.StreamUpdates` (**SSE**: data-less `update` event whenever the running leg changes on WCA Live; `?year=` optional). Opens successfully even when no leg is running. An open stream is what keeps the WCA Live subscription alive (§19) |
@@ -641,6 +662,11 @@ links in `app/layout.tsx` if needed. **Read the Next 16 docs first** (§3 warnin
 - The contact form (`app/contact/components/ContactForm.tsx`) is still **not
   wired to any backend** — it renders and validates nothing, submitting does
   nothing. Needs a route handler or a mail service.
+- **Tippverseny (`internal/prediction` + `/tools/prediction`) only covers
+  contest CREATION and LISTING so far — see §21.** Leaderboards/participant
+  counts/answer submission are not built yet; `participantCount` is hardcoded
+  to 0 and `status` only ever reports `open`/`closed` (never `evaluated`,
+  though the frontend type still has that state for later).
 - `/results`, `/rankings`, `/guide`, `/team`, `/registration` are linked from
   `QuickToolsSection` but **no such routes exist yet** (they 404).
 - ~~The Hungarian All-Rounder tool card links out to `allrounderpoints.vercel.app`~~
@@ -1255,6 +1281,83 @@ metaadat (alt szöveg, szerző).
 - ⚠️ A poszt TÖRLÉSE továbbra sem törli a képfájlokat a volume-ról (`DeletePosts`
   csak a DB sort). Ez a galéria előtt is így volt, de most posztonként 10 fájlt
   jelenthet.
+
+## 21. Tippverseny (`internal/prediction` + `/tools/prediction`)
+
+Admin által versenyenként indítható tippverseny: dobogó-tippek (1-2-3. hely)
+a verseny kiválasztott versenyszámaira, plusz szabad extra kérdések
+(versenyző/idő/szám típussal, pl. "Hány rekord születik?"). **Csak a
+LÉTREHOZÁS és a LISTÁZÁS van megépítve** — a tippek leadása (userenkénti
+válaszok tárolása) és a kiértékelés (pontozás, végeredmény) még nincs, ez egy
+külön, nagyobb következő lépés lesz. A frontend típusa (`PredictionStatus`)
+emiatt tartalmaz egy `"evaluated"` állapotot is, amit a backend ma sosem ad
+vissza.
+
+**A verseny metaadatai (név, város, dátum) NINCSENEK nálunk tárolva.** A
+`prediction_contests.competition_wca_id` csak egy szöveges azonosító, FK
+nélkül — ugyanaz a minta, mint a `special_competitions`-nál (§18): a verseny a
+WCA-tól jön, mi csak az *ID*-t tartjuk meg. Listázáskor a
+`prediction.Service.GetContests` a `competition.Service.GetUpcomingHungarian`-t
+hívja, és a választ `competitionId` szerint indexeli be — ha a WCA API hibázik,
+a tippverseny akkor is megjelenik, csak a verseny neve a nyers `competition_wca_id`
+lesz (lásd `buildContest` a `service.go`-ban). Emiatt `prediction.Service`
+egy szűk `CompetitionLookup` interfészen keresztül függ a competition csomagtól
+(nem a konkrét `*competition.Service`-en), hogy a tesztelhetőség és a réteghatár
+tiszta maradjon.
+
+**A `status` (nyitott/lezárt) számított érték, nem oszlop.** A
+`prediction_deadline`-ból számolódik minden listázáskor (`statusFor` a
+`model.go`-ban) — így a leadási határidő és a megjelenített állapot soha nem
+csúszhat szét.
+
+Adatmodell (lásd §7 a teljes séma-blokkhoz):
+- `prediction_contests` — egy sor egy tippversenyt jelent.
+- `prediction_podium_events` — melyik versenyszámokhoz kell dobogót tippelni
+  (gyerek tábla, `ON DELETE CASCADE`).
+- `prediction_extra_questions` — az admin szabad kérdései, `ordinal`-lal
+  megjelenítési sorrendben (mint az `allrounder_results.ordinal`, de itt csak
+  sorrendezéshez kell, nem számítási bemenet).
+
+A `POST /predictions` (`prediction.Handler.CreateContest`) mindhárom táblát
+**egy tranzakcióban** írja (`Repository.Create`) — vagy mindhárom sikerül,
+vagy egyik sem, hogy ne maradjon félig beírt tippverseny.
+
+### Frontend
+
+`/tools/prediction` (`app/tools/prediction/`), Server Component: a lista
+oldal (`page.tsx`) szerveroldalon hívja a `GET /predictions`-t (mint a
+`/posts`, `serverApiUrl()`-lel), és publikus — bárki látja a listát, csak a
+létrehozás admin (`useUser()` role-check a `PredictionList`-ben, mint a
+posztoknál).
+
+Az admin `CreatePredictionModal` (`components/CreatePredictionModal.tsx`):
+- Verseny-választó a `GET /competitions/upcoming`-ból (böngészőből,
+  `clientApiUrl()`), amely most már `eventIds`-t is ad versenyenként (lásd §8)
+  — ebből épül fel a dobogó-jelölők listája versenyenként, `@cubing/icons`
+  ikonokkal, `app/tools/prediction/lib/events.ts` névtérképpel (ugyanaz a
+  minta, mint az allrounder toolban, §19, de külön fájl — a két tool
+  egymástól függetlenül fejlődik).
+- Extra kérdés-szerkesztő (`ExtraQuestionsEditor.tsx`): tetszőleges számú sor,
+  típusonként (Versenyző/Idő/Szám) választható select-tel.
+- A POST body RFC3339 `predictionDeadline`-t küld
+  (`new Date(...).toISOString()`); a backend `time.Parse(time.RFC3339, ...)`-vel
+  olvassa.
+
+**A részletező oldal (`[id]/page.tsx`) egyelőre CSAK MEGJELENÍTÉS — nincs
+tippleadó logika.** `GET /predictions/{id}` nem létezik, ezért a szerveroldali
+`getPrediction` a teljes `GET /predictions` listát kéri le és szűr `id`
+szerint; ha a backend kap egyedi lekérő végpontot, ezt cseréld le. A
+`PodiumEventForm` (dobogó-versenyszámonként 1-2-3. hely input) és az
+`ExtraQuestionField` (kérdéstípusonként ikon + placeholder: person/time/number)
+egyszerű, kontrollálatlan `<input>`-ok — nincs `useState`, `onChange` vagy
+submit handler. A "Tipp leadása" gomb `disabled`, ha a tippverseny már
+`closed`.
+
+⚠️ Amikor a tippleadás/kiértékelés megépül, ne bővítsd tovább ezt a modult
+gondolkodás nélkül — a userenkénti válaszok tárolása és a pontozás logika
+valószínűleg saját táblát/service-réteget igényel, hasonlóan ahhoz, ahogy az
+allrounder is külön választja a "series config kódban" (§19) és a "letöltött
+eredmény DB-ben" felelősséget.
 
 ## Instructions for Claude
 

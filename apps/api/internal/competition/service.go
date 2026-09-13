@@ -31,6 +31,7 @@ func (s *Service) GetUpcomingHungarian() ([]Competition, error) {
 			City:      c.City,
 			Country:   countryName(c.CountryISO2),
 			URL:       c.URL,
+			EventIDs:  c.EventIDs,
 		})
 	}
 
