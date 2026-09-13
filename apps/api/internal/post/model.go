@@ -5,14 +5,19 @@ import (
 	"time"
 )
 
-
 type Post struct {
-	ID        string    `json:"id"`
-	Tag       types.PostTag `json:"tag"`
-	Title     string    `json:"title"`
-	Content   string    `json:"content"`
-	// ImagePath a borítókép publikus útvonala (pl. "/uploads/<uuid>.webp"),
-	// üres string ha a poszthoz nincs kép. A DB oszlop nullable.
-	ImagePath string    `json:"image_path"`
-	CreatedAt time.Time `json:"created_at"`
+	ID      string        `json:"id"`
+	Tag     types.PostTag `json:"tag"`
+	Title   string        `json:"title"`
+	Content string        `json:"content"`
+
+	ImagePaths []string  `json:"image_paths"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
+func (p Post) CoverImage() string {
+	if len(p.ImagePaths) == 0 {
+		return ""
+	}
+	return p.ImagePaths[0]
 }

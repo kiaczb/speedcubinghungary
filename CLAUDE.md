@@ -372,7 +372,9 @@ column off `special_dnf_attempts` — official results are no longer stored, §1
 `000010_add_allrounder_results` (the All-Rounder WCA results cache, see §19) and
 `000011_add_allrounder_competition_dates` (nullable `start_date`/`end_date`/
 `live_competition_id` on `allrounder_syncs` — this is what bounds when we open a
-WCA Live connection for a leg, §19).
+WCA Live connection for a leg, §19) and `000012_add_post_images` (replaces
+`posts.image_path` with `posts.image_paths TEXT[]` — a post is a gallery now,
+see §20; the single cover image is backfilled into a one-element array).
 Applied automatically on API startup via
 `migrate.New("file:///migrations", cfg.DatabaseURL)` (the prod image bakes
 `db/migrations` to `/migrations`).
@@ -381,7 +383,11 @@ Applied automatically on API startup via
 post_tag ENUM ('event','competition','news','announcement','report')
 
 posts(id UUID PK, title TEXT, tag post_tag, content TEXT,
-      image_path TEXT NULL,   -- 000002: '/uploads/<uuid>.<ext>' vagy NULL
+      image_paths TEXT[] NOT NULL DEFAULT '{}',
+                              -- 000002 + 000012: a poszt képei ('/uploads/<uuid>.<ext>')
+                              -- a MEGJELENÍTÉS sorrendjében. Az első elem a borítókép,
+                              -- a többi a poszt oldali carousel képe (§20). A sorrend
+                              -- maga az adat — ezért tömb és nem külön tábla.
       report_week DATE NULL UNIQUE,  -- 000003: heti riport idempotencia-kulcsa
                                      -- (a hét hétfője); normál posztnál NULL,
                                      -- és a Postgres a NULL-okat külön veszi
@@ -456,8 +462,8 @@ chi router in `internal/router/router.go`. Global middleware: `middleware.JSON`
 | GET  | `/posts` | public | `post.GetPosts` |
 | GET  | `/posts/{id}` | public | `post.GetPostByID` |
 | GET  | `/posts/latest` | public | `post.GetLatestPosts` (limit 3) |
-| POST | `/posts` | JWT + `admin` | `post.CreatePost` (accepts **multipart/form-data** with an optional `image` file, or the legacy JSON body) |
-| PUT  | `/posts/{id}` | JWT + `admin` | `post.UpdatePost` (multipart or JSON; keeps the current image unless a new `image` is sent or `remove_image=true`; 404 if the id doesn't exist) |
+| POST | `/posts` | JWT + `admin` | `post.CreatePost` (accepts **multipart/form-data** with up to `MaxImages` (10) repeated `images` file parts — their order is the gallery order — or the legacy JSON body) |
+| PUT  | `/posts/{id}` | JWT + `admin` | `post.UpdatePost` (multipart or JSON; `image_order` describes the **whole** resulting gallery, see §20; without it the legacy behaviour applies — new `images` are appended and `remove_image=true` clears the gallery; 404 if the id doesn't exist) |
 | GET  | `/uploads/*` | public | static file server over `cfg.UploadDir` (post images) |
 | DELETE | `/posts` | JWT + `admin` | `post.DeletePosts` (body `{ids:[]}`) |
 | GET  | `/competitions/upcoming` | public | `competition.GetUpcoming` (HU only) |
@@ -738,6 +744,15 @@ links in `app/layout.tsx` if needed. **Read the Next 16 docs first** (§3 warnin
   (`http.DetectContentType`), never from the client's Content-Type header, and the
   stored filename is a generated UUID — the client's filename is discarded to
   prevent path traversal. Limit is 5 MiB (`post.MaxImageSize`).
+- ⚠️ The prod API image's `USER appuser` (uid 1001) can't write into a **freshly
+  created** `uploads_data` named volume — Docker creates new named volumes owned
+  by `root:root`, so the very first upload on a new environment fails with
+  `open /data/uploads/...: permission denied`. Fixed via
+  `infra/docker/api/entrypoint.sh`: the container starts as **root**, `chown -R`s
+  `UPLOAD_DIR` to `appuser`, then `su-exec`s down to `appuser` to run the server
+  (`Dockerfile` stays `ENTRYPOINT`, no more `USER appuser` line/`CMD`). This makes
+  every fresh deploy (new server, new volume) self-healing — don't revert to a
+  bare `USER appuser` + `CMD` without re-solving this.
 - Constructor naming is inconsistent across packages (`NewPostgresRepository` vs
   `postgresRepository`, `Service` interface in `auth` vs concrete struct in `post`).
   When editing a package, match **that package's** existing style.
@@ -1160,6 +1175,62 @@ but the dev override mounts `web_node_modules` as a named volume — a new
 dependency needs `docker compose … exec web npm install` **and a `web` container
 restart** (the Next dev server caches the failed resolution). Test/prod rebuild
 the image, so `npm ci` handles it there.
+
+## 20. Post képgaléria / carousel (`posts.image_paths` + `PostGallery`)
+
+Egy poszthoz **legfeljebb 10 kép** tartozhat (`post.MaxImages`), és a poszt
+oldalán carousellel lehet lapozni köztük. Korábban egyetlen borítókép volt
+(`posts.image_path`), ezt váltotta a `000012_add_post_images`.
+
+**A sorrend maga az adat.** Az `image_paths` tömb sorrendje egyszerre három
+dolgot jelent: az **első elem a borítókép** (ez látszik a listákban és a
+`NewsCard`-on), a teljes tömb pedig a carousel lapozási sorrendje. Ezért tömb
+és nem külön `post_images` tábla: nem kell `ordinal` oszlop és join ahhoz, hogy
+a sorrend megmaradjon. Ne normalizáld külön táblába, hacsak nem lesz képenkénti
+metaadat (alt szöveg, szerző).
+
+### A multipart szerződés
+
+- **Létrehozás**: ismételt `images` fájlmezők, a beérkezés sorrendje = a galéria
+  sorrendje.
+- **Szerkesztés**: az `image_order` mező egy JSON tömb, ami a **teljes végső
+  galériát** írja le. Minden eleme vagy a poszt egy MEGLÉVŐ képútvonala, vagy a
+  `"new"` jelölő, amit sorban a most feltöltött `images` fájlok töltenek ki.
+  Ez egyetlen mezőben fejezi ki a törlést, az átrendezést és azt is, hogy egy új
+  kép a meglévők **közé** kerüljön — ez utóbbi miatt nem elég a „megtartandók
+  listája + a végére fűzött újak" megoldás.
+- ⚠️ `resolveImageOrder` (handler.go) **elutasít minden olyan útvonalat, ami nem
+  ehhez a poszthoz tartozik** — enélkül a kliens más poszt (vagy tetszőleges)
+  képére hivatkozhatna, és a takarítás azt törölné. Ugyanígy hibás, ha marad
+  hivatkozás nélküli feltöltött fájl (árva fájl lenne a volume-on), vagy ha egy
+  útvonal kétszer szerepel.
+- `image_order` **nélkül** a régi viselkedés él tovább (új képek a végére,
+  `remove_image=true` üríti a galériát), így egy korábbi kliens nem törik el. Az
+  `image` (egyes számú) fájlmezőt is fogadjuk még az `images` mellett.
+- A legfeljebb 10 kép × 5 MiB miatt a kérés törzsének korlátja `maxUploadBytes`;
+  a **fájlonkénti** méretet a `FileHeader.Size` alapján utasítjuk el, mert a
+  `SaveImage`-beli `LimitReader` csak csonkítana (néma félkép helyett 400).
+- Minden hibaágon takarítunk: `SaveImages` a saját félig kész feltöltéseit, a
+  handler pedig a sikertelen mentés utáni fájlokat törli. Sikeres mentés után a
+  galériából **kiesett** képek fájljai törlődnek.
+
+### Frontend
+
+- `app/posts/lib/postImage.ts`: `postCoverUrl()` a listákhoz (első kép),
+  `postImageUrls()` a carouselhez, `MAX_POST_IMAGES` a backend korlát tükre.
+- `app/posts/components/PostGallery.tsx` (client): **egyetlen képnél
+  szándékosan nincs vezérlő** — pontosan az a kép marad, ami korábban is látszott.
+  Több képnél nyilak, pöttyök, `ArrowLeft`/`ArrowRight` és mobilon húzás lapoz,
+  körbeérve. A képek egy eltolt sávban vannak (nem feltételes renderelés), így a
+  böngésző előre betölti a következőt.
+- A `CreatePostModal` galériaszerkesztője egyetlen listában kezeli a meglévő
+  (útvonal) és az új (File) képeket, hogy a sorrendjük együtt legyen
+  szerkeszthető; submitkor ebből áll elő az `image_order` és ebben a sorrendben
+  fűzi hozzá az `images` fájlokat. A kettőnek **egyeznie kell** — a backend
+  sorban tölti ki a `"new"` helyeket.
+- ⚠️ A poszt TÖRLÉSE továbbra sem törli a képfájlokat a volume-ról (`DeletePosts`
+  csak a DB sort). Ez a galéria előtt is így volt, de most posztonként 10 fájlt
+  jelenthet.
 
 ## Instructions for Claude
 

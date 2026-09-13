@@ -1,8 +1,9 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { FaArrowLeft, FaArrowRight } from "react-icons/fa";
 import { badgeMap, PostsItem, TagTypes } from "../types";
-import { postImageUrl } from "../lib/postImage";
+import { MAX_POST_IMAGES, postImageUrl } from "../lib/postImage";
 import { clientApiUrl } from "@/app/lib/api";
 import Button from "@/app/components/ui/Button";
 import Field, { controlClass } from "@/app/components/ui/Field";
@@ -18,6 +19,11 @@ const ACCEPTED_IMAGE_TYPES = [
   "image/gif",
 ];
 
+
+type GalleryItem =
+  | { kind: "existing"; path: string; url: string }
+  | { kind: "new"; file: File; url: string };
+
 type Props = {
   onClose: () => void;
   // Ha meg van adva, a modal SZERKESZTÉS módban indul (PUT /posts/{id}),
@@ -30,28 +36,27 @@ export default function CreatePostModal({ onClose, post }: Props) {
   const API_URL = clientApiUrl();
 
   const isEdit = Boolean(post);
-  const existingImageUrl = postImageUrl(post?.image_path);
 
   const [title, setTitle] = useState(post?.title ?? "");
   const [tag, setTag] = useState<TagTypes>(post?.tag ?? "news");
   const [content, setContent] = useState(post?.content ?? "");
-  const [image, setImage] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  // Szerkesztéskor: igaz, ha a felhasználó a MEGLÉVŐ képet törölni akarja
-  // (új kép feltöltése nélkül). Ilyenkor remove_image=true megy a backendnek.
-  const [removeExisting, setRemoveExisting] = useState(false);
+  const [images, setImages] = useState<GalleryItem[]>(() =>
+    (post?.image_paths ?? []).map((path) => ({
+      kind: "existing" as const,
+      path,
+      url: postImageUrl(path) ?? "",
+    })),
+  );
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
-  // Ref-ben tartjuk, hogy csere/unmount esetén fel tudjuk szabadítani anélkül,
-  // hogy effectben hívnánk setState-et.
-  const objectUrlRef = useRef<string | null>(null);
 
-  const shownImage = previewUrl ?? (removeExisting ? null : existingImageUrl);
+  const objectUrlsRef = useRef<Set<string>>(new Set());
 
   const contentLength = content.trim().length;
+  const remainingSlots = MAX_POST_IMAGES - images.length;
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -70,55 +75,79 @@ export default function CreatePostModal({ onClose, post }: Props) {
     };
   }, []);
 
-  // Unmountkor szabadítsuk fel az utolsó objectURL-t (különben memóriát szivárogtat).
   useEffect(() => {
+    const urls = objectUrlsRef.current;
     return () => {
-      if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+      urls.forEach((url) => URL.revokeObjectURL(url));
     };
   }, []);
 
-  const applyImage = (file: File | null) => {
-    if (objectUrlRef.current) {
-      URL.revokeObjectURL(objectUrlRef.current);
-      objectUrlRef.current = null;
-    }
-    if (file) objectUrlRef.current = URL.createObjectURL(file);
+  const handleFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
 
-    setPreviewUrl(objectUrlRef.current);
-    setImage(file);
-  };
-
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0] ?? null;
+    e.target.value = "";
     setError(null);
+    if (files.length === 0) return;
 
-    if (!file) {
-      applyImage(null);
-      return;
+    const accepted: GalleryItem[] = [];
+    let rejectedType = false;
+    let rejectedSize = false;
+    let rejectedCount = false;
+
+    for (const file of files) {
+      if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
+        rejectedType = true;
+        continue;
+      }
+      if (file.size > MAX_IMAGE_BYTES) {
+        rejectedSize = true;
+        continue;
+      }
+      if (images.length + accepted.length >= MAX_POST_IMAGES) {
+        rejectedCount = true;
+        break;
+      }
+
+      const url = URL.createObjectURL(file);
+      objectUrlsRef.current.add(url);
+      accepted.push({ kind: "new", file, url });
     }
-    if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
+
+    if (accepted.length > 0) setImages([...images, ...accepted]);
+
+    if (rejectedCount) {
+      setError(`Legfeljebb ${MAX_POST_IMAGES} kép csatolható a poszthoz.`);
+    } else if (rejectedSize) {
+      setError("A kihagyott kép(ek) túl nagyok — legfeljebb 5 MB lehet egy kép.");
+    } else if (rejectedType) {
       setError(
         "Nem támogatott képformátum. Engedélyezett: JPEG, PNG, WebP, GIF.",
       );
-      e.target.value = "";
-      applyImage(null);
-      return;
     }
-    if (file.size > MAX_IMAGE_BYTES) {
-      setError("A kép túl nagy — legfeljebb 5 MB lehet.");
-      e.target.value = "";
-      applyImage(null);
-      return;
-    }
-    setRemoveExisting(false);
-    applyImage(file);
   };
 
-  const clearImage = () => {
-    applyImage(null);
-    // Szerkesztéskor a meglévő képet is töröljük (remove_image=true a submitben).
-    if (isEdit) setRemoveExisting(true);
-    if (fileInputRef.current) fileInputRef.current.value = "";
+  const removeImage = (index: number) => {
+    const item = images[index];
+    if (item.kind === "new") {
+      URL.revokeObjectURL(item.url);
+      objectUrlsRef.current.delete(item.url);
+    }
+    setImages(images.filter((_, i) => i !== index));
+    setError(null);
+  };
+
+  // A sorrend maga az adat: az első kép a borítókép, és a poszt oldalán a
+  // carousel is ebben a sorrendben lapoz.
+  const moveImage = (index: number, delta: number) => {
+    const target = index + delta;
+    if (target < 0 || target >= images.length) return;
+
+    const reordered = [...images];
+    [reordered[index], reordered[target]] = [
+      reordered[target],
+      reordered[index],
+    ];
+    setImages(reordered);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -140,11 +169,20 @@ export default function CreatePostModal({ onClose, post }: Props) {
     formData.append("title", title.trim());
     formData.append("tag", tag);
     formData.append("content", content.trim());
-    if (image) {
-      formData.append("image", image);
-    } else if (isEdit && removeExisting) {
-      // Nincs új kép, de a meglévőt törölni kell.
-      formData.append("remove_image", "true");
+
+
+    for (const item of images) {
+      if (item.kind === "new") formData.append("images", item.file);
+    }
+
+    if (isEdit) {
+
+      formData.append(
+        "image_order",
+        JSON.stringify(
+          images.map((item) => (item.kind === "existing" ? item.path : "new")),
+        ),
+      );
     }
 
     setSubmitting(true);
@@ -255,33 +293,86 @@ export default function CreatePostModal({ onClose, post }: Props) {
             />
           </Field>
 
-          <Field label="Borítókép" htmlFor="post-image" optional>
+          <Field
+            label="Képek"
+            htmlFor="post-images"
+            optional
+            hint={
+              <span className="text-muted-foreground">
+                <span className="tabular font-mono">{images.length}</span> /{" "}
+                {MAX_POST_IMAGES} kép
+              </span>
+            }
+          >
             <input
-              id="post-image"
+              id="post-images"
               ref={fileInputRef}
               type="file"
+              multiple
               accept={ACCEPTED_IMAGE_TYPES.join(",")}
-              onChange={handleImageChange}
-              className="w-full cursor-pointer text-sm text-muted-foreground file:mr-3 file:cursor-pointer file:rounded-control file:border file:border-line file:bg-surface-muted file:px-4 file:py-2 file:text-sm file:font-medium file:text-foreground hover:file:bg-line"
+              onChange={handleFilesChange}
+              disabled={remainingSlots <= 0}
+              className="w-full cursor-pointer text-sm text-muted-foreground file:mr-3 file:cursor-pointer file:rounded-control file:border file:border-line file:bg-surface-muted file:px-4 file:py-2 file:text-sm file:font-medium file:text-foreground hover:file:bg-line disabled:cursor-not-allowed disabled:opacity-50"
             />
-            {shownImage && (
-              <div className="mt-3 flex items-start gap-3">
-                {/* Sima img: a kép domainje környezetenként más — így nem kell remotePatterns. */}
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={shownImage}
-                  alt="Előnézet"
-                  className="max-h-40 w-auto rounded-control border border-line"
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={clearImage}
-                >
-                  Kép eltávolítása
-                </Button>
-              </div>
+
+            {images.length > 0 && (
+              <>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Az első kép a borítókép — ez látszik a listákban. A poszt
+                  oldalán a képek ebben a sorrendben lapozhatók.
+                </p>
+
+                <ul className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                  {images.map((item, index) => (
+                    <li
+                      key={item.url}
+                      className="relative overflow-hidden rounded-control border border-line bg-surface-muted"
+                    >
+                      {/* Sima img: a kép domainje környezetenként más — így nem kell remotePatterns. */}
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={item.url}
+                        alt={`${index + 1}. kép előnézete`}
+                        className="aspect-video w-full object-cover"
+                      />
+
+                      <span className="tabular absolute left-1.5 top-1.5 rounded-control bg-surface-inverse/75 px-1.5 py-0.5 font-mono text-[11px] text-white">
+                        {index === 0 ? "Borító" : index + 1}
+                      </span>
+
+                      <button
+                        type="button"
+                        onClick={() => removeImage(index)}
+                        aria-label={`${index + 1}. kép eltávolítása`}
+                        className="absolute right-1.5 top-1.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-surface-inverse/75 text-sm leading-none text-white transition-colors duration-200 ease-smooth hover:bg-brand-red"
+                      >
+                        ×
+                      </button>
+
+                      <div className="flex justify-center gap-1 border-t border-line bg-surface p-1">
+                        <button
+                          type="button"
+                          onClick={() => moveImage(index, -1)}
+                          disabled={index === 0}
+                          aria-label={`${index + 1}. kép előrébb`}
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-control text-muted-foreground transition-colors duration-200 ease-smooth hover:bg-surface-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
+                        >
+                          <FaArrowLeft className="h-3 w-3" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => moveImage(index, 1)}
+                          disabled={index === images.length - 1}
+                          aria-label={`${index + 1}. kép hátrébb`}
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-control text-muted-foreground transition-colors duration-200 ease-smooth hover:bg-surface-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
+                        >
+                          <FaArrowRight className="h-3 w-3" />
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </>
             )}
           </Field>
 

@@ -3,8 +3,12 @@ export type PostsItem = {
   tag: TagTypes;
   title: string;
   content: string;
-  /** A borítókép API-relatív útvonala (pl. "/uploads/<uuid>.webp"); az API ""-t ad kép nélküli poszthoz. */
-  image_path?: string;
+  /**
+   * A poszt képeinek API-relatív útvonalai (pl. "/uploads/<uuid>.webp") a
+   * MEGJELENÍTÉS sorrendjében — az első elem a borítókép, a többi a poszt
+   * oldalán lévő carousel további képe. Az API kép nélküli poszthoz []-t ad.
+   */
+  image_paths?: string[];
   created_at: string;
 };
 

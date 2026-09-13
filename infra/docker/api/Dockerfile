@@ -27,11 +27,15 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /server ./cm
 # ---------- prod: minimal runtime image ----------
 FROM alpine:3.20 AS prod
 # ca-certificates: required for outbound HTTPS (WCA API).
-RUN apk add --no-cache ca-certificates && adduser -S -u 1001 appuser
+# su-exec: lets the entrypoint start as root (to chown a fresh uploads volume,
+# which Docker creates root:root) and then drop to appuser before exec'ing.
+RUN apk add --no-cache ca-certificates su-exec && adduser -S -u 1001 appuser
 WORKDIR /app
 COPY --from=build /server /app/server
 # golang-migrate reads file:///migrations on startup (see cmd/server/main.go).
 COPY db/migrations /migrations
-USER appuser
+COPY infra/docker/api/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+# Stays root here on purpose — entrypoint.sh drops to appuser itself.
 EXPOSE 8080
-CMD ["/app/server"]
+ENTRYPOINT ["/entrypoint.sh"]
