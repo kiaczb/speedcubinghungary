@@ -4,8 +4,12 @@ import (
 	"log"
 	"net/http"
 	"speedcubinghungary/internal/allrounder"
+	"speedcubinghungary/internal/auth"
+	"speedcubinghungary/internal/competition"
 	"speedcubinghungary/internal/config"
 	"speedcubinghungary/internal/db"
+	"speedcubinghungary/internal/post"
+	"speedcubinghungary/internal/prediction"
 	"speedcubinghungary/internal/router"
 	"speedcubinghungary/internal/special"
 
@@ -37,13 +41,6 @@ func main() {
 		log.Fatal("Migration run error:", err)
 	}
 
-	// 3. Budapest Special: WCA Live alapú eredménytábla. A versenyt a NÉZŐ
-	//    választja ki kérésenként — nincs szerveroldali "figyelt verseny". A
-	//    hivatalos eredményt NEM tároljuk: a tracker a memóriában tartja, és
-	//    amíg legalább egy nézet nyitva van, a WCA Live subscription tartja
-	//    frissen. A tracker és a HTTP réteg ugyanazon a Broadcasteren osztozik,
-	//    hogy a beérkező frissítésekről a megnyitott felületek azonnal (SSE-n)
-	//    értesüljenek.
 	specialRepo := special.NewPostgresRepository(dbConn)
 	liveClient := special.NewLiveClient(cfg.WCALiveURL)
 	specialBroadcaster := special.NewBroadcaster()
@@ -72,8 +69,24 @@ func main() {
 		allrounderBroadcaster,
 	))
 
-	// 5. Create router with config
-	r := router.New(dbConn, cfg, specialHandler, allrounderHandler)
+	// 5. Post feature
+	postHandler := post.NewHandler(post.NewService(post.NewPostgresRepository(dbConn)), cfg.UploadDir)
+
+	// 6. Competition feature (WCA API proxy)
+	competitionService := competition.NewService(competition.NewWCARepository())
+	competitionHandler := competition.NewHandler(competitionService)
+
+	// 7. Tippverseny (a versenyadatokat a competition service-en keresztül kéri le)
+	predictionHandler := prediction.NewHandler(prediction.NewService(
+		prediction.NewPostgresRepository(dbConn),
+		competitionService,
+	))
+
+	// 8. Auth (WCA OAuth)
+	authHandler := auth.NewHandler(auth.NewService(auth.NewPostgresRepository(dbConn)))
+
+	// 9. Create router with config
+	r := router.New(cfg, postHandler, competitionHandler, predictionHandler, authHandler, specialHandler, allrounderHandler)
 
 	log.Printf("Server started on :8080 (mode: %s)", cfg.Deployment)
 	log.Fatal(http.ListenAndServe("0.0.0.0:8080", r))

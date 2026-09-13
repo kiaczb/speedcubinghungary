@@ -83,7 +83,9 @@ speedcubinghungary/
 
 Each feature package (`auth`, `post`, `competition`) follows the same **layered
 vertical slice**: `model.go` (types) → `repository.go` (data access) → `service.go`
-(business logic) → `handler.go` (HTTP). Wiring happens in `internal/router/router.go`.
+(business logic) → `handler.go` (HTTP). Wiring (repo → service → handler) happens
+in `cmd/server/main.go`; `internal/router/router.go` takes the finished handlers
+as parameters and only registers routes.
 
 - `auth`: exchanges WCA OAuth code for a WCA token, calls WCA `/me`, upserts the
   user, mints the app JWT cookie. Owns the `users` table.
@@ -216,8 +218,11 @@ Every feature is a package under `internal/<feature>/` with the same four files:
 4. **`handler.go`** — HTTP handlers on a `Handler` struct holding the service.
    Decode request, call service, encode JSON response / `http.Error`. `NewHandler(service)`.
 
-Wiring is manual constructor injection in `router.New` — `repo → service → handler`,
-then register routes. **There is no DI framework; follow this manual pattern.**
+Wiring is manual constructor injection in `cmd/server/main.go` — `repo → service →
+handler`, one block per feature, then the finished handlers are passed into
+`router.New(cfg, postHandler, competitionHandler, predictionHandler, authHandler,
+specialHandler, allrounderHandler)`, which only registers routes.
+**There is no DI framework; follow this manual pattern.**
 
 Other Go conventions observed:
 - Errors are surfaced with `http.Error(w, err.Error(), status)` and returned up the
@@ -633,14 +638,16 @@ unless explicitly asked.
 2. Add business logic to `service.go` (validate in a `validator.go` if the feature
    has one).
 3. Add the handler in `handler.go` (decode → call service → encode/`http.Error`).
-4. Register the route in `router.New`; wrap in the auth/RBAC `r.Group` if protected.
+4. Register the route in `router.New` on the handler already passed in; wrap in
+   the auth/RBAC `r.Group` if protected.
 5. Add a table-driven / testify test next to the file (`*_test.go`). Mock the repo
    with testify `mock` (see `auth/service_test.go`) or `go-sqlmock` for SQL.
 
 ### Add a new backend feature package
 Mirror `internal/post/`: create `internal/<feature>/{model,repository,service,handler}.go`
 with the same constructor + interface shape, add any shared enum to
-`internal/types/`, and wire it in `router.New`.
+`internal/types/`, wire the repo → service → handler in `cmd/server/main.go`, and
+pass the handler into `router.New` (add it as a new parameter) to register routes.
 
 ### Add a frontend route
 Create `apps/web/app/<route>/page.tsx` (+ colocated `components/`, `lib/`,
@@ -734,7 +741,7 @@ links in `app/layout.tsx` if needed. **Read the Next 16 docs first** (§3 warnin
 ## 15. Recurring patterns cheat-sheet
 
 - Go feature = `model/repository/service/handler` + interface + `NewXxx`
-  constructor, wired manually in `router.New`.
+  constructor, wired manually in `cmd/server/main.go`; `router.New` only routes.
 - HTTP handler shape: decode into a local anonymous request struct → call service →
   `json.NewEncoder(w).Encode(...)` or `http.Error(w, err.Error(), status)`.
 - Repository returns domain structs + `error`; SQL is raw and parameterized.
@@ -1364,8 +1371,9 @@ eredmény DB-ben" felelősséget.
 When working in this repo:
 
 1. **Follow existing patterns instead of introducing new ones.** New Go features
-   use the `model/repository/service/handler` + `router.New` wiring shape. New
-   frontend routes colocate `components/lib/types` under `app/<route>/`.
+   use the `model/repository/service/handler` shape, wired in `cmd/server/main.go`
+   and passed into `router.New` (which only registers routes). New frontend
+   routes colocate `components/lib/types` under `app/<route>/`.
 2. **Read the Next.js 16 docs before writing frontend code** — this Next version
    differs from training data. See `apps/web/AGENTS.md`.
 3. **Minimize unnecessary refactoring.** Don't rename constructors, unify JSON

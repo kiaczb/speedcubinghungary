@@ -2,7 +2,6 @@
 package router
 
 import (
-	"database/sql"
 	"net/http"
 	"speedcubinghungary/internal/allrounder"
 	"speedcubinghungary/internal/auth"
@@ -18,10 +17,14 @@ import (
 	"github.com/go-chi/cors"
 )
 
-// New összeállítja a HTTP routert.
+// New összeállítja a HTTP routert. A wiring (repo → service → handler) a
+// main.go-ban történik; ez a függvény kész handlereket vár és csak route-ol.
 func New(
-	db *sql.DB,
 	cfg *config.Config,
+	postHandler *post.Handler,
+	competitionHandler *competition.Handler,
+	predictionHandler *prediction.Handler,
+	authHandler *auth.Handler,
 	specialHandler *special.Handler,
 	allrounderHandler *allrounder.Handler,
 ) *chi.Mux {
@@ -34,14 +37,11 @@ func New(
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
 		AllowCredentials: true, // kell a cookie-hoz
 	}))
-	// Post routes
-	repo := post.NewPostgresRepository(db)
-	service := post.NewService(repo)
-	handler := post.NewHandler(service, cfg.UploadDir)
 
-	r.Get("/posts", handler.GetPosts)
-	r.Get("/posts/{id}", handler.GetPostByID)
-	r.Get("/posts/latest", handler.GetLatestPosts)
+	// Post routes
+	r.Get("/posts", postHandler.GetPosts)
+	r.Get("/posts/{id}", postHandler.GetPostByID)
+	r.Get("/posts/latest", postHandler.GetLatestPosts)
 
 	// Feltöltött posztképek kiszolgálása a volume-ról (publikus, csak olvasás).
 	// A globális middleware.JSON minden válaszra application/json-t állít, és a Go
@@ -58,21 +58,13 @@ func New(
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.AuthMiddlewareWithConfig(cfg))
 		r.Use(middleware.RBACMiddleware(types.ROLE_ADMIN))
-		r.Post("/posts", handler.CreatePost)
-		r.Put("/posts/{id}", handler.UpdatePost)
-		r.Delete("/posts", handler.DeletePosts)
+		r.Post("/posts", postHandler.CreatePost)
+		r.Put("/posts/{id}", postHandler.UpdatePost)
+		r.Delete("/posts", postHandler.DeletePosts)
 	})
 
 	// Competition routes (WCA API proxy)
-	competitionRepo := competition.NewWCARepository()
-	competitionService := competition.NewService(competitionRepo)
-	competitionHandler := competition.NewHandler(competitionService)
-
 	r.Get("/competitions/upcoming", competitionHandler.GetUpcoming)
-
-	predictionRepo := prediction.NewPostgresRepository(db)
-	predictionService := prediction.NewService(predictionRepo, competitionService)
-	predictionHandler := prediction.NewHandler(predictionService)
 
 	r.Get("/predictions", predictionHandler.GetContests)
 
@@ -85,13 +77,6 @@ func New(
 	r.Get("/allrounder/standings", allrounderHandler.GetStandings)
 	r.Get("/allrounder/stream", allrounderHandler.StreamUpdates)
 
-	// Budapest Special: WCA Live alapú eredménytábla a DNF-ek tényleges idejével.
-	//
-	// A versenyt a NÉZŐ választja ki (?competition=), nincs szerveroldali
-	// "figyelt verseny". Az OLVASÁS publikus — ugyanez a verseny eredménytáblája
-	// a WCA Live-on is bárki számára látható, a DNF-idők pedig épp azért
-	// készülnek, hogy a versenyzők lássák őket. Egyedül a DNF-idő RÖGZÍTÉSE
-	// admin, mert az a verseny üzemeltetése.
 	r.Get("/special/competitions", specialHandler.GetCompetitions)
 	r.Get("/special/report", specialHandler.GetReport)
 	r.Get("/special/stream", specialHandler.StreamUpdates)
@@ -103,11 +88,8 @@ func New(
 		r.Put("/special/results/{liveResultId}/attempts/{attemptNumber}/elapsed", specialHandler.RecordElapsed)
 		r.Post("/allrounder/refresh", allrounderHandler.Refresh)
 	})
-	//Auth feature
-	authRepo := auth.NewPostgresRepository(db)
-	authService := auth.NewService(authRepo)
-	authHandler := auth.NewHandler(authService)
 
+	// Auth feature
 	r.Get("/login/callback", authHandler.LoginCallback)
 
 	// /me route - csak bejelentkezett user-eknek
@@ -115,7 +97,6 @@ func New(
 		r.Use(middleware.AuthMiddlewareWithConfig(cfg)) // Use config
 		r.Get("/me", authHandler.Me)
 		r.Post("/logout", authHandler.Logout)
-
 	})
 
 	return r
