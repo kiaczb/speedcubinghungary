@@ -753,6 +753,19 @@ links in `app/layout.tsx` if needed. **Read the Next 16 docs first** (§3 warnin
   (`Dockerfile` stays `ENTRYPOINT`, no more `USER appuser` line/`CMD`). This makes
   every fresh deploy (new server, new volume) self-healing — don't revert to a
   bare `USER appuser` + `CMD` without re-solving this.
+- ⚠️ **Per-Dockerfile `.dockerignore` files can exclude a file the same
+  Dockerfile `COPY`s.** `infra/docker/api/Dockerfile.dockerignore` blanket-excludes
+  `infra` (to keep the API's build context — repo root — lean), but the Dockerfile
+  also `COPY infra/docker/api/entrypoint.sh /entrypoint.sh` (added by the fix
+  above, in a later commit that didn't touch the ignore file). The build only
+  failed once a clean host actually had to build that layer fresh instead of
+  hitting cache — `"/infra/docker/api/entrypoint.sh": not found"`. Fixed with a
+  negation line, `!infra/docker/api/entrypoint.sh`, placed **right after** the
+  blanket `infra` exclusion. If you add a new `COPY` from a directory that a
+  `Dockerfile.dockerignore` excludes wholesale, you must add a matching `!`
+  negation line, or a fresh (uncached) build will fail the same way. Test with
+  `docker build -f infra/docker/api/Dockerfile --target prod .` — a cached build
+  can hide this for a long time.
 - Constructor naming is inconsistent across packages (`NewPostgresRepository` vs
   `postgresRepository`, `Service` interface in `auth` vs concrete struct in `post`).
   When editing a package, match **that package's** existing style.

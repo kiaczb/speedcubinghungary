@@ -4,6 +4,10 @@
 .github
 docs
 infra
+# entrypoint.sh is COPYed by the Dockerfile itself (root-drop for uploads
+# volume permissions) — un-ignore it despite the blanket `infra` exclusion
+# above, or the build fails with "not found" (see CLAUDE.md §17).
+!infra/docker/api/entrypoint.sh
 apps/web
 apps/scripts
 **/node_modules
