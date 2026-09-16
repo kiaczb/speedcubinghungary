@@ -29,7 +29,7 @@ FROM alpine:3.20 AS prod
 # ca-certificates: required for outbound HTTPS (WCA API).
 # su-exec: lets the entrypoint start as root (to chown a fresh uploads volume,
 # which Docker creates root:root) and then drop to appuser before exec'ing.
-RUN apk add --no-cache ca-certificates su-exec && adduser -S -u 1001 appuser
+RUN apk add --no-cache ca-certificates su-exec && addgroup -S -g 1001 appuser && adduser -S -u 1001 -G appuser appuser
 WORKDIR /app
 COPY --from=build /server /app/server
 # golang-migrate reads file:///migrations on startup (see cmd/server/main.go).
