@@ -93,6 +93,11 @@ func TestValidateNewContest_ExtraQuestions(t *testing.T) {
 			nil,
 		},
 		{
+			"text type valid",
+			[]ExtraQuestion{{Prompt: "Milyen új trükköt fogunk látni?", Type: types.QUESTION_TEXT}},
+			nil,
+		},
+		{
 			"no extra questions is fine",
 			nil,
 			nil,

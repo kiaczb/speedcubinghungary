@@ -274,7 +274,7 @@ export default function CreatePredictionModal({ onClose }: Props) {
             label="Extra kérdések"
             htmlFor="prediction-extra-questions"
             optional
-            hint="Pl. versenyző, idő vagy szám tippelése — például 'Ki nyeri a 3x3x3-at?' vagy 'Hány rekord születik?'."
+            hint="Pl. versenyző, idő, szám vagy szabad szöveg tippelése — például 'Ki nyeri a 3x3x3-at?' vagy 'Hány rekord születik?'."
           >
             <ExtraQuestionsEditor
               questions={extraQuestions}

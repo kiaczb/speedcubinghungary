@@ -380,7 +380,9 @@ column off `special_dnf_attempts` — official results are no longer stored, §1
 WCA Live connection for a leg, §19) and `000012_add_post_images` (replaces
 `posts.image_path` with `posts.image_paths TEXT[]` — a post is a gallery now,
 see §20; the single cover image is backfilled into a one-element array) and
-`000013_add_prediction_contests` (the Tippverseny tables, see §21).
+`000013_add_prediction_contests` (the Tippverseny tables, see §21) and
+`000014_add_prediction_text_question_type` (adds the `'text'` value to
+`prediction_question_type` — a free-text extra question).
 Applied automatically on API startup via
 `migrate.New("file:///migrations", cfg.DatabaseURL)` (the prod image bakes
 `db/migrations` to `/migrations`).
@@ -452,7 +454,7 @@ prediction_contests(id UUID PK, competition_wca_id TEXT, prediction_deadline TIM
 prediction_podium_events(contest_id → prediction_contests, event_id TEXT,
         PRIMARY KEY (contest_id, event_id))  -- amikhez dobogó-tippet (1-2-3. hely) kell leadni
 
-prediction_question_type ENUM ('person','time','number')
+prediction_question_type ENUM ('person','time','number','text')  -- 'text': 000014
 
 prediction_extra_questions(id UUID PK, contest_id → prediction_contests,
         prompt TEXT, type prediction_question_type, ordinal INT)
@@ -491,8 +493,11 @@ chi router in `internal/router/router.go`. Global middleware: `middleware.JSON`
 | GET  | `/uploads/*` | public | static file server over `cfg.UploadDir` (post images) |
 | DELETE | `/posts` | JWT + `admin` | `post.DeletePosts` (body `{ids:[]}`) |
 | GET  | `/competitions/upcoming` | public | `competition.GetUpcoming` (HU only; DTO includes `eventIds` — the WCA API's `event_ids` passed straight through, no extra request) |
+| GET  | `/competitions/{id}/psych-sheet/{eventId}` | public | `competition.GetPsychSheet` — proxy of the WCA psych sheet (PR-ranked start list) for one event: `[{name, wcaId, position}]`, `position` 0 = no PR yet, `wcaId` empty for newcomers. Ids validated against `^[A-Za-z0-9]{1,64}$` (400), upstream failure 502. **Cached 15 min + singleflight**, see §21 |
+| GET  | `/competitions/{id}/competitors` | public | `competition.GetCompetitors` — every accepted, competing registrant from the public WCIF, sorted by name: `[{name, wcaId}]`. (The WCA `/registrations` endpoint only carries user ids, no names — that's why WCIF.) Same validation/caching as above |
 | GET  | `/predictions` | public | `prediction.GetContests` — every tippverseny, `competitionName`/`City`/`Country`/`StartDate` enriched live from `competition.Service.GetUpcomingHungarian` (not stored, see §21). `status` is computed from `predictionDeadline`, never `"evaluated"` yet |
-| POST | `/predictions` | JWT + `admin` | `prediction.CreateContest` (JSON body `{competitionId, predictionDeadline (RFC3339), podiumEventIds[], extraQuestions: [{prompt, type: "person"\|"time"\|"number"}]}`; 400 on a past deadline, an empty `podiumEventIds`, or an invalid/empty question) |
+| POST | `/predictions` | JWT + `admin` | `prediction.CreateContest` (JSON body `{competitionId, predictionDeadline (RFC3339), podiumEventIds[], extraQuestions: [{prompt, type: "person"\|"time"\|"number"\|"text"}]}`; 400 on a past deadline, an empty `podiumEventIds`, or an invalid/empty question) |
+| DELETE | `/predictions/{id}` | JWT + `admin` | `prediction.DeleteContest` — deletes the contest row; `prediction_podium_events`/`prediction_extra_questions` cascade via their FK (`ON DELETE CASCADE`), no transaction needed. 404 if the id doesn't exist |
 | GET  | `/allrounder/standings` | public | `allrounder.GetStandings` — a whole season's point standings in one payload (rules + competitions + people). `?year=` is optional; a **missing, unknown or malformed** year falls back to the default season, so there is no error branch — the response's `year` says which one you got |
 | POST | `/allrounder/refresh` | JWT + `admin` | `allrounder.Refresh` — re-fetches the season from the WCA API ignoring the cache TTLs. Admin-only because it generates upstream traffic |
 | GET  | `/allrounder/stream` | public | `allrounder.StreamUpdates` (**SSE**: data-less `update` event whenever the running leg changes on WCA Live; `?year=` optional). Opens successfully even when no leg is running. An open stream is what keeps the WCA Live subscription alive (§19) |
@@ -670,10 +675,10 @@ links in `app/layout.tsx` if needed. **Read the Next 16 docs first** (§3 warnin
   wired to any backend** — it renders and validates nothing, submitting does
   nothing. Needs a route handler or a mail service.
 - **Tippverseny (`internal/prediction` + `/tools/prediction`) only covers
-  contest CREATION and LISTING so far — see §21.** Leaderboards/participant
-  counts/answer submission are not built yet; `participantCount` is hardcoded
-  to 0 and `status` only ever reports `open`/`closed` (never `evaluated`,
-  though the frontend type still has that state for later).
+  contest CREATION, LISTING and DELETION so far — see §21.** Leaderboards/
+  participant counts/answer submission are not built yet; `participantCount`
+  is hardcoded to 0 and `status` only ever reports `open`/`closed` (never
+  `evaluated`, though the frontend type still has that state for later).
 - `/results`, `/rankings`, `/guide`, `/team`, `/registration` are linked from
   `QuickToolsSection` but **no such routes exist yet** (they 404).
 - ~~The Hungarian All-Rounder tool card links out to `allrounderpoints.vercel.app`~~
@@ -687,6 +692,36 @@ links in `app/layout.tsx` if needed. **Read the Next 16 docs first** (§3 warnin
 - `apps/api/tmp/` (air build output) and `__pycache__/` dirs are build artifacts.
 - No Redis / message queue / object storage in the stack — the only data store is
   Postgres. Don't assume a cache/queue layer exists.
+- ⚠️ **On the current staging host (`RylothNet`), the internet-facing Caddy is
+  NOT the compose-managed `caddy` service from `infra/docker-compose.yml`.**
+  It's a separate, manually-started `caddy` container (image `caddy:latest`,
+  container name literally `caddy`, config bind-mounted from
+  `/home/benekin/caddy/Caddyfile` on the host — **not tracked in this repo**)
+  that also proxies an unrelated `rylothnet.ddns.net` domain (Jellyfin). It
+  exists because the compose `caddy` service can't bind :80/:443 — something
+  already holds those ports on this host — so `up -d` for the `proxy` profile
+  fails with "port is already allocated" and the compose `caddy` service stays
+  `Created`/`Exited`, harmlessly. Two consequences if the API/web containers
+  are ever recreated with a different Compose project name (i.e.
+  `COMPOSE_PROJECT_NAME`, which sets the container-name prefix and the
+  `<project>_appnet` network name) — this already happened once
+  (`schu_test` → `speedcubinghungary_test`) and caused a same-day 502 on both
+  login and `/competitions/upcoming`, because both proxy through this
+  container:
+  1. `/home/benekin/caddy/Caddyfile`'s `reverse_proxy` targets hardcode the
+     **container names** (not service names — this Caddy isn't in the compose
+     network's service-DNS scope) and must be updated by hand to match.
+  2. The `caddy` container must be connected to the **new** `<project>_appnet`
+     network by hand (`docker network connect <project>_appnet caddy`) — it
+     does not join it automatically, and without it DNS lookups for the
+     container names fail (`no such host`) even with a correct Caddyfile.
+  A `caddy reload` can report `"config is unchanged"` and silently keep
+  serving the old config if the reload races the file edit — `docker restart
+  caddy` is the reliable way to pick up a Caddyfile change here. Prefer fixing
+  the underlying port conflict and switching back to the compose-managed
+  `caddy` service over perpetuating this manual one, but until that happens,
+  check both of the above after any staging redeploy that changes the project
+  name or recreates `api`/`web`.
 - `db/postgres.go` uses `sslmode=disable`; acceptable because the DB is only on the
   internal Docker network (never published in test/prod). Make it configurable if
   the DB is ever exposed.
@@ -1293,12 +1328,13 @@ metaadat (alt szöveg, szerző).
 
 Admin által versenyenként indítható tippverseny: dobogó-tippek (1-2-3. hely)
 a verseny kiválasztott versenyszámaira, plusz szabad extra kérdések
-(versenyző/idő/szám típussal, pl. "Hány rekord születik?"). **Csak a
-LÉTREHOZÁS és a LISTÁZÁS van megépítve** — a tippek leadása (userenkénti
-válaszok tárolása) és a kiértékelés (pontozás, végeredmény) még nincs, ez egy
-külön, nagyobb következő lépés lesz. A frontend típusa (`PredictionStatus`)
-emiatt tartalmaz egy `"evaluated"` állapotot is, amit a backend ma sosem ad
-vissza.
+(versenyző/idő/szám/szabad szöveg típussal, pl. "Hány rekord születik?").
+**Csak a
+LÉTREHOZÁS, a LISTÁZÁS és a TÖRLÉS van megépítve** — a tippek leadása
+(userenkénti válaszok tárolása) és a kiértékelés (pontozás, végeredmény) még
+nincs, ez egy külön, nagyobb következő lépés lesz. A frontend típusa
+(`PredictionStatus`) emiatt tartalmaz egy `"evaluated"` állapotot is, amit a
+backend ma sosem ad vissza.
 
 **A verseny metaadatai (név, város, dátum) NINCSENEK nálunk tárolva.** A
 `prediction_contests.competition_wca_id` csak egy szöveges azonosító, FK
@@ -1329,13 +1365,25 @@ A `POST /predictions` (`prediction.Handler.CreateContest`) mindhárom táblát
 **egy tranzakcióban** írja (`Repository.Create`) — vagy mindhárom sikerül,
 vagy egyik sem, hogy ne maradjon félig beírt tippverseny.
 
+A `DELETE /predictions/{id}` (`prediction.Handler.DeleteContest`) NEM
+tranzakció — elég egyetlen `DELETE FROM prediction_contests WHERE id = $1`,
+mert a gyerek táblák FK-ja `ON DELETE CASCADE`. 0 törölt sor `ErrContestNotFound`-ot
+ad vissza, amit a handler 404-re fordít (ugyanaz a minta, mint a `post.Update`
+a `posts` táblán, lásd §6).
+
 ### Frontend
 
 `/tools/prediction` (`app/tools/prediction/`), Server Component: a lista
 oldal (`page.tsx`) szerveroldalon hívja a `GET /predictions`-t (mint a
 `/posts`, `serverApiUrl()`-lel), és publikus — bárki látja a listát, csak a
-létrehozás admin (`useUser()` role-check a `PredictionList`-ben, mint a
-posztoknál).
+létrehozás és a törlés admin (`useUser()` role-check a `PredictionList`-ben,
+mint a posztoknál — `isAdmin` lejut a `PredictionListItem`-be, ami a törlés
+gombot rendereli). `DeletePredictionButton.tsx` egyetlen tippversenyt töröl
+megerősítő `window.confirm`-mal (nincs többes kijelölés, mint a posztoknál a
+`DeletePostsButton`-nál — a tippverseny-lista nem checkbox-os). A gomb a
+kártya `Link`-jének `after:absolute after:inset-0` overlay-je fölött
+`relative z-10`-zel marad kattintható, ugyanúgy, mint a `PostsListItem`
+szerkesztő gombja.
 
 Az admin `CreatePredictionModal` (`components/CreatePredictionModal.tsx`):
 - Verseny-választó a `GET /competitions/upcoming`-ból (böngészőből,
@@ -1345,20 +1393,49 @@ Az admin `CreatePredictionModal` (`components/CreatePredictionModal.tsx`):
   minta, mint az allrounder toolban, §19, de külön fájl — a két tool
   egymástól függetlenül fejlődik).
 - Extra kérdés-szerkesztő (`ExtraQuestionsEditor.tsx`): tetszőleges számú sor,
-  típusonként (Versenyző/Idő/Szám) választható select-tel.
+  típusonként (Versenyző/Idő/Szám/Szabad szöveg) választható select-tel.
 - A POST body RFC3339 `predictionDeadline`-t küld
   (`new Date(...).toISOString()`); a backend `time.Parse(time.RFC3339, ...)`-vel
   olvassa.
 
-**A részletező oldal (`[id]/page.tsx`) egyelőre CSAK MEGJELENÍTÉS — nincs
-tippleadó logika.** `GET /predictions/{id}` nem létezik, ezért a szerveroldali
+**A részletező oldal (`[id]/page.tsx`) kitölthető, de a submit még nem hív
+végpontot.** `GET /predictions/{id}` nem létezik, ezért a szerveroldali
 `getPrediction` a teljes `GET /predictions` listát kéri le és szűr `id`
-szerint; ha a backend kap egyedi lekérő végpontot, ezt cseréld le. A
-`PodiumEventForm` (dobogó-versenyszámonként 1-2-3. hely input) és az
-`ExtraQuestionField` (kérdéstípusonként ikon + placeholder: person/time/number)
-egyszerű, kontrollálatlan `<input>`-ok — nincs `useState`, `onChange` vagy
-submit handler. A "Tipp leadása" gomb `disabled`, ha a tippverseny már
-`closed`.
+szerint; ha a backend kap egyedi lekérő végpontot, ezt cseréld le. A form
+állapota a `PredictionForm` client komponensben él (a `page.tsx` Server
+Component marad); a "Tipp leadása" gomb `disabled`, ha a tippverseny már
+`closed`. A mezők a kérdés típusához igazodnak:
+
+- **Versenyző** (`CompetitorInput`): typeahead, a választás a NEVET adja
+  vissza. A dobogó-tippeknél a versenyszám **psych sheet-je** a lista
+  (`/competitions/{id}/psych-sheet/{eventId}`, a `#N` pozíció csak
+  tájékoztat), az extra "versenyző" kérdéseknél a **teljes nevezői lista**
+  (`/competitions/{id}/competitors`). A listát nem az input tölti be, hanem
+  a szülő a `useCompetitorOptions` hookkal: **egy versenyszám három mezője
+  EGY kérés**, a nevezői lista pedig egyszer, csak ha van person kérdés.
+  Hiba esetén a mező sima szöveges input marad (WCA-kiesés ne blokkoljon).
+- **Idő** (`TimeInput` + `lib/time.ts`): csak számjegy, gépelés közben
+  jobbról tagolva (`14289` → `1:42.89`), plafon 60:00.00, 6 számjegy. ⚠️ A
+  `formatTimeInput` levágja a vezető nullákat — a megjelenített `0.01`-ből az
+  `extractDigits` `001`-et ad vissza, és enélkül `001:23.45`-té halmozódna.
+  Elutasított bevitelnél (`null`) a mező az előző értéken marad.
+- **Szám**: `type="number"`.
+- **Szabad szöveg** (`types.QUESTION_TEXT` / `"text"`, migráció
+  `000014_add_prediction_text_question_type`): sima `type="text"` input,
+  olyan kérdésekhez, amik nem versenyzőt, időt vagy számot várnak (pl.
+  "Milyen új trükköt fogunk látni?"). A Postgres enumhoz hozzáadott érték —
+  a `down` migráció szándékosan no-op, ugyanaz a minta, mint a `post_tag`
+  `'report'` értékénél (000003): a Postgres nem tudja eltávolítani egy enum
+  értékét, az árva érték ártalmatlan.
+
+⚠️ **A WCA API kb. 15 párhuzamos kérés után 429-et ad.** A psych sheet
+mezőnkénti lekérése (11 versenyszám × 3 hely = 33) ezt minden oldalbetöltésnél
+túllépte, és 502-ként jött vissza. Ezért (1) a frontend versenyszámonként egy
+kérést küld, (2) a `competition.Service` 15 percig memóriában cache-eli a
+psych sheeteket és a nevezői listát, és `singleflight`-tal összevonja az
+egyidejű azonos kéréseket (a React StrictMode dev-ben minden fetch-et
+duplán futtat). Hibás válasz nem kerül a cache-be. Ne tedd vissza a
+lekérést az inputba, és ne vedd ki a cache-t.
 
 ⚠️ Amikor a tippleadás/kiértékelés megépül, ne bővítsd tovább ezt a modult
 gondolkodás nélkül — a userenkénti válaszok tárolása és a pontozás logika

@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"speedcubinghungary/internal/types"
+
+	"github.com/go-chi/chi/v5"
 )
 
 type Handler struct {
@@ -67,4 +69,22 @@ func (h *Handler) CreateContest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusCreated)
+}
+
+// DeleteContest handles DELETE /predictions/{id}.
+func (h *Handler) DeleteContest(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		http.Error(w, "missing prediction id", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.service.DeleteContest(id); err != nil {
+		status := http.StatusInternalServerError
+		if errors.Is(err, ErrContestNotFound) {
+			status = http.StatusNotFound
+		}
+		http.Error(w, err.Error(), status)
+		return
+	}
 }

@@ -31,7 +31,11 @@ const PredictionList = ({ predictions }: Props) => {
       ) : (
         <div className="flex flex-col gap-4">
           {predictions.map((prediction) => (
-            <PredictionListItem key={prediction.id} prediction={prediction} />
+            <PredictionListItem
+              key={prediction.id}
+              prediction={prediction}
+              isAdmin={isAdmin}
+            />
           ))}
         </div>
       )}

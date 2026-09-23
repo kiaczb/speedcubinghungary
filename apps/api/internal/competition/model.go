@@ -25,3 +25,50 @@ type wcaCompetition struct {
 	URL         string   `json:"url"`
 	EventIDs    []string `json:"event_ids"`
 }
+
+// PsychSheetEntry is one competitor's position on a single event's psych
+// sheet (the WCA's PR-ranked start list). JSON keys are camelCase to match
+// the web client conventions.
+type PsychSheetEntry struct {
+	Name     string `json:"name"`
+	WCAID    string `json:"wcaId"`
+	Position int    `json:"position"`
+}
+
+// wcaPsychSheet mirrors the relevant subset of fields returned by the WCA
+// API's psych sheet endpoint. It is an internal type used only for decoding
+// the upstream response.
+type wcaPsychSheet struct {
+	SortedRankings []wcaPsychSheetEntry `json:"sorted_rankings"`
+}
+
+type wcaPsychSheetEntry struct {
+	Name  string `json:"name"`
+	WCAID string `json:"wca_id"`
+	Pos   int    `json:"pos"`
+}
+
+// Competitor is one accepted, competing registrant of a competition. JSON
+// keys are camelCase to match the web client conventions. WCAID is empty
+// for newcomers.
+type Competitor struct {
+	Name  string `json:"name"`
+	WCAID string `json:"wcaId"`
+}
+
+// wcaWCIF mirrors the relevant subset of the WCA public WCIF document
+// (/competitions/{id}/wcif/public). Internal decoding type only.
+type wcaWCIF struct {
+	Persons []wcaWCIFPerson `json:"persons"`
+}
+
+type wcaWCIFPerson struct {
+	Name         string               `json:"name"`
+	WCAID        string               `json:"wcaId"`
+	Registration *wcaWCIFRegistration `json:"registration"`
+}
+
+type wcaWCIFRegistration struct {
+	Status      string `json:"status"`
+	IsCompeting bool   `json:"isCompeting"`
+}
