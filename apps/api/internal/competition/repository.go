@@ -17,6 +17,8 @@ const maxPages = 20
 // Repository defines read access to competition data.
 type Repository interface {
 	GetUpcomingByCountry(countryISO2 string) ([]wcaCompetition, error)
+	GetPsychSheet(competitionID, eventID string) (wcaPsychSheet, error)
+	GetWCIF(competitionID string) (wcaWCIF, error)
 }
 
 // WCARepository fetches competition data from the public WCA API.
@@ -72,4 +74,30 @@ func (r *WCARepository) GetUpcomingByCountry(countryISO2 string) ([]wcaCompetiti
 	}
 
 	return all, nil
+}
+
+func (r *WCARepository) GetPsychSheet(competitionID, eventID string) (wcaPsychSheet, error) {
+	var sheet wcaPsychSheet
+	err := r.getJSON(fmt.Sprintf("%s/%s/psych-sheet/%s", r.baseURL, url.PathEscape(competitionID), url.PathEscape(eventID)), &sheet)
+	return sheet, err
+}
+
+func (r *WCARepository) GetWCIF(competitionID string) (wcaWCIF, error) {
+	var wcif wcaWCIF
+	err := r.getJSON(fmt.Sprintf("%s/%s/wcif/public", r.baseURL, url.PathEscape(competitionID)), &wcif)
+	return wcif, err
+}
+
+func (r *WCARepository) getJSON(reqURL string, out any) error {
+	resp, err := r.client.Get(reqURL)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("WCA API returned status %d", resp.StatusCode)
+	}
+
+	return json.NewDecoder(resp.Body).Decode(out)
 }

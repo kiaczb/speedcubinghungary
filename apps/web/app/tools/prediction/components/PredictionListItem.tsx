@@ -10,9 +10,11 @@ import Card from "@/app/components/Cards/Card";
 import Badge from "@/app/components/Badge";
 import { eventName } from "../lib/events";
 import { PredictionContest, statusBadgeMap } from "../types";
+import DeletePredictionButton from "./DeletePredictionButton";
 
 type Props = {
   prediction: PredictionContest;
+  isAdmin?: boolean;
 };
 
 function formatDate(date: string): string {
@@ -23,7 +25,7 @@ function formatDate(date: string): string {
   });
 }
 
-const PredictionListItem = ({ prediction }: Props) => {
+const PredictionListItem = ({ prediction, isAdmin }: Props) => {
   const badge = statusBadgeMap[prediction.status];
 
   return (
@@ -37,6 +39,14 @@ const PredictionListItem = ({ prediction }: Props) => {
               {prediction.participantCount} tipp
             </span>
           </span>
+
+          {isAdmin && (
+            <DeletePredictionButton
+              predictionId={prediction.id}
+              competitionName={prediction.competitionName}
+              className="ml-auto"
+            />
+          )}
         </div>
 
         <h2 className="text-lg font-semibold leading-snug text-foreground">

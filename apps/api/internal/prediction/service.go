@@ -148,3 +148,9 @@ func (s *Service) CreateContest(competitionID string, deadline time.Time, podium
 
 	return s.repo.Create(row, podiumEventIDs, questionRows)
 }
+
+// DeleteContest töröl egy tippversenyt. A dobogó-versenyszámok és az extra
+// kérdések a DB-beli ON DELETE CASCADE miatt vele együtt törlődnek.
+func (s *Service) DeleteContest(id string) error {
+	return s.repo.Delete(id)
+}

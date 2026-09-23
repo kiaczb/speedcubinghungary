@@ -7,10 +7,8 @@ import {
   FaUsers,
 } from "react-icons/fa";
 import Badge from "@/app/components/Badge";
-import Button from "@/app/components/ui/Button";
 import { serverApiUrl } from "@/app/lib/api";
-import PodiumEventForm from "../components/PodiumEventForm";
-import ExtraQuestionField from "../components/ExtraQuestionField";
+import PredictionForm from "../components/PredictionForm";
 import { PredictionContest, statusBadgeMap } from "../types";
 
 type PageProps = {
@@ -125,46 +123,7 @@ export default async function PredictionDetailPage({ params }: PageProps) {
           </p>
         </header>
 
-        <form className="mt-8 flex flex-col gap-10">
-          <section>
-            <h2 className="text-lg font-semibold text-foreground">
-              Dobogó-tippek
-            </h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Add meg, szerinted ki végez az 1-2-3. helyen az egyes
-              versenyszámokban.
-            </p>
-
-            <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-              {prediction.podiumEventIds.map((eventId) => (
-                <PodiumEventForm key={eventId} eventId={eventId} />
-              ))}
-            </div>
-          </section>
-
-          {prediction.extraQuestions.length > 0 && (
-            <section>
-              <h2 className="text-lg font-semibold text-foreground">
-                Extra kérdések
-              </h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Ezekre a kérdésekre is tippelhetsz.
-              </p>
-
-              <div className="mt-4 flex flex-col gap-4">
-                {prediction.extraQuestions.map((question) => (
-                  <ExtraQuestionField key={question.id} question={question} />
-                ))}
-              </div>
-            </section>
-          )}
-
-          <div className="flex justify-end border-t border-line pt-6">
-            <Button type="submit" disabled={!isOpen}>
-              {isOpen ? "Tipp leadása" : "A tippelés lezárult"}
-            </Button>
-          </div>
-        </form>
+        <PredictionForm prediction={prediction} isOpen={isOpen} />
       </div>
     </div>
   );

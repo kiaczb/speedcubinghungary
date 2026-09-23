@@ -24,7 +24,7 @@ var competitionIDPattern = regexp.MustCompile(`^[A-Za-z0-9]{1,64}$`)
 
 func isValidQuestionType(t types.PredictionQuestionType) bool {
 	switch t {
-	case types.QUESTION_PERSON, types.QUESTION_TIME, types.QUESTION_NUMBER:
+	case types.QUESTION_PERSON, types.QUESTION_TIME, types.QUESTION_NUMBER, types.QUESTION_TEXT:
 		return true
 	}
 	return false

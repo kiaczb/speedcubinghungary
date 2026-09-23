@@ -1,19 +1,35 @@
+"use client";
+
 import "@cubing/icons";
-import { controlClass } from "@/app/components/ui/Field";
 import { eventName } from "../lib/events";
+import { useCompetitorOptions } from "../lib/useCompetitorOptions";
+import CompetitorInput from "./CompetitorInput";
 
 type Props = {
+  competitionId: string;
   eventId: string;
+  /** A 3 dobogós hely tippjei, 1-2-3. hely sorrendben. */
+  picks: [string, string, string];
+  onChange: (place: 0 | 1 | 2, name: string) => void;
 };
 
 const PLACES = [
   { place: 1, label: "1. hely" },
   { place: 2, label: "2. hely" },
   { place: 3, label: "3. hely" },
-];
+] as const;
 
-// Csak a megjelenés — a mezők egyelőre nincsenek állapothoz/submithoz kötve.
-const PodiumEventForm = ({ eventId }: Props) => {
+const PodiumEventForm = ({
+  competitionId,
+  eventId,
+  picks,
+  onChange,
+}: Props) => {
+  // Versenyszámonként EGY lekérés, amin a három mező osztozik.
+  const competitors = useCompetitorOptions(
+    `/competitions/${encodeURIComponent(competitionId)}/psych-sheet/${encodeURIComponent(eventId)}`,
+  );
+
   return (
     <div className="rounded-control border border-line bg-surface-muted p-4">
       <div className="flex items-center gap-2">
@@ -30,15 +46,23 @@ const PodiumEventForm = ({ eventId }: Props) => {
             <span className="tabular flex h-9 w-9 shrink-0 items-center justify-center rounded-control border border-line bg-surface font-mono text-sm font-semibold text-muted-foreground">
               {place}.
             </span>
-            <input
-              type="text"
-              placeholder="Versenyző neve"
-              aria-label={`${eventName(eventId)} ${label}`}
-              className={controlClass}
-            />
+            <div className="min-w-0 flex-1">
+              <CompetitorInput
+                {...competitors}
+                value={picks[place - 1]}
+                onChange={(name) => onChange((place - 1) as 0 | 1 | 2, name)}
+                ariaLabel={`${eventName(eventId)} ${label}`}
+              />
+            </div>
           </div>
         ))}
       </div>
+
+      {competitors.status === "error" && (
+        <p className="mt-2.5 text-xs text-brand-red-strong">
+          Nem sikerült betölteni a versenyzőket — a nevet kézzel is beírhatod.
+        </p>
+      )}
     </div>
   );
 };

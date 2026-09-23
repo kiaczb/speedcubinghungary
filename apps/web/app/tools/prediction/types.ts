@@ -20,22 +20,38 @@ export type PredictionContest = {
 };
 
 // --- Extra kérdések a tippversenyhez -------------------------------------
-// Első körben három mezőtípus: versenyző, idő, szám. Ezekből épül fel egy
+// Négy mezőtípus: versenyző, idő, szám, szabad szöveg. Ezekből épül fel egy
 // szabad kérdés (pl. "Ki nyeri a 3x3x3-at?" → person, "Mennyi lesz a 3x3x3
-// országos csúcs?" → time, "Hány rekord születik a versenyen?" → number).
+// országos csúcs?" → time, "Hány rekord születik a versenyen?" → number,
+// "Milyen új trükköt fogunk látni?" → text).
 
-export type ExtraQuestionType = "person" | "time" | "number";
+export type ExtraQuestionType = "person" | "time" | "number" | "text";
 
 export const extraQuestionTypeLabels: Record<ExtraQuestionType, string> = {
   person: "Versenyző",
   time: "Idő",
   number: "Szám",
+  text: "Szabad szöveg",
 };
 
 export type ExtraQuestion = {
   id: string;
   prompt: string;
   type: ExtraQuestionType;
+};
+
+// --- Versenyző-választó ---------------------------------------------------
+// A dobogó-tippekhez a versenyszám psych sheet-je (GET /competitions/{id}/
+// psych-sheet/{eventId}) adja a listát pozícióval; az extra "versenyző"
+// kérdésekhez a teljes nevezői lista (GET /competitions/{id}/competitors),
+// pozíció nélkül. Ugyanaz az input dolgozik mindkettővel.
+
+export type CompetitorOption = {
+  name: string;
+  /** Újoncnál üres. */
+  wcaId: string;
+  /** Psych sheet helyezés, 1-től; 0 = nincs még eredménye; nevezői listánál nincs. */
+  position?: number;
 };
 
 // --- Dobogó-tipp form állapota (admin létrehozó modal) --------------------

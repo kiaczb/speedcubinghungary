@@ -65,6 +65,8 @@ func New(
 
 	// Competition routes (WCA API proxy)
 	r.Get("/competitions/upcoming", competitionHandler.GetUpcoming)
+	r.Get("/competitions/{id}/psych-sheet/{eventId}", competitionHandler.GetPsychSheet)
+	r.Get("/competitions/{id}/competitors", competitionHandler.GetCompetitors)
 
 	r.Get("/predictions", predictionHandler.GetContests)
 
@@ -72,6 +74,7 @@ func New(
 		r.Use(middleware.AuthMiddlewareWithConfig(cfg))
 		r.Use(middleware.RBACMiddleware(types.ROLE_ADMIN))
 		r.Post("/predictions", predictionHandler.CreateContest)
+		r.Delete("/predictions/{id}", predictionHandler.DeleteContest)
 	})
 
 	r.Get("/allrounder/standings", allrounderHandler.GetStandings)

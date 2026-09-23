@@ -33,6 +33,7 @@ type Repository interface {
 	GetPodiumEvents(contestIDs []string) (map[string][]string, error)
 	GetExtraQuestions(contestIDs []string) (map[string][]extraQuestionRow, error)
 	Create(row contestRow, podiumEventIDs []string, questions []extraQuestionRow) error
+	Delete(id string) error
 }
 
 type PostgresRepository struct {
@@ -162,4 +163,29 @@ func (r *PostgresRepository) Create(row contestRow, podiumEventIDs []string, que
 	}
 
 	return tx.Commit()
+}
+
+// Delete törli a tippversenyt. A dobogó-versenyszámok és az extra kérdések
+// sorai a `prediction_podium_events`/`prediction_extra_questions` FK-jának
+// ON DELETE CASCADE-je miatt vele együtt törlődnek — nem kell tranzakció.
+func (r *PostgresRepository) Delete(id string) error {
+	res, err := r.db.Exec(`
+		DELETE FROM prediction_contests
+		WHERE id = $1
+	`, id)
+	if err != nil {
+		return err
+	}
+
+	// Ha nincs ilyen id, 0 sor törlődik — ezt 404-ként akarjuk jelezni, nem
+	// néma sikerként (mint a post.Update, lásd post/repository.go).
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return ErrContestNotFound
+	}
+
+	return nil
 }
