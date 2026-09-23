@@ -249,14 +249,30 @@ Other Go conventions observed:
 - **Shared primitives live in `app/components/ui/`**: `Button` (variants
   `primary`/`secondary`/`ghost`/`danger`/`inverse`; renders `<button>`,
   `<Link>`, or external `<a>` based on `href`/`external`), `Field` (+ the
-  exported `controlClass` for inputs), `PageHeader`, `StateMessage`. Plus
+  exported `controlClass` for inputs), `PageHeader`, `StateMessage`,
+  `ConfirmModal` (destructive-action confirmation — same backdrop/panel style
+  as `CreatePostModal`/`CreatePredictionModal`; takes `title`, `description`,
+  `onConfirm: () => Promise<void>`, `onClose`; manages its own submitting/error
+  state and closes itself on a successful `onConfirm`). Plus
   `app/components/Cards/Card.tsx` (variants `elevated`/`outlined`/`inverse`,
   `padding`, `interactive`) and `app/components/Badge.tsx`. **Reuse these
-  instead of hand-rolling a button/card/field.**
+  instead of hand-rolling a button/card/field/confirm dialog** — in
+  particular, never use the native `window.confirm`/`window.alert` for a
+  destructive action; use `ConfirmModal` (see `DeletePostButton.tsx` /
+  `DeletePredictionButton.tsx` for the pattern: an icon button that opens the
+  modal, an async `onConfirm` that does the fetch + `router.refresh()`).
 - **Shared data lives in `app/lib/`**: `api.ts` (`serverApiUrl()` /
-  `clientApiUrl()` — the two-base-URL split below, in one place) and `site.ts`
+  `clientApiUrl()` — the two-base-URL split below, in one place), `site.ts`
   (`NAV_LINKS`, `CONTACT_ITEMS`, `SITE_DESCRIPTION`, used by the navbar, footer
-  and contact page). Add nav/contact entries there, not per-component.
+  and contact page), and `useBodyScrollLock.ts` (locks background scroll while
+  a modal is open — used by `ConfirmModal`, `CreatePostModal`,
+  `CreatePredictionModal`, `RulesModal`). Add nav/contact entries there, not
+  per-component.
+  - ⚠️ `useBodyScrollLock` also compensates `body`'s `padding-right` by the
+    scrollbar's width. A bare `overflow: hidden` on `body` makes the vertical
+    scrollbar disappear, and the page content reflows into that space — the
+    classic "page shifts right when a modal opens" bug. Every modal must use
+    this hook instead of setting `document.body.style.overflow` by hand.
 - **Dark mode is implemented and follows the OS** (`prefers-color-scheme`; no
   toggle, no class strategy, so no JS and no hydration flash). It works by
   **redefining the design tokens** in a `@media (prefers-color-scheme: dark)`
@@ -1378,12 +1394,12 @@ oldal (`page.tsx`) szerveroldalon hívja a `GET /predictions`-t (mint a
 `/posts`, `serverApiUrl()`-lel), és publikus — bárki látja a listát, csak a
 létrehozás és a törlés admin (`useUser()` role-check a `PredictionList`-ben,
 mint a posztoknál — `isAdmin` lejut a `PredictionListItem`-be, ami a törlés
-gombot rendereli). `DeletePredictionButton.tsx` egyetlen tippversenyt töröl
-megerősítő `window.confirm`-mal (nincs többes kijelölés, mint a posztoknál a
-`DeletePostsButton`-nál — a tippverseny-lista nem checkbox-os). A gomb a
-kártya `Link`-jének `after:absolute after:inset-0` overlay-je fölött
-`relative z-10`-zel marad kattintható, ugyanúgy, mint a `PostsListItem`
-szerkesztő gombja.
+gombot rendereli). `DeletePredictionButton.tsx` egyetlen tippversenyt töröl,
+megerősítésre a közös `app/components/ui/ConfirmModal.tsx`-t használva (lásd
+§6 — sem itt, sem a posztoknál nincs többes kijelölés/bulk törlés, mindkettő
+elemenkénti kuka-ikon). A gomb a kártya `Link`-jének `after:absolute
+after:inset-0` overlay-je fölött `relative z-10`-zel marad kattintható,
+ugyanúgy, mint a `PostsListItem` szerkesztő/törlő gombjai.
 
 Az admin `CreatePredictionModal` (`components/CreatePredictionModal.tsx`):
 - Verseny-választó a `GET /competitions/upcoming`-ból (böngészőből,
