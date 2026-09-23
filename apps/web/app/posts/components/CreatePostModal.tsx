@@ -5,6 +5,7 @@ import { FaArrowLeft, FaArrowRight } from "react-icons/fa";
 import { badgeMap, PostsItem, TagTypes } from "../types";
 import { MAX_POST_IMAGES, postImageUrl } from "../lib/postImage";
 import { clientApiUrl } from "@/app/lib/api";
+import { useBodyScrollLock } from "@/app/lib/useBodyScrollLock";
 import Button from "@/app/components/ui/Button";
 import Field, { controlClass } from "@/app/components/ui/Field";
 import MarkdownEditor from "./MarkdownEditor";
@@ -66,13 +67,10 @@ export default function CreatePostModal({ onClose, post }: Props) {
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
 
+  useBodyScrollLock(true);
+
   useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
     titleInputRef.current?.focus();
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
   }, []);
 
   useEffect(() => {

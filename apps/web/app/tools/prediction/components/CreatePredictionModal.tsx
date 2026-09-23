@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import "@cubing/icons";
 import { UpcomingCompetition } from "@/app/calendar/types";
 import { clientApiUrl } from "@/app/lib/api";
+import { useBodyScrollLock } from "@/app/lib/useBodyScrollLock";
 import Button from "@/app/components/ui/Button";
 import Field, { controlClass } from "@/app/components/ui/Field";
 import { eventName } from "../lib/events";
@@ -41,13 +42,7 @@ export default function CreatePredictionModal({ onClose }: Props) {
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
 
-  useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
-  }, []);
+  useBodyScrollLock(true);
 
   useEffect(() => {
     const controller = new AbortController();

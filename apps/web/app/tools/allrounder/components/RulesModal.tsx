@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { FaRegQuestionCircle } from "react-icons/fa";
+import { useBodyScrollLock } from "@/app/lib/useBodyScrollLock";
 import Button from "@/app/components/ui/Button";
 
 type RulesModalProps = {
@@ -18,6 +19,8 @@ const RulesModal = ({
 }: RulesModalProps) => {
   const [open, setOpen] = useState(false);
 
+  useBodyScrollLock(open);
+
   useEffect(() => {
     if (!open) return;
 
@@ -26,13 +29,7 @@ const RulesModal = ({
     };
 
     document.addEventListener("keydown", onKeyDown);
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      document.body.style.overflow = previousOverflow;
-    };
+    return () => document.removeEventListener("keydown", onKeyDown);
   }, [open]);
 
   // Két oszlopban fut a lista, hogy a 20 helyezés görgetés nélkül elférjen.
