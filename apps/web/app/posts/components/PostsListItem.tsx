@@ -8,6 +8,7 @@ import Badge from "@/app/components/Badge";
 import { badgeMap, PostsItem } from "../types";
 import { postCoverUrl } from "../lib/postImage";
 import { postPreview } from "../lib/postPreview";
+import { formatShortDate } from "@/app/lib/date";
 import { reportSummary } from "../lib/report";
 import DeletePostButton from "./DeletePostButton";
 
@@ -49,7 +50,7 @@ const PostsListItem = ({ postsItem, isAdmin }: Props) => {
                     dateTime={postsItem.created_at}
                     className="tabular font-mono text-xs text-subtle-foreground"
                   >
-                    {new Date(postsItem.created_at).toLocaleDateString("hu-HU")}
+                    {formatShortDate(postsItem.created_at)}
                   </time>
                 )}
               </div>

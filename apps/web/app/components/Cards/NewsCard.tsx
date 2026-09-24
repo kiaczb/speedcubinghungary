@@ -4,6 +4,7 @@ import Card from "./Card";
 import Badge from "../Badge";
 import { badgeMap, PostsItem } from "@/app/posts/types";
 import { postPreview } from "@/app/posts/lib/postPreview";
+import { formatShortDate } from "@/app/lib/date";
 import { reportSummary } from "@/app/posts/lib/report";
 import { FaArrowRight } from "react-icons/fa";
 
@@ -49,7 +50,7 @@ const NewsCard: React.FC<NewsCardProps> = ({ post, imageUrl }) => {
             dateTime={post.created_at}
             className="tabular font-mono text-xs text-subtle-foreground"
           >
-            {new Date(post.created_at).toLocaleDateString("hu-HU")}
+            {formatShortDate(post.created_at)}
           </time>
 
           <h3 className="mt-2 text-lg font-semibold leading-snug text-foreground">

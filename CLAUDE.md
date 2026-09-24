@@ -276,7 +276,12 @@ Other Go conventions observed:
   (`NAV_LINKS`, `CONTACT_ITEMS`, `SITE_DESCRIPTION`, used by the navbar, footer
   and contact page), `events.ts` (`eventName()` — the WCA event id → Hungarian
   name table, shared by the allrounder and prediction tools; **don't copy it
-  back into a tool**), `time.ts` (`formatTimeInput()` — WCA-style digit-only
+  back into a tool**), `date.ts` (every date/time the UI renders — `hu-HU` and
+  **pinned to `Europe/Budapest`**, because `toLocaleDateString` otherwise uses
+  the runtime's zone and a Server Component runs in the container's UTC while a
+  client component runs on the visitor's machine; near midnight the same date
+  rendered as two different days. Add a new shape here rather than writing
+  another `toLocaleDateString` in a component), `time.ts` (`formatTimeInput()` — WCA-style digit-only
   time entry, shared by the prediction form and the Special DNF cell; it
   returns `null` for input it refuses and the caller must then keep the
   previous value), and `useBodyScrollLock.ts` (locks background scroll while

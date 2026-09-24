@@ -8,6 +8,7 @@ import { useBodyScrollLock } from "@/app/lib/useBodyScrollLock";
 import Button from "@/app/components/ui/Button";
 import Field, { controlClass } from "@/app/components/ui/Field";
 import { eventName } from "@/app/lib/events";
+import { formatShortDate } from "@/app/lib/date";
 import { ExtraQuestion } from "../types";
 import ExtraQuestionsEditor from "./ExtraQuestionsEditor";
 
@@ -193,9 +194,7 @@ export default function CreatePredictionModal({ onClose }: Props) {
                 {competitions.map((competition) => (
                   <option key={competition.id} value={competition.id}>
                     {competition.name} —{" "}
-                    {new Date(competition.startDate).toLocaleDateString(
-                      "hu-HU",
-                    )}
+                    {formatShortDate(competition.startDate)}
                   </option>
                 ))}
               </select>

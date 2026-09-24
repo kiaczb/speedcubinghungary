@@ -1,6 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import {
+  formatLongDate,
+  formatLongDateWithWeekday,
+  formatMonthLabel,
+} from "@/app/lib/date";
 import { FaChevronLeft, FaChevronRight } from "react-icons/fa";
 import { UpcomingCompetition } from "../types";
 import {
@@ -56,10 +61,7 @@ const MonthCalendar = ({ competitions }: Props) => {
     );
   };
 
-  const monthLabel = viewMonth.toLocaleDateString("hu-HU", {
-    year: "numeric",
-    month: "long",
-  });
+  const monthLabel = formatMonthLabel(viewMonth);
 
   const selectedCompetitions = selectedDate
     ? getCompetitionsForDay(eventMap, selectedDate)
@@ -129,11 +131,7 @@ const MonthCalendar = ({ competitions }: Props) => {
                 role="button"
                 tabIndex={0}
                 aria-pressed={isSelected}
-                aria-label={date.toLocaleDateString("hu-HU", {
-                  year: "numeric",
-                  month: "long",
-                  day: "numeric",
-                })}
+                aria-label={formatLongDate(date)}
                 onClick={() => setSelectedDate(new Date(date))}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
@@ -196,12 +194,7 @@ const MonthCalendar = ({ competitions }: Props) => {
         {selectedDate ? (
           <>
             <h3 className="mb-3 text-sm font-semibold capitalize text-foreground">
-              {selectedDate.toLocaleDateString("hu-HU", {
-                year: "numeric",
-                month: "long",
-                day: "numeric",
-                weekday: "long",
-              })}
+              {formatLongDateWithWeekday(selectedDate)}
             </h3>
             {selectedCompetitions.length > 0 ? (
               <div className="flex flex-col gap-4">
