@@ -1023,6 +1023,7 @@ reconciliation, no `resolved_at`, and no backfill problem:
 | Auth | none — `UserSocket.connect/3` accepts every connection. Send **no** `Origin` header (Phoenix `check_origin` passes when it is absent). |
 | Heartbeat | required every <60s on topic `phoenix`, event `heartbeat` |
 | Subscription | there is exactly **one**: `roundUpdated(id: ID!): Round!` |
+| Unsubscribe | `unsubscribe` on `__absinthe__:control` with `{"subscriptionId": …}` — dropping the key locally is **not** unsubscribing; without this frame WCA Live keeps pushing that round for the life of the connection |
 | WCA ID → live ID | no GraphQL lookup exists; follow the `302` from `/link/competitions/{wcaId}` → `/competitions/{numericId}` |
 
 ⚠️ **You cannot fetch a whole competition's results in one query.** Adding
