@@ -14,7 +14,7 @@ import { useUser } from "@/app/components/UserProvider";
 import Button from "@/app/components/ui/Button";
 import { controlClass } from "@/app/components/ui/Field";
 import StateMessage from "@/app/components/ui/StateMessage";
-import { clientApiUrl } from "@/app/lib/api";
+import { clientApiUrl, clientFetch, clientJson } from "@/app/lib/api";
 import CompetitionPicker from "./CompetitionPicker";
 import CompetitorCard from "./CompetitorCard";
 import RoundTabs from "./RoundTabs";
@@ -22,25 +22,6 @@ import type { Competition, Competitor, SpecialReport } from "../types";
 
 const FALLBACK_POLL_MS = 30_000;
 
-async function apiFetch(path: string, init?: RequestInit) {
-  const res = await fetch(`${clientApiUrl()}${path}`, {
-    credentials: "include",
-    ...init,
-  });
-
-  if (!res.ok) {
-    // A munkamenet egy óráig él, ami egy verseny alatt simán lejár. A nyers
-    // "unauthorized" a rögzítőnek semmit nem mond arról, mit kell tennie.
-    if (res.status === 401 || res.status === 403) {
-      throw new Error("Lejárt a bejelentkezésed — jelentkezz be újra.");
-    }
-
-    const message = (await res.text()).trim();
-    throw new Error(message || `A kérés sikertelen (${res.status})`);
-  }
-
-  return res;
-}
 
 function matchesQuery(competitor: Competitor, query: string): boolean {
   const needle = query.trim().toLowerCase();
@@ -101,8 +82,7 @@ const SpecialView = () => {
       const path = `/special/report?competition=${encodeURIComponent(competition)}${
         round === null ? "" : `&round=${round}`
       }`;
-      const res = await apiFetch(path);
-      return res.json();
+      return clientJson<SpecialReport>(path);
     },
     [],
   );
@@ -171,12 +151,11 @@ const SpecialView = () => {
 
     // A mentés hibája SZÁNDÉKOSAN felszáll a hívó cellához: az jelzi a
     // rögzítőnek, hogy a beírt idő nincs elmentve (lásd CompetitorCard).
-    await apiFetch(
+    await clientFetch(
       `/special/results/${liveResultId}/attempts/${attemptNumber}/elapsed`,
       {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ competitionWcaId: competitionId, elapsedCs }),
+        json: { competitionWcaId: competitionId, elapsedCs },
       },
     );
 

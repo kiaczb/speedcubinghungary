@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { FaSyncAlt } from "react-icons/fa";
 import { useUser } from "@/app/components/UserProvider";
 import Button from "@/app/components/ui/Button";
-import { clientApiUrl } from "@/app/lib/api";
+import { clientFetch } from "@/app/lib/api";
 
 type RefreshButtonProps = {
   year: number;
@@ -36,11 +36,7 @@ const RefreshButton = ({ year }: RefreshButtonProps) => {
     setFailed(false);
 
     try {
-      const res = await fetch(
-        `${clientApiUrl()}/allrounder/refresh?year=${year}`,
-        { method: "POST", credentials: "include" },
-      );
-      if (!res.ok) throw new Error(`A kérés sikertelen (${res.status})`);
+      await clientFetch(`/allrounder/refresh?year=${year}`, { method: "POST" });
 
       startReload(() => router.refresh());
     } catch (error) {

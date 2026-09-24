@@ -9,7 +9,7 @@ import {
 } from "react-icons/fa";
 import { controlClass } from "@/app/components/ui/Field";
 import StateMessage from "@/app/components/ui/StateMessage";
-import { clientApiUrl } from "@/app/lib/api";
+import { clientJson } from "@/app/lib/api";
 import type { Competition } from "../types";
 
 const SEARCH_DEBOUNCE_MS = 300;
@@ -40,16 +40,12 @@ const CompetitionPicker = ({ onSelect }: CompetitionPickerProps) => {
     const needle = query.trim();
 
     const timer = setTimeout(() => {
-      const url = needle
-        ? `${clientApiUrl()}/special/competitions?query=${encodeURIComponent(needle)}`
-        : `${clientApiUrl()}/special/competitions`;
+      const path = needle
+        ? `/special/competitions?query=${encodeURIComponent(needle)}`
+        : "/special/competitions";
 
-      fetch(url)
-        .then((res) => {
-          if (!res.ok) throw new Error(`A kérés sikertelen (${res.status})`);
-          return res.json();
-        })
-        .then((data: Competition[]) => {
+      clientJson<Competition[]>(path)
+        .then((data) => {
           if (cancelled) return;
           setCompetitions(data);
           setStatus("ready");

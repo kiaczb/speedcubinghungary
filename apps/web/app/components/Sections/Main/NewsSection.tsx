@@ -4,19 +4,10 @@ import Button from "../../ui/Button";
 import { FaArrowRight } from "react-icons/fa";
 import { PostsItem } from "@/app/posts/types";
 import { postCoverUrl } from "@/app/posts/lib/postImage";
-import { serverApiUrl } from "@/app/lib/api";
+import { serverJson } from "@/app/lib/api";
 
 async function getLatestPosts(): Promise<PostsItem[]> {
-  try {
-    const res = await fetch(`${serverApiUrl()}/posts/latest`, {
-      cache: "no-store",
-    });
-    if (!res.ok) return [];
-    return res.json();
-  } catch (error) {
-    console.error("Nem sikerült elérni a backendet:", error);
-    return [];
-  }
+  return serverJson<PostsItem[]>("/posts/latest", []);
 }
 
 export default async function NewsSection() {

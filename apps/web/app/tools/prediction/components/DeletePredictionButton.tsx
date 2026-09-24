@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { FaRegTrashAlt } from "react-icons/fa";
 import ConfirmModal from "@/app/components/ui/ConfirmModal";
-import { clientApiUrl } from "@/app/lib/api";
+import { clientFetch } from "@/app/lib/api";
 
 type Props = {
   predictionId: string;
@@ -20,14 +20,7 @@ export default function DeletePredictionButton({
   const [confirming, setConfirming] = useState(false);
 
   const handleConfirm = async () => {
-    const res = await fetch(`${clientApiUrl()}/predictions/${predictionId}`, {
-      method: "DELETE",
-      credentials: "include",
-    });
-    if (!res.ok) {
-      const message = await res.text();
-      throw new Error(message || "Hiba a tippverseny törlésekor");
-    }
+    await clientFetch(`/predictions/${predictionId}`, { method: "DELETE" });
     router.refresh();
   };
 

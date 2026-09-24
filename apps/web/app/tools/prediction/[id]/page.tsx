@@ -7,7 +7,7 @@ import {
   FaUsers,
 } from "react-icons/fa";
 import Badge from "@/app/components/Badge";
-import { serverApiUrl } from "@/app/lib/api";
+import { serverJson } from "@/app/lib/api";
 import { formatDateTime, formatLongDate } from "@/app/lib/date";
 import PredictionForm from "../components/PredictionForm";
 import { PredictionContest, statusBadgeMap } from "../types";
@@ -19,20 +19,11 @@ type PageProps = {
 };
 
 async function getPrediction(id: string): Promise<PredictionContest | null> {
-  try {
-    // Nincs még GET /predictions/{id} végpont — a listából szűrünk, amíg a
-    // backend csak a listázást és a létrehozást támogatja (lásd CLAUDE.md §21).
-    const res = await fetch(`${serverApiUrl()}/predictions`, {
-      cache: "no-store",
-    });
-    if (!res.ok) return null;
+  // Nincs még GET /predictions/{id} végpont — a listából szűrünk, amíg a
+  // backend csak a listázást és a létrehozást támogatja (lásd CLAUDE.md §21).
+  const predictions = await serverJson<PredictionContest[]>("/predictions", []);
 
-    const predictions: PredictionContest[] = await res.json();
-    return predictions.find((p) => p.id === id) ?? null;
-  } catch (error) {
-    console.error("Nem sikerült elérni a backendet:", error);
-    return null;
-  }
+  return predictions.find((p) => p.id === id) ?? null;
 }
 
 export default async function PredictionDetailPage({ params }: PageProps) {

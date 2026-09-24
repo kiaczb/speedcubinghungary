@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { FaRegTrashAlt } from "react-icons/fa";
 import ConfirmModal from "@/app/components/ui/ConfirmModal";
-import { clientApiUrl } from "@/app/lib/api";
+import { clientFetch } from "@/app/lib/api";
 
 type Props = {
   postId: string;
@@ -16,16 +16,7 @@ export default function DeletePostButton({ postId, title, className = "" }: Prop
   const [confirming, setConfirming] = useState(false);
 
   const handleConfirm = async () => {
-    const res = await fetch(`${clientApiUrl()}/posts`, {
-      method: "DELETE",
-      body: JSON.stringify({ ids: [postId] }),
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-    });
-    if (!res.ok) {
-      const message = await res.text();
-      throw new Error(message || "Hiba a poszt törlésekor");
-    }
+    await clientFetch("/posts", { method: "DELETE", json: { ids: [postId] } });
     router.refresh();
   };
 

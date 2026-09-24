@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import "@cubing/icons";
 import { UpcomingCompetition } from "@/app/calendar/types";
-import { clientApiUrl } from "@/app/lib/api";
+import { clientFetch, clientJson } from "@/app/lib/api";
 import Button from "@/app/components/ui/Button";
 import Field, { controlClass } from "@/app/components/ui/Field";
 import Modal from "@/app/components/ui/Modal";
@@ -20,8 +20,6 @@ type CompetitionsStatus = "loading" | "error" | "success";
 
 export default function CreatePredictionModal({ onClose }: Props) {
   const router = useRouter();
-  const API_URL = clientApiUrl();
-
   const [competitionsStatus, setCompetitionsStatus] =
     useState<CompetitionsStatus>("loading");
   const [competitions, setCompetitions] = useState<UpcomingCompetition[]>([]);
@@ -41,12 +39,10 @@ export default function CreatePredictionModal({ onClose }: Props) {
     const fetchCompetitions = async () => {
       setCompetitionsStatus("loading");
       try {
-        const res = await fetch(`${API_URL}/competitions/upcoming`, {
-          signal: controller.signal,
-        });
-        if (!res.ok) throw new Error(`Request failed: ${res.status}`);
-
-        const data: UpcomingCompetition[] = await res.json();
+        const data = await clientJson<UpcomingCompetition[]>(
+          "/competitions/upcoming",
+          { signal: controller.signal },
+        );
         data.sort((a, b) => a.startDate.localeCompare(b.startDate));
 
         setCompetitions(data);
@@ -61,7 +57,7 @@ export default function CreatePredictionModal({ onClose }: Props) {
 
     fetchCompetitions();
     return () => controller.abort();
-  }, [API_URL]);
+  }, []);
 
   // Verseny váltásakor a dobogó-jelölés a friss esemény-lista szerint marad
   // csak érvényes — egy korábban kiválasztott versenyszám könnyen nem
@@ -105,11 +101,9 @@ export default function CreatePredictionModal({ onClose }: Props) {
 
     setSubmitting(true);
     try {
-      const res = await fetch(`${API_URL}/predictions`, {
+      await clientFetch("/predictions", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
+        json: {
           competitionId,
           predictionDeadline: new Date(predictionDeadline).toISOString(),
           podiumEventIds,
@@ -117,13 +111,8 @@ export default function CreatePredictionModal({ onClose }: Props) {
             prompt: q.prompt.trim(),
             type: q.type,
           })),
-        }),
+        },
       });
-
-      if (!res.ok) {
-        const message = await res.text();
-        throw new Error(message || "Hiba a tippverseny létrehozásakor");
-      }
 
       router.refresh();
       onClose();

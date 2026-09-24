@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import PostsList from "./components/PostList";
 import PageHeader from "../components/ui/PageHeader";
-import { serverApiUrl } from "../lib/api";
+import { serverJson } from "../lib/api";
 import { PostsItem } from "./types";
 
 export const metadata: Metadata = {
@@ -11,14 +11,7 @@ export const metadata: Metadata = {
 };
 
 async function getPosts(): Promise<PostsItem[]> {
-  try {
-    const res = await fetch(`${serverApiUrl()}/posts`, { cache: "no-store" });
-    if (!res.ok) return [];
-    return res.json();
-  } catch (error) {
-    console.error("Nem sikerült elérni a backendet:", error);
-    return [];
-  }
+  return serverJson<PostsItem[]>("/posts", []);
 }
 
 export default async function PostsPage() {

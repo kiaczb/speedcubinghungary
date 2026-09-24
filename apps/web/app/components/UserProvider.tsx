@@ -1,6 +1,6 @@
 "use client";
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { clientApiUrl } from "../lib/api";
+import { clientFetch, clientJson } from "../lib/api";
 
 export interface MeResponse {
   user_id: number;
@@ -30,38 +30,31 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({
   const [user, setUser] = useState<MeResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true); // Kezdetben töltünk
 
-  const API_URL = clientApiUrl();
-
   useEffect(() => {
     const fetchMe = async () => {
       try {
-        const res = await fetch(`${API_URL}/me`, {
-          credentials: "include", // EZ A KULCS! Ez küldi el a sütit.
-        });
-        if (!res.ok) throw new Error("Not logged in");
-        
-        const data: MeResponse = await res.json();
-        setUser(data);
+        // A 401 itt VÁRT állapot: nincs bejelentkezve. Ezért nem naplózunk.
+        setUser(await clientJson<MeResponse>("/me"));
       } catch {
         setUser(null);
       } finally {
-        setIsLoading(false); // Befejeztük a lekérést
+        setIsLoading(false);
       }
     };
-    
+
     fetchMe();
-  }, [API_URL]);
+  }, []);
 
   const logout = async () => {
     try {
-      await fetch(`${API_URL}/logout`, { 
-        method: "POST", 
-        credentials: "include" 
-      });
-      setUser(null);
+      await clientFetch("/logout", { method: "POST" });
     } catch (error) {
       console.error("Logout failed", error);
     }
+    // A helyi állapotot akkor is töröljük, ha a kérés elbukott — a süti
+    // egy órán belül amúgy is lejár, és a felhasználó kijelentkezettnek hiszi
+    // magát.
+    setUser(null);
   };
 
   return (
