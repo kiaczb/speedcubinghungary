@@ -3,6 +3,7 @@ import { FaExclamationTriangle, FaTrophy } from "react-icons/fa";
 import PageHeader from "@/app/components/ui/PageHeader";
 import StateMessage from "@/app/components/ui/StateMessage";
 import { serverApiUrl } from "@/app/lib/api";
+import { formatTimestamp } from "@/app/lib/date";
 import LiveBanner from "./components/LiveBanner";
 import RefreshButton from "./components/RefreshButton";
 import RulesModal from "./components/RulesModal";
@@ -23,11 +24,6 @@ type AllRounderPageProps = {
 
 // A szerver a saját zónájában fut, az olvasók viszont itthon vannak — a
 // gyorsítótár korát ezért fix zónában írjuk ki, nem a futtatóéban.
-const timestampFormatter = new Intl.DateTimeFormat("hu-HU", {
-  timeZone: "Europe/Budapest",
-  dateStyle: "short",
-  timeStyle: "short",
-});
 
 async function getStandings(year?: string): Promise<Standings | null> {
   const query = year ? `?year=${encodeURIComponent(year)}` : "";
@@ -141,7 +137,7 @@ export default async function AllRounderPage({
                   title="A sorozat állomásai közül a legrégebbi lekérés ideje — ennél régebbi adat nincs a táblázatban."
                 >
                   Eredmények frissítve:{" "}
-                  {timestampFormatter.format(new Date(standings.updatedAt))}
+                  {formatTimestamp(standings.updatedAt)}
                 </p>
               )}
             </div>

@@ -9,6 +9,7 @@ import {
 import Card from "@/app/components/Cards/Card";
 import Badge from "@/app/components/Badge";
 import { eventName } from "@/app/lib/events";
+import { formatLongDate } from "@/app/lib/date";
 import { PredictionContest, statusBadgeMap } from "../types";
 import DeletePredictionButton from "./DeletePredictionButton";
 
@@ -16,14 +17,6 @@ type Props = {
   prediction: PredictionContest;
   isAdmin?: boolean;
 };
-
-function formatDate(date: string): string {
-  return new Date(date).toLocaleDateString("hu-HU", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
-}
 
 const PredictionListItem = ({ prediction, isAdmin }: Props) => {
   const badge = statusBadgeMap[prediction.status];
@@ -62,7 +55,7 @@ const PredictionListItem = ({ prediction, isAdmin }: Props) => {
           <span className="flex items-center gap-2">
             <FaRegCalendarAlt className="h-3.5 w-3.5 shrink-0 text-subtle-foreground" />
             <span className="tabular">
-              {formatDate(prediction.competitionStartDate)}
+              {formatLongDate(prediction.competitionStartDate)}
             </span>
           </span>
           <span className="flex items-center gap-2">

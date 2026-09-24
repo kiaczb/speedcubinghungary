@@ -8,6 +8,7 @@ import {
 } from "react-icons/fa";
 import Badge from "@/app/components/Badge";
 import { serverApiUrl } from "@/app/lib/api";
+import { formatDateTime, formatLongDate } from "@/app/lib/date";
 import PredictionForm from "../components/PredictionForm";
 import { PredictionContest, statusBadgeMap } from "../types";
 
@@ -32,24 +33,6 @@ async function getPrediction(id: string): Promise<PredictionContest | null> {
     console.error("Nem sikerült elérni a backendet:", error);
     return null;
   }
-}
-
-function formatDate(date: string): string {
-  return new Date(date).toLocaleDateString("hu-HU", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
-}
-
-function formatDeadline(date: string): string {
-  return new Date(date).toLocaleString("hu-HU", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 }
 
 export default async function PredictionDetailPage({ params }: PageProps) {
@@ -92,7 +75,7 @@ export default async function PredictionDetailPage({ params }: PageProps) {
             <span className="flex items-center gap-2">
               <FaRegCalendarAlt className="h-3.5 w-3.5 shrink-0 text-subtle-foreground" />
               <span className="tabular">
-                {formatDate(prediction.competitionStartDate)}
+                {formatLongDate(prediction.competitionStartDate)}
               </span>
             </span>
             <span className="flex items-center gap-2">
@@ -108,14 +91,14 @@ export default async function PredictionDetailPage({ params }: PageProps) {
               <>
                 Tippelési határidő:{" "}
                 <span className="tabular font-medium text-foreground">
-                  {formatDeadline(prediction.predictionDeadline)}
+                  {formatDateTime(prediction.predictionDeadline)}
                 </span>
               </>
             ) : (
               <>
                 A tippelés lezárult{" "}
                 <span className="tabular font-medium text-foreground">
-                  {formatDeadline(prediction.predictionDeadline)}
+                  {formatDateTime(prediction.predictionDeadline)}
                 </span>
                 -kor.
               </>
