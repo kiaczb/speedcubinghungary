@@ -4,10 +4,10 @@ import { useRef, useState } from "react";
 import { FaExclamationTriangle } from "react-icons/fa";
 import Card from "@/app/components/Cards/Card";
 import { controlClass } from "@/app/components/ui/Field";
+import { formatTimeInput } from "@/app/lib/time";
 import {
   formatAttemptResult,
   formatCentiseconds,
-  formatTimeInput,
   parseTimeToCentiseconds,
 } from "../lib/time";
 import type { Competitor, CompetitorAttempt, CompetitorRound } from "../types";
@@ -132,7 +132,12 @@ const EditableAttemptCell = ({
       <input
         value={value}
         onChange={(event) => {
-          setValue(formatTimeInput(event.target.value));
+          // Elutasított bevitelnél (null) a mező az ELŐZŐ értéken marad —
+          // verseny közben egy néma csonkolás rosszabb, mint ha nem lép semmi.
+          const formatted = formatTimeInput(event.target.value);
+          if (formatted === null) return;
+
+          setValue(formatted);
           setInvalid(false);
         }}
         onBlur={() => {

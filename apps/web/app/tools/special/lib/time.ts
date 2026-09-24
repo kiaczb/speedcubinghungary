@@ -14,21 +14,8 @@ export function formatCentiseconds(centiseconds: number): string {
   return negative ? `-${body}` : body;
 }
 
-export function formatTimeInput(value: string): string {
-  const digits = value.replace(/\D/g, "").replace(/^0+(?=\d)/, "");
-  if (!digits) return "";
-
-  if (digits.length <= 2) {
-    return `0.${digits.padStart(2, "0")}`;
-  }
-
-  if (digits.length <= 4) {
-    return `${parseInt(digits.slice(0, -2), 10)}.${digits.slice(-2)}`;
-  }
-
-  const minutes = parseInt(digits.slice(0, -4), 10);
-  return `${minutes}:${digits.slice(-4, -2)}.${digits.slice(-2)}`;
-}
+// A gépelés közbeni formázás a KÖZÖS app/lib/time.ts-ben van (a tippverseny is
+// azt használja) — itt csak az marad, ami a WCA eredményekre jellemző.
 
 export function parseTimeToCentiseconds(formatted: string): number | null {
   const trimmed = formatted.trim().replace(",", ".");

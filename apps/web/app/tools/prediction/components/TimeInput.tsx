@@ -1,7 +1,7 @@
 "use client";
 
 import { controlClass } from "@/app/components/ui/Field";
-import { extractDigits, formatTimeInput } from "../lib/time";
+import { formatTimeInput } from "@/app/lib/time";
 
 type Props = {
   value: string;
@@ -28,7 +28,8 @@ const TimeInput = ({
       inputMode="numeric"
       value={value}
       onChange={(event) => {
-        const formatted = formatTimeInput(extractDigits(event.target.value));
+        // Elutasított bevitelnél (null) a mező az ELŐZŐ értéken marad.
+        const formatted = formatTimeInput(event.target.value);
         if (formatted !== null) onChange(formatted);
       }}
       placeholder={placeholder}

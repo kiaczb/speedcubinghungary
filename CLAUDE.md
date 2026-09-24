@@ -276,7 +276,10 @@ Other Go conventions observed:
   (`NAV_LINKS`, `CONTACT_ITEMS`, `SITE_DESCRIPTION`, used by the navbar, footer
   and contact page), `events.ts` (`eventName()` — the WCA event id → Hungarian
   name table, shared by the allrounder and prediction tools; **don't copy it
-  back into a tool**), and `useBodyScrollLock.ts` (locks background scroll while
+  back into a tool**), `time.ts` (`formatTimeInput()` — WCA-style digit-only
+  time entry, shared by the prediction form and the Special DNF cell; it
+  returns `null` for input it refuses and the caller must then keep the
+  previous value), and `useBodyScrollLock.ts` (locks background scroll while
   a modal is open — used by `ConfirmModal`, `CreatePostModal`,
   `CreatePredictionModal`, `RulesModal`). Add nav/contact entries there, not
   per-component.
@@ -1548,11 +1551,13 @@ Component marad); a "Tipp leadása" gomb `disabled`, ha a tippverseny már
   a szülő a `useCompetitorOptions` hookkal: **egy versenyszám három mezője
   EGY kérés**, a nevezői lista pedig egyszer, csak ha van person kérdés.
   Hiba esetén a mező sima szöveges input marad (WCA-kiesés ne blokkoljon).
-- **Idő** (`TimeInput` + `lib/time.ts`): csak számjegy, gépelés közben
-  jobbról tagolva (`14289` → `1:42.89`), plafon 60:00.00, 6 számjegy. ⚠️ A
-  `formatTimeInput` levágja a vezető nullákat — a megjelenített `0.01`-ből az
-  `extractDigits` `001`-et ad vissza, és enélkül `001:23.45`-té halmozódna.
-  Elutasított bevitelnél (`null`) a mező az előző értéken marad.
+- **Idő** (`TimeInput` + a KÖZÖS `app/lib/time.ts`): csak számjegy, gépelés
+  közben jobbról tagolva (`14289` → `1:42.89`), plafon 60:00.00, 6 számjegy.
+  ⚠️ A `formatTimeInput` levágja a vezető nullákat — a megjelenített `0.01`
+  nyers számjegyei `001`, és enélkül `001:23.45`-té halmozódna.
+  Elutasított bevitelnél (`null`) a mező az előző értéken marad. Ugyanezt
+  használja a Budapest Special DNF-cellája is (§18) — **ne másold vissza egy
+  toolba**, korábban két, viselkedésében eltérő példány volt.
 - **Szám**: `type="number"`.
 - **Szabad szöveg** (`types.QUESTION_TEXT` / `"text"`, migráció
   `000014_add_prediction_text_question_type`): sima `type="text"` input,
