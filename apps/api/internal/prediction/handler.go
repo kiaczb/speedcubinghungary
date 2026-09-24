@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"speedcubinghungary/internal/httperr"
 	"time"
 
 	"speedcubinghungary/internal/types"
@@ -22,7 +23,7 @@ func NewHandler(service *Service) *Handler {
 func (h *Handler) GetContests(w http.ResponseWriter, r *http.Request) {
 	contests, err := h.service.GetContests()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		httperr.Write(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	json.NewEncoder(w).Encode(contests)
@@ -64,7 +65,7 @@ func (h *Handler) CreateContest(w http.ResponseWriter, r *http.Request) {
 			errors.Is(err, ErrEmptyQuestionPrompt) {
 			status = http.StatusBadRequest
 		}
-		http.Error(w, err.Error(), status)
+		httperr.Write(w, r, status, err)
 		return
 	}
 
@@ -84,7 +85,7 @@ func (h *Handler) DeleteContest(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(err, ErrContestNotFound) {
 			status = http.StatusNotFound
 		}
-		http.Error(w, err.Error(), status)
+		httperr.Write(w, r, status, err)
 		return
 	}
 }

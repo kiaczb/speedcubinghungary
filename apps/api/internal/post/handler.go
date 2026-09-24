@@ -5,6 +5,7 @@ import (
 	"errors"
 	"mime/multipart"
 	"net/http"
+	"speedcubinghungary/internal/httperr"
 	"speedcubinghungary/internal/types"
 	"strings"
 
@@ -93,10 +94,24 @@ func uploadStatus(err error) int {
 	return http.StatusInternalServerError
 }
 
+// readStatus a poszt-olvasás hibáit fordítja HTTP státusszá. A nem létező (vagy
+// nem is UUID alakú) azonosító a KLIENS hibája — korábban mindkettő 500-at
+// adott, és a nyers adatbázis-hibával együtt ment ki.
+func readStatus(err error) int {
+	switch {
+	case errors.Is(err, ErrPostNotFound):
+		return http.StatusNotFound
+	case errors.Is(err, ErrInvalidID):
+		return http.StatusBadRequest
+	default:
+		return http.StatusInternalServerError
+	}
+}
+
 func (h *Handler) GetPosts(w http.ResponseWriter, r *http.Request) {
 	posts, err := h.service.GetPosts()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		httperr.Write(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	json.NewEncoder(w).Encode(posts)
@@ -104,7 +119,7 @@ func (h *Handler) GetPosts(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetLatestPosts(w http.ResponseWriter, r *http.Request) {
 	posts, err := h.service.GetLatestPosts()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		httperr.Write(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	json.NewEncoder(w).Encode(posts)
@@ -113,7 +128,7 @@ func (h *Handler) GetPostByID(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	post, err := h.service.GetPostByID(id)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		httperr.Write(w, r, readStatus(err), err)
 		return
 	}
 	json.NewEncoder(w).Encode(post)
@@ -151,7 +166,7 @@ func (h *Handler) CreatePost(w http.ResponseWriter, r *http.Request) {
 		var err error
 		imagePaths, err = SaveImages(headers, h.uploadDir)
 		if err != nil {
-			http.Error(w, err.Error(), uploadStatus(err))
+			httperr.Write(w, r, uploadStatus(err), err)
 			return
 		}
 	} else {
@@ -179,7 +194,7 @@ func (h *Handler) CreatePost(w http.ResponseWriter, r *http.Request) {
 			errors.Is(err, ErrTooManyImages) {
 			status = http.StatusBadRequest
 		}
-		http.Error(w, err.Error(), status)
+		httperr.Write(w, r, status, err)
 		return
 	}
 
@@ -198,7 +213,7 @@ func (h *Handler) UpdatePost(w http.ResponseWriter, r *http.Request) {
 	// nélküli szerkesztéskor megtartsuk a jelenlegi galériát.
 	existing, err := h.service.GetPostByID(id)
 	if err != nil {
-		http.Error(w, ErrPostNotFound.Error(), http.StatusNotFound)
+		httperr.Write(w, r, readStatus(err), err)
 		return
 	}
 
@@ -230,7 +245,7 @@ func (h *Handler) UpdatePost(w http.ResponseWriter, r *http.Request) {
 
 		uploaded, err = SaveImages(headers, h.uploadDir)
 		if err != nil {
-			http.Error(w, err.Error(), uploadStatus(err))
+			httperr.Write(w, r, uploadStatus(err), err)
 			return
 		}
 
@@ -240,7 +255,7 @@ func (h *Handler) UpdatePost(w http.ResponseWriter, r *http.Request) {
 			imagePaths, err = resolveImageOrder(raw, existing.ImagePaths, uploaded)
 			if err != nil {
 				RemoveImages(uploaded, h.uploadDir)
-				http.Error(w, err.Error(), http.StatusBadRequest)
+				httperr.Write(w, r, http.StatusBadRequest, err)
 				return
 			}
 		} else {
@@ -278,7 +293,7 @@ func (h *Handler) UpdatePost(w http.ResponseWriter, r *http.Request) {
 			errors.Is(err, ErrTooManyImages):
 			status = http.StatusBadRequest
 		}
-		http.Error(w, err.Error(), status)
+		httperr.Write(w, r, status, err)
 		return
 	}
 
@@ -309,7 +324,7 @@ func (h *Handler) DeletePosts(w http.ResponseWriter, r *http.Request) {
 
 	err = h.service.DeletePosts(req.IDs)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		httperr.Write(w, r, readStatus(err), err)
 		return
 	}
 }

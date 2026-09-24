@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"speedcubinghungary/internal/httperr"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -20,7 +21,9 @@ func NewHandler(service *Service) *Handler {
 func (h *Handler) GetUpcoming(w http.ResponseWriter, r *http.Request) {
 	competitions, err := h.service.GetUpcomingHungarian()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		// A WCA API elérhetetlensége nem a MI hibánk: 502, mint a másik két
+		// proxy-végponton. Korábban 500-at adott, a nyers upstream hibaszöveggel.
+		writeError(w, r, err)
 		return
 	}
 	json.NewEncoder(w).Encode(competitions)
@@ -30,7 +33,7 @@ func (h *Handler) GetUpcoming(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetPsychSheet(w http.ResponseWriter, r *http.Request) {
 	entries, err := h.service.GetPsychSheet(chi.URLParam(r, "id"), chi.URLParam(r, "eventId"))
 	if err != nil {
-		writeError(w, err)
+		writeError(w, r, err)
 		return
 	}
 	json.NewEncoder(w).Encode(entries)
@@ -40,18 +43,20 @@ func (h *Handler) GetPsychSheet(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetCompetitors(w http.ResponseWriter, r *http.Request) {
 	competitors, err := h.service.GetCompetitors(chi.URLParam(r, "id"))
 	if err != nil {
-		writeError(w, err)
+		writeError(w, r, err)
 		return
 	}
 	json.NewEncoder(w).Encode(competitors)
 }
 
 // writeError maps a client-caused id error to 400 and everything else — the
-// WCA API being down or rate-limiting us — to 502.
-func writeError(w http.ResponseWriter, err error) {
+// WCA API being down or rate-limiting us — to 502. The upstream error's text
+// stays in the server log (httperr), because it carries WCA URLs and our own
+// query parameters.
+func writeError(w http.ResponseWriter, r *http.Request, err error) {
+	status := http.StatusBadGateway
 	if errors.Is(err, ErrInvalidID) {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		status = http.StatusBadRequest
 	}
-	http.Error(w, err.Error(), http.StatusBadGateway)
+	httperr.Write(w, r, status, err)
 }
