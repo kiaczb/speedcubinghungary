@@ -3,6 +3,7 @@ package special
 import (
 	"context"
 	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -229,4 +230,87 @@ func TestSubscriptionKeyRoundTrip(t *testing.T) {
 
 	_, err = roundIDFromKey("nem-ilyen-kulcs")
 	assert.Error(t, err)
+}
+
+// ⚠️ Egy kör lekérési hibája nem törölheti a kör addigi eredményeit.
+//
+// A load korábban a TELJES rounds map-et lecserélte, így egy pillanatnyi WCA
+// Live hiba eltüntette a kört a riportból — a versenyző kumulatív kerete
+// (A1a3) pedig hibás „maradék időt” mutatott, amíg a következő frissítés
+// vissza nem hozta.
+func TestTracker_KeepsRoundWhenItsQueryFails(t *testing.T) {
+	var failing atomic.Bool
+
+	server := fakeWCALive(t,
+		fakeRound{id: "1", eventID: "222", number: 1, results: []liveResult{
+			result("11", 7, "Teszt Elek", attempts(300, 350, 320)),
+		}},
+		fakeRound{id: "2", eventID: "333", number: 1, fail: &failing, results: []liveResult{
+			result("12", 7, "Teszt Elek", attempts(900, 850, 880)),
+		}},
+	)
+
+	tracker := newTestTracker(server.URL)
+
+	first, err := tracker.Results(context.Background(), testCompetition())
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"222-r1", "333-r1"}, roundWCIFIDs(first))
+
+	failing.Store(true)
+
+	entry, err := tracker.entry(testCompetition())
+	require.NoError(t, err)
+
+	results, err := tracker.load(context.Background(), entry, true)
+	require.NoError(t, err, "a részleges hiba nem teszi tönkre a betöltést")
+
+	assert.ElementsMatch(t, []string{"222-r1", "333-r1"}, roundWCIFIDs(results),
+		"a hibás kör az előző pillanatképével él tovább")
+}
+
+// Ha EGYETLEN kör sem jött le, az nem részleges hiba: ilyenkor hibát adunk, és
+// a korábbi állapotot érintetlenül hagyjuk, hogy a következő kérés azonnal
+// újrapróbálja ahelyett, hogy üres riportot szolgálnánk ki a cache TTL végéig.
+func TestTracker_TotalRoundFailureKeepsPreviousState(t *testing.T) {
+	var failing atomic.Bool
+
+	server := fakeWCALive(t, fakeRound{
+		id: "1", eventID: "333", number: 1, fail: &failing,
+		results: []liveResult{result("11", 7, "Teszt Elek", attempts(900))},
+	})
+
+	tracker := newTestTracker(server.URL)
+
+	first, err := tracker.Results(context.Background(), testCompetition())
+	require.NoError(t, err)
+	require.Len(t, first, 1)
+
+	failing.Store(true)
+
+	entry, err := tracker.entry(testCompetition())
+	require.NoError(t, err)
+
+	loadedAt := entry.loadedAt
+
+	_, err = tracker.load(context.Background(), entry, true)
+	require.Error(t, err, "teljes kiesésnél hibát kell jelezni")
+
+	assert.Len(t, entry.rounds, 1, "a korábbi pillanatkép megmarad")
+	assert.Equal(t, loadedAt, entry.loadedAt,
+		"a loadedAt sem frissülhet, különben a cache TTL elnyelné az újrapróbálkozást")
+}
+
+func roundWCIFIDs(results []ResultSnapshot) []string {
+	seen := make(map[string]bool, len(results))
+	ids := make([]string, 0, len(results))
+
+	for _, result := range results {
+		if seen[result.RoundWCIFID] {
+			continue
+		}
+		seen[result.RoundWCIFID] = true
+		ids = append(ids, result.RoundWCIFID)
+	}
+
+	return ids
 }

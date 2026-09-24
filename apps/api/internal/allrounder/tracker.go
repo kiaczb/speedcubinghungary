@@ -185,6 +185,7 @@ func (t *LiveTracker) load(ctx context.Context, entry *trackedCompetition) ([]Ro
 		slots  = make(chan struct{}, liveRoundConcurrency)
 		rounds = make(map[int]RoundResults, len(identities))
 		byID   = make(map[int]roundIdentity, len(identities))
+		failed = make(map[int]bool)
 	)
 
 	for _, identity := range identities {
@@ -200,6 +201,10 @@ func (t *LiveTracker) load(ctx context.Context, entry *trackedCompetition) ([]Ro
 			round, err := t.client.GetRound(ctx, identity.LiveRoundID)
 			if err != nil {
 				log.Printf("[allrounder] failed to query round %d: %v", identity.LiveRoundID, err)
+
+				mu.Lock()
+				failed[identity.LiveRoundID] = true
+				mu.Unlock()
 				return
 			}
 
@@ -211,7 +216,23 @@ func (t *LiveTracker) load(ctx context.Context, entry *trackedCompetition) ([]Ro
 
 	wg.Wait()
 
+	// Ha egyetlen kör sem jött le, az elérhetetlen upstream, nem részleges hiba:
+	// ne írjuk felül a meglévő állapotot, és a loadedAt-ot se frissítsük.
+	if len(failed) > 0 && len(rounds) == 0 {
+		return nil, fmt.Errorf("every round query failed for %s", entry.competitionWCAID)
+	}
+
 	t.mu.Lock()
+	// ⚠️ Egy kör lekérési hibája NEM törölheti a kör addigi eredményeit: a map
+	// teljes cseréjével az élő állomás pontjai látványosan lecsökkennének, majd
+	// a következő frissítéskor visszajönnének — a versenyzőnek ez elvesztett
+	// pontnak látszik. A hibás körök ezért az ELŐZŐ pillanatképükkel élnek tovább.
+	for roundID := range failed {
+		if previous, known := entry.rounds[roundID]; known {
+			rounds[roundID] = previous
+		}
+	}
+
 	entry.identities = byID
 	entry.rounds = rounds
 	entry.loadedAt = time.Now()

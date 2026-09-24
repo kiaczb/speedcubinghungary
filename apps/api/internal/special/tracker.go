@@ -260,6 +260,7 @@ func (t *Tracker) load(ctx context.Context, entry *trackedCompetition, force boo
 	}
 
 	rounds := make(map[int]trackedRound)
+	failed := make(map[int]bool)
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	slots := make(chan struct{}, roundFetchConcurrency)
@@ -275,6 +276,10 @@ func (t *Tracker) load(ctx context.Context, entry *trackedCompetition, force boo
 			round, err := t.client.GetRound(ctx, tracked.identity.LiveRoundID)
 			if err != nil {
 				log.Printf("[special] failed to query round %d: %v", tracked.identity.LiveRoundID, err)
+
+				mu.Lock()
+				failed[tracked.identity.LiveRoundID] = true
+				mu.Unlock()
 				return
 			}
 			tracked.results = snapshotResults(tracked.identity, *round)
@@ -287,7 +292,25 @@ func (t *Tracker) load(ctx context.Context, entry *trackedCompetition, force boo
 
 	wg.Wait()
 
+	// Ha EGYETLEN kör sem jött le, az nem részleges hiba, hanem elérhetetlen
+	// upstream. Ilyenkor ne írjuk felül a meglévő állapotot, és a loadedAt-ot se
+	// frissítsük — így a következő kérés azonnal újrapróbálja, ahelyett hogy egy
+	// üres pillanatképet szolgálnánk ki a cache TTL végéig.
+	if len(failed) > 0 && len(rounds) == 0 {
+		return nil, fmt.Errorf("every round query failed for %s", entry.competition.CompetitionWCAID)
+	}
+
 	t.mu.Lock()
+	// ⚠️ Egy kör lekérési hibája NEM törölheti a kör addigi eredményeit. A map
+	// teljes cseréjével egy pillanatnyi WCA Live hiba eltüntetné a kört a
+	// riportból, és a kumulatív keret (A1a3) hibás „maradék időt” mutatna —
+	// ezért a hibás körök az ELŐZŐ pillanatképükkel élnek tovább.
+	for roundID := range failed {
+		if previous, known := entry.rounds[roundID]; known {
+			rounds[roundID] = previous
+		}
+	}
+
 	entry.rounds = rounds
 	entry.loadedAt = time.Now()
 	entry.lastSeen = entry.loadedAt

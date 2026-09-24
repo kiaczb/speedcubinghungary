@@ -29,6 +29,12 @@ async function apiFetch(path: string, init?: RequestInit) {
   });
 
   if (!res.ok) {
+    // A munkamenet egy óráig él, ami egy verseny alatt simán lejár. A nyers
+    // "unauthorized" a rögzítőnek semmit nem mond arról, mit kell tennie.
+    if (res.status === 401 || res.status === 403) {
+      throw new Error("Lejárt a bejelentkezésed — jelentkezz be újra.");
+    }
+
     const message = (await res.text()).trim();
     throw new Error(message || `A kérés sikertelen (${res.status})`);
   }
@@ -163,6 +169,8 @@ const SpecialView = () => {
   ) => {
     if (!competitionId) return;
 
+    // A mentés hibája SZÁNDÉKOSAN felszáll a hívó cellához: az jelzi a
+    // rögzítőnek, hogy a beírt idő nincs elmentve (lásd CompetitorCard).
     await apiFetch(
       `/special/results/${liveResultId}/attempts/${attemptNumber}/elapsed`,
       {
@@ -171,7 +179,15 @@ const SpecialView = () => {
         body: JSON.stringify({ competitionWcaId: competitionId, elapsedCs }),
       },
     );
-    setReport(await fetchReport(competitionId, selectedRound));
+
+    // A visszaolvasás hibája viszont NEM mentési hiba — a mentés ekkor már
+    // megtörtént. Ha ezt is felengednénk, a cella mentetlennek jelölné a már
+    // elmentett időt. Az SSE (vagy a tartalék poll) úgyis frissít.
+    try {
+      setReport(await fetchReport(competitionId, selectedRound));
+    } catch (error) {
+      console.error("A Special riport frissítése a mentés után sikertelen:", error);
+    }
   };
 
   if (!competitionId) {
