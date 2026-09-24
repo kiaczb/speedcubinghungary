@@ -520,7 +520,7 @@ chi router in `internal/router/router.go`. Global middleware: `middleware.JSON`
 | POST | `/posts` | JWT + `admin` | `post.CreatePost` (accepts **multipart/form-data** with up to `MaxImages` (10) repeated `images` file parts — their order is the gallery order — or the legacy JSON body) |
 | PUT  | `/posts/{id}` | JWT + `admin` | `post.UpdatePost` (multipart or JSON; `image_order` describes the **whole** resulting gallery, see §20; without it the legacy behaviour applies — new `images` are appended and `remove_image=true` clears the gallery; 404 if the id doesn't exist) |
 | GET  | `/uploads/*` | public | static file server over `cfg.UploadDir` (post images) |
-| DELETE | `/posts` | JWT + `admin` | `post.DeletePosts` (body `{ids:[]}`) |
+| DELETE | `/posts` | JWT + `admin` | `post.DeletePosts` (body `{ids:[]}`; also deletes the posts' image files from the volume, see §20) |
 | GET  | `/competitions/upcoming` | public | `competition.GetUpcoming` (HU only; DTO includes `eventIds` — the WCA API's `event_ids` passed straight through, no extra request) |
 | GET  | `/competitions/{id}/psych-sheet/{eventId}` | public | `competition.GetPsychSheet` — proxy of the WCA psych sheet (PR-ranked start list) for one event: `[{name, wcaId, position}]`, `position` 0 = no PR yet, `wcaId` empty for newcomers. Ids validated against `^[A-Za-z0-9]{1,64}$` (400), upstream failure 502. **Cached 15 min + singleflight**, see §21 |
 | GET  | `/competitions/{id}/competitors` | public | `competition.GetCompetitors` — every accepted, competing registrant from the public WCIF, sorted by name: `[{name, wcaId}]`. (The WCA `/registrations` endpoint only carries user ids, no names — that's why WCIF.) Same validation/caching as above |
@@ -1429,9 +1429,11 @@ metaadat (alt szöveg, szerző).
   szerkeszthető; submitkor ebből áll elő az `image_order` és ebben a sorrendben
   fűzi hozzá az `images` fájlokat. A kettőnek **egyeznie kell** — a backend
   sorban tölti ki a `"new"` helyeket.
-- ⚠️ A poszt TÖRLÉSE továbbra sem törli a képfájlokat a volume-ról (`DeletePosts`
-  csak a DB sort). Ez a galéria előtt is így volt, de most posztonként 10 fájlt
-  jelenthet.
+- A poszt TÖRLÉSE a képfájlokat is elviszi. A `Repository.Delete` a
+  `DELETE … RETURNING image_paths`-szal EGY lekérdezésben adja vissza a
+  felszabadult útvonalakat (külön SELECT + DELETE közben változhatna a
+  galéria), a handler pedig ezekre hívja a `RemoveImages`-t — hibaágon is,
+  mert a visszakapott sorok addigra már tényleg törlődtek.
 
 ## 21. Tippverseny (`internal/prediction` + `/tools/prediction`)
 

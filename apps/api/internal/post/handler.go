@@ -322,7 +322,13 @@ func (h *Handler) DeletePosts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = h.service.DeletePosts(req.IDs)
+	orphaned, err := h.service.DeletePosts(req.IDs)
+
+	// A törölt posztok képeire már semmi nem hivatkozik — különben a volume-on
+	// posztonként akár 10 fájl maradna örökre (§20). Hibaágon is takarítunk:
+	// amit a DB visszaadott, annak a sora már tényleg törlődött.
+	RemoveImages(orphaned, h.uploadDir)
+
 	if err != nil {
 		httperr.Write(w, r, readStatus(err), err)
 		return
