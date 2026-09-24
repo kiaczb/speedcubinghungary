@@ -5,9 +5,9 @@ import { FaArrowLeft, FaArrowRight } from "react-icons/fa";
 import { badgeMap, PostsItem, TagTypes } from "../types";
 import { MAX_POST_IMAGES, postImageUrl } from "../lib/postImage";
 import { clientApiUrl } from "@/app/lib/api";
-import { useBodyScrollLock } from "@/app/lib/useBodyScrollLock";
 import Button from "@/app/components/ui/Button";
 import Field, { controlClass } from "@/app/components/ui/Field";
+import Modal from "@/app/components/ui/Modal";
 import MarkdownEditor from "./MarkdownEditor";
 
 // Egyezzenek a backend korlátaival: apps/api/internal/post/upload.go + validator.go
@@ -58,20 +58,6 @@ export default function CreatePostModal({ onClose, post }: Props) {
 
   const contentLength = content.trim().length;
   const remainingSlots = MAX_POST_IMAGES - images.length;
-
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
-
-  useBodyScrollLock(true);
-
-  useEffect(() => {
-    titleInputRef.current?.focus();
-  }, []);
 
   useEffect(() => {
     const urls = objectUrlsRef.current;
@@ -212,198 +198,177 @@ export default function CreatePostModal({ onClose, post }: Props) {
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm dark:bg-black/70"
-      onClick={onClose}
-      role="presentation"
+    <Modal
+      title={isEdit ? "Poszt szerkesztése" : "Új poszt létrehozása"}
+      onClose={onClose}
+      closeDisabled={submitting}
+      initialFocusRef={titleInputRef}
     >
-      <div
-        className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-panel border border-line bg-surface shadow-panel"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="create-post-title"
-      >
-        <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-line bg-surface/95 px-6 py-4 backdrop-blur-sm">
-          <h2 id="create-post-title" className="text-lg font-bold">
-            {isEdit ? "Poszt szerkesztése" : "Új poszt létrehozása"}
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Bezárás"
-            className="-mr-2 -mt-1 inline-flex h-8 w-8 items-center justify-center rounded-control text-xl leading-none text-muted-foreground transition-colors duration-200 ease-smooth hover:bg-surface-muted hover:text-foreground"
+      <form onSubmit={handleSubmit} className="space-y-5 px-6 py-5">
+        <Field label="Cím" htmlFor="post-title">
+          <input
+            id="post-title"
+            ref={titleInputRef}
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="A poszt címe"
+            className={controlClass}
+          />
+        </Field>
+
+        <Field label="Kategória" htmlFor="post-tag">
+          <select
+            id="post-tag"
+            value={tag}
+            onChange={(e) => setTag(e.target.value as TagTypes)}
+            className={controlClass}
           >
-            ×
-          </button>
-        </div>
+            {Object.entries(badgeMap).map(([value, { label }]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </Field>
 
-        <form onSubmit={handleSubmit} className="space-y-5 px-6 py-5">
-          <Field label="Cím" htmlFor="post-title">
-            <input
-              id="post-title"
-              ref={titleInputRef}
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="A poszt címe"
-              className={controlClass}
-            />
-          </Field>
-
-          <Field label="Kategória" htmlFor="post-tag">
-            <select
-              id="post-tag"
-              value={tag}
-              onChange={(e) => setTag(e.target.value as TagTypes)}
-              className={controlClass}
+        <Field
+          label="Leírás"
+          htmlFor="post-content"
+          hint={
+            <span
+              className={
+                contentLength < MIN_CONTENT_LENGTH
+                  ? "font-medium text-brand-red"
+                  : "text-muted-foreground"
+              }
             >
-              {Object.entries(badgeMap).map(([value, { label }]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </Field>
+              <span className="tabular font-mono">{contentLength}</span> /{" "}
+              {MIN_CONTENT_LENGTH} karakter minimum
+            </span>
+          }
+        >
+          <MarkdownEditor
+            id="post-content"
+            value={content}
+            onChange={setContent}
+            rows={12}
+            placeholder={"A poszt tartalma…\n\nJelöld ki a szöveget, és használd a fenti gombokat."}
+          />
+        </Field>
 
-          <Field
-            label="Leírás"
-            htmlFor="post-content"
-            hint={
-              <span
-                className={
-                  contentLength < MIN_CONTENT_LENGTH
-                    ? "font-medium text-brand-red"
-                    : "text-muted-foreground"
-                }
-              >
-                <span className="tabular font-mono">{contentLength}</span> /{" "}
-                {MIN_CONTENT_LENGTH} karakter minimum
-              </span>
-            }
-          >
-            <MarkdownEditor
-              id="post-content"
-              value={content}
-              onChange={setContent}
-              rows={12}
-              placeholder={"A poszt tartalma…\n\nJelöld ki a szöveget, és használd a fenti gombokat."}
-            />
-          </Field>
+        <Field
+          label="Képek"
+          htmlFor="post-images"
+          optional
+          hint={
+            <span className="text-muted-foreground">
+              <span className="tabular font-mono">{images.length}</span> /{" "}
+              {MAX_POST_IMAGES} kép
+            </span>
+          }
+        >
+          <input
+            id="post-images"
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept={ACCEPTED_IMAGE_TYPES.join(",")}
+            onChange={handleFilesChange}
+            disabled={remainingSlots <= 0}
+            className="w-full cursor-pointer text-sm text-muted-foreground file:mr-3 file:cursor-pointer file:rounded-control file:border file:border-line file:bg-surface-muted file:px-4 file:py-2 file:text-sm file:font-medium file:text-foreground hover:file:bg-line disabled:cursor-not-allowed disabled:opacity-50"
+          />
 
-          <Field
-            label="Képek"
-            htmlFor="post-images"
-            optional
-            hint={
-              <span className="text-muted-foreground">
-                <span className="tabular font-mono">{images.length}</span> /{" "}
-                {MAX_POST_IMAGES} kép
-              </span>
-            }
-          >
-            <input
-              id="post-images"
-              ref={fileInputRef}
-              type="file"
-              multiple
-              accept={ACCEPTED_IMAGE_TYPES.join(",")}
-              onChange={handleFilesChange}
-              disabled={remainingSlots <= 0}
-              className="w-full cursor-pointer text-sm text-muted-foreground file:mr-3 file:cursor-pointer file:rounded-control file:border file:border-line file:bg-surface-muted file:px-4 file:py-2 file:text-sm file:font-medium file:text-foreground hover:file:bg-line disabled:cursor-not-allowed disabled:opacity-50"
-            />
+          {images.length > 0 && (
+            <>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Az első kép a borítókép — ez látszik a listákban. A poszt
+                oldalán a képek ebben a sorrendben lapozhatók.
+              </p>
 
-            {images.length > 0 && (
-              <>
-                <p className="mt-2 text-xs text-muted-foreground">
-                  Az első kép a borítókép — ez látszik a listákban. A poszt
-                  oldalán a képek ebben a sorrendben lapozhatók.
-                </p>
+              <ul className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                {images.map((item, index) => (
+                  <li
+                    key={item.url}
+                    className="relative overflow-hidden rounded-control border border-line bg-surface-muted"
+                  >
+                    {/* Sima img: a kép domainje környezetenként más — így nem kell remotePatterns. */}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={item.url}
+                      alt={`${index + 1}. kép előnézete`}
+                      className="aspect-video w-full object-cover"
+                    />
 
-                <ul className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
-                  {images.map((item, index) => (
-                    <li
-                      key={item.url}
-                      className="relative overflow-hidden rounded-control border border-line bg-surface-muted"
+                    <span className="tabular absolute left-1.5 top-1.5 rounded-control bg-surface-inverse/75 px-1.5 py-0.5 font-mono text-[11px] text-white">
+                      {index === 0 ? "Borító" : index + 1}
+                    </span>
+
+                    <button
+                      type="button"
+                      onClick={() => removeImage(index)}
+                      aria-label={`${index + 1}. kép eltávolítása`}
+                      className="absolute right-1.5 top-1.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-surface-inverse/75 text-sm leading-none text-white transition-colors duration-200 ease-smooth hover:bg-brand-red"
                     >
-                      {/* Sima img: a kép domainje környezetenként más — így nem kell remotePatterns. */}
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={item.url}
-                        alt={`${index + 1}. kép előnézete`}
-                        className="aspect-video w-full object-cover"
-                      />
+                      ×
+                    </button>
 
-                      <span className="tabular absolute left-1.5 top-1.5 rounded-control bg-surface-inverse/75 px-1.5 py-0.5 font-mono text-[11px] text-white">
-                        {index === 0 ? "Borító" : index + 1}
-                      </span>
-
+                    <div className="flex justify-center gap-1 border-t border-line bg-surface p-1">
                       <button
                         type="button"
-                        onClick={() => removeImage(index)}
-                        aria-label={`${index + 1}. kép eltávolítása`}
-                        className="absolute right-1.5 top-1.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-surface-inverse/75 text-sm leading-none text-white transition-colors duration-200 ease-smooth hover:bg-brand-red"
+                        onClick={() => moveImage(index, -1)}
+                        disabled={index === 0}
+                        aria-label={`${index + 1}. kép előrébb`}
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-control text-muted-foreground transition-colors duration-200 ease-smooth hover:bg-surface-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
                       >
-                        ×
+                        <FaArrowLeft className="h-3 w-3" />
                       </button>
-
-                      <div className="flex justify-center gap-1 border-t border-line bg-surface p-1">
-                        <button
-                          type="button"
-                          onClick={() => moveImage(index, -1)}
-                          disabled={index === 0}
-                          aria-label={`${index + 1}. kép előrébb`}
-                          className="inline-flex h-7 w-7 items-center justify-center rounded-control text-muted-foreground transition-colors duration-200 ease-smooth hover:bg-surface-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
-                        >
-                          <FaArrowLeft className="h-3 w-3" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => moveImage(index, 1)}
-                          disabled={index === images.length - 1}
-                          aria-label={`${index + 1}. kép hátrébb`}
-                          className="inline-flex h-7 w-7 items-center justify-center rounded-control text-muted-foreground transition-colors duration-200 ease-smooth hover:bg-surface-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
-                        >
-                          <FaArrowRight className="h-3 w-3" />
-                        </button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            )}
-          </Field>
-
-          {error && (
-            <p
-              role="alert"
-              className="rounded-control border border-brand-red/20 bg-brand-red/5 px-3.5 py-2.5 text-sm text-brand-red-strong"
-            >
-              {error}
-            </p>
+                      <button
+                        type="button"
+                        onClick={() => moveImage(index, 1)}
+                        disabled={index === images.length - 1}
+                        aria-label={`${index + 1}. kép hátrébb`}
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-control text-muted-foreground transition-colors duration-200 ease-smooth hover:bg-surface-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
+                      >
+                        <FaArrowRight className="h-3 w-3" />
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </>
           )}
+        </Field>
 
-          <div className="flex justify-end gap-3 border-t border-line pt-5">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={onClose}
-              disabled={submitting}
-            >
-              Mégse
-            </Button>
-            <Button type="submit" disabled={submitting}>
-              {submitting
-                ? isEdit
-                  ? "Mentés…"
-                  : "Létrehozás…"
-                : isEdit
-                  ? "Mentés"
-                  : "Létrehozás"}
-            </Button>
-          </div>
-        </form>
-      </div>
-    </div>
+        {error && (
+          <p
+            role="alert"
+            className="rounded-control border border-brand-red/20 bg-brand-red/5 px-3.5 py-2.5 text-sm text-brand-red-strong"
+          >
+            {error}
+          </p>
+        )}
+
+        <div className="flex justify-end gap-3 border-t border-line pt-5">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={onClose}
+            disabled={submitting}
+          >
+            Mégse
+          </Button>
+          <Button type="submit" disabled={submitting}>
+            {submitting
+              ? isEdit
+                ? "Mentés…"
+                : "Létrehozás…"
+              : isEdit
+                ? "Mentés"
+                : "Létrehozás"}
+          </Button>
+        </div>
+      </form>
+    </Modal>
   );
 }

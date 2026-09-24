@@ -260,8 +260,17 @@ Other Go conventions observed:
   `primary`/`secondary`/`ghost`/`danger`/`inverse`; renders `<button>`,
   `<Link>`, or external `<a>` based on `href`/`external`), `Field` (+ the
   exported `controlClass` for inputs), `PageHeader`, `StateMessage`,
-  `ConfirmModal` (destructive-action confirmation — same backdrop/panel style
-  as `CreatePostModal`/`CreatePredictionModal`; takes `title`, `description`,
+  `Modal` (**the shell every modal is built on**: backdrop, panel, header bar,
+  Escape, backdrop click, scroll lock — and the **focus trap**. Tab cycles
+  inside the panel, focus lands there on open and returns to whatever opened it
+  on close. Props: `title`, `onClose`, `size` (`sm`/`md`/`lg`), `role`,
+  `closeDisabled` (blocks every way out while a request is in flight),
+  `hideHeader` for a dialog that renders its own title, `initialFocusRef`.
+  ⚠️ Don't hand-roll a backdrop + panel again — the four that existed had each
+  dropped the focus trap, so Tab walked out of the dialog into the page behind
+  it),
+  `ConfirmModal` (destructive-action confirmation, built on `Modal`;
+  takes `title`, `description`,
   `onConfirm: () => Promise<void>`, `onClose`; manages its own submitting/error
   state and closes itself on a successful `onConfirm`). Plus
   `app/components/Cards/Card.tsx` (variants `elevated`/`outlined`/`inverse`,
@@ -285,9 +294,8 @@ Other Go conventions observed:
   time entry, shared by the prediction form and the Special DNF cell; it
   returns `null` for input it refuses and the caller must then keep the
   previous value), and `useBodyScrollLock.ts` (locks background scroll while
-  a modal is open — used by `ConfirmModal`, `CreatePostModal`,
-  `CreatePredictionModal`, `RulesModal`). Add nav/contact entries there, not
-  per-component.
+  a modal is open — called by `Modal`, so a modal built on it gets this for
+  free). Add nav/contact entries there, not per-component.
   - ⚠️ `useBodyScrollLock` also compensates `body`'s `padding-right` by the
     scrollbar's width. A bare `overflow: hidden` on `body` makes the vertical
     scrollbar disappear, and the page content reflows into that space — the
