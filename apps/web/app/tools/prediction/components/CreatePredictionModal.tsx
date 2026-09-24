@@ -4,9 +4,9 @@ import { useRouter } from "next/navigation";
 import "@cubing/icons";
 import { UpcomingCompetition } from "@/app/calendar/types";
 import { clientApiUrl } from "@/app/lib/api";
-import { useBodyScrollLock } from "@/app/lib/useBodyScrollLock";
 import Button from "@/app/components/ui/Button";
 import Field, { controlClass } from "@/app/components/ui/Field";
+import Modal from "@/app/components/ui/Modal";
 import { eventName } from "@/app/lib/events";
 import { formatShortDate } from "@/app/lib/date";
 import { ExtraQuestion } from "../types";
@@ -34,16 +34,6 @@ export default function CreatePredictionModal({ onClose }: Props) {
 
   const selectRef = useRef<HTMLSelectElement>(null);
   const selectedCompetition = competitions.find((c) => c.id === competitionId);
-
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
-
-  useBodyScrollLock(true);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -145,161 +135,140 @@ export default function CreatePredictionModal({ onClose }: Props) {
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm dark:bg-black/70"
-      onClick={onClose}
-      role="presentation"
+    <Modal
+      title="Új tippverseny létrehozása"
+      onClose={onClose}
+      closeDisabled={submitting}
+      initialFocusRef={selectRef}
     >
-      <div
-        className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-panel border border-line bg-surface shadow-panel"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="create-prediction-title"
-      >
-        <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-line bg-surface/95 px-6 py-4 backdrop-blur-sm">
-          <h2 id="create-prediction-title" className="text-lg font-bold">
-            Új tippverseny létrehozása
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Bezárás"
-            className="-mr-2 -mt-1 inline-flex h-8 w-8 items-center justify-center rounded-control text-xl leading-none text-muted-foreground transition-colors duration-200 ease-smooth hover:bg-surface-muted hover:text-foreground"
-          >
-            ×
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-5 px-6 py-5">
-          <Field label="Verseny" htmlFor="prediction-competition">
-            {competitionsStatus === "error" ? (
-              <p className="rounded-control border border-brand-red/20 bg-brand-red/5 px-3.5 py-2.5 text-sm text-brand-red-strong">
-                Nem sikerült betölteni a versenyeket.
-              </p>
-            ) : (
-              <select
-                id="prediction-competition"
-                ref={selectRef}
-                value={competitionId}
-                onChange={(e) => handleCompetitionChange(e.target.value)}
-                disabled={competitionsStatus === "loading"}
-                className={controlClass}
-              >
-                <option value="">
-                  {competitionsStatus === "loading"
-                    ? "Versenyek betöltése…"
-                    : "Válassz versenyt"}
-                </option>
-                {competitions.map((competition) => (
-                  <option key={competition.id} value={competition.id}>
-                    {competition.name} —{" "}
-                    {formatShortDate(competition.startDate)}
-                  </option>
-                ))}
-              </select>
-            )}
-          </Field>
-
-          <Field
-            label="Tippelési határidő"
-            htmlFor="prediction-deadline"
-            hint="Eddig lehet tippet leadni — utána a tippverseny lezárul."
-          >
-            <input
-              id="prediction-deadline"
-              type="datetime-local"
-              value={predictionDeadline}
-              onChange={(e) => setPredictionDeadline(e.target.value)}
+      <form onSubmit={handleSubmit} className="space-y-5 px-6 py-5">
+        <Field label="Verseny" htmlFor="prediction-competition">
+          {competitionsStatus === "error" ? (
+            <p className="rounded-control border border-brand-red/20 bg-brand-red/5 px-3.5 py-2.5 text-sm text-brand-red-strong">
+              Nem sikerült betölteni a versenyeket.
+            </p>
+          ) : (
+            <select
+              id="prediction-competition"
+              ref={selectRef}
+              value={competitionId}
+              onChange={(e) => handleCompetitionChange(e.target.value)}
+              disabled={competitionsStatus === "loading"}
               className={controlClass}
-            />
-          </Field>
-
-          <Field
-            label="Dobogó-tippek versenyszámai"
-            htmlFor="prediction-events"
-            hint={
-              selectedCompetition
-                ? "Ezekhez a versenyszámokhoz kell majd 1-2-3. helyet tippelni."
-                : "Válassz versenyt — a lista a verseny versenyszámaiból töltődik."
-            }
-          >
-            {selectedCompetition ? (
-              <div
-                id="prediction-events"
-                className="flex flex-wrap gap-2"
-                role="group"
-                aria-label="Dobogó-tippek versenyszámai"
-              >
-                {selectedCompetition.eventIds.map((eventId) => {
-                  const checked = podiumEventIds.includes(eventId);
-                  return (
-                    <label
-                      key={eventId}
-                      className={`flex cursor-pointer items-center gap-2 rounded-control border px-3 py-2 text-sm transition-colors duration-200 ease-smooth ${
-                        checked
-                          ? "border-foreground bg-surface-muted text-foreground"
-                          : "border-line text-muted-foreground hover:border-line-strong"
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => toggleEvent(eventId)}
-                        className="h-3.5 w-3.5 accent-foreground"
-                      />
-                      <span
-                        className={`cubing-icon event-${eventId} text-[15px] leading-none`}
-                        aria-hidden
-                      />
-                      {eventName(eventId)}
-                    </label>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="text-sm text-subtle-foreground">
-                Nincs kiválasztott verseny.
-              </p>
-            )}
-          </Field>
-
-          <Field
-            label="Extra kérdések"
-            htmlFor="prediction-extra-questions"
-            optional
-            hint="Pl. versenyző, idő, szám vagy szabad szöveg tippelése — például 'Ki nyeri a 3x3x3-at?' vagy 'Hány rekord születik?'."
-          >
-            <ExtraQuestionsEditor
-              questions={extraQuestions}
-              onChange={setExtraQuestions}
-            />
-          </Field>
-
-          {error && (
-            <p
-              role="alert"
-              className="rounded-control border border-brand-red/20 bg-brand-red/5 px-3.5 py-2.5 text-sm text-brand-red-strong"
             >
-              {error}
+              <option value="">
+                {competitionsStatus === "loading"
+                  ? "Versenyek betöltése…"
+                  : "Válassz versenyt"}
+              </option>
+              {competitions.map((competition) => (
+                <option key={competition.id} value={competition.id}>
+                  {competition.name} —{" "}
+                  {formatShortDate(competition.startDate)}
+                </option>
+              ))}
+            </select>
+          )}
+        </Field>
+
+        <Field
+          label="Tippelési határidő"
+          htmlFor="prediction-deadline"
+          hint="Eddig lehet tippet leadni — utána a tippverseny lezárul."
+        >
+          <input
+            id="prediction-deadline"
+            type="datetime-local"
+            value={predictionDeadline}
+            onChange={(e) => setPredictionDeadline(e.target.value)}
+            className={controlClass}
+          />
+        </Field>
+
+        <Field
+          label="Dobogó-tippek versenyszámai"
+          htmlFor="prediction-events"
+          hint={
+            selectedCompetition
+              ? "Ezekhez a versenyszámokhoz kell majd 1-2-3. helyet tippelni."
+              : "Válassz versenyt — a lista a verseny versenyszámaiból töltődik."
+          }
+        >
+          {selectedCompetition ? (
+            <div
+              id="prediction-events"
+              className="flex flex-wrap gap-2"
+              role="group"
+              aria-label="Dobogó-tippek versenyszámai"
+            >
+              {selectedCompetition.eventIds.map((eventId) => {
+                const checked = podiumEventIds.includes(eventId);
+                return (
+                  <label
+                    key={eventId}
+                    className={`flex cursor-pointer items-center gap-2 rounded-control border px-3 py-2 text-sm transition-colors duration-200 ease-smooth ${
+                      checked
+                        ? "border-foreground bg-surface-muted text-foreground"
+                        : "border-line text-muted-foreground hover:border-line-strong"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleEvent(eventId)}
+                      className="h-3.5 w-3.5 accent-foreground"
+                    />
+                    <span
+                      className={`cubing-icon event-${eventId} text-[15px] leading-none`}
+                      aria-hidden
+                    />
+                    {eventName(eventId)}
+                  </label>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-sm text-subtle-foreground">
+              Nincs kiválasztott verseny.
             </p>
           )}
+        </Field>
 
-          <div className="flex justify-end gap-3 border-t border-line pt-5">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={onClose}
-              disabled={submitting}
-            >
-              Mégse
-            </Button>
-            <Button type="submit" disabled={submitting}>
-              {submitting ? "Létrehozás…" : "Létrehozás"}
-            </Button>
-          </div>
-        </form>
-      </div>
-    </div>
+        <Field
+          label="Extra kérdések"
+          htmlFor="prediction-extra-questions"
+          optional
+          hint="Pl. versenyző, idő, szám vagy szabad szöveg tippelése — például 'Ki nyeri a 3x3x3-at?' vagy 'Hány rekord születik?'."
+        >
+          <ExtraQuestionsEditor
+            questions={extraQuestions}
+            onChange={setExtraQuestions}
+          />
+        </Field>
+
+        {error && (
+          <p
+            role="alert"
+            className="rounded-control border border-brand-red/20 bg-brand-red/5 px-3.5 py-2.5 text-sm text-brand-red-strong"
+          >
+            {error}
+          </p>
+        )}
+
+        <div className="flex justify-end gap-3 border-t border-line pt-5">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={onClose}
+            disabled={submitting}
+          >
+            Mégse
+          </Button>
+          <Button type="submit" disabled={submitting}>
+            {submitting ? "Létrehozás…" : "Létrehozás"}
+          </Button>
+        </div>
+      </form>
+    </Modal>
   );
 }
