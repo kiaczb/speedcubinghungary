@@ -2,6 +2,7 @@ package post
 
 import (
 	"database/sql"
+	"errors"
 
 	"github.com/lib/pq"
 )
@@ -92,11 +93,19 @@ func (r *PostgresRepository) GetByID(id string) (Post, error) {
 		FROM posts
 		WHERE id = $1
 	`, id).Scan(&p.ID, &p.Tag, &p.Title, &p.Content, pq.Array(&p.ImagePaths), &p.CreatedAt)
+	// A nem létező poszt NEM szerverhiba: saját sentinel hibává fordítjuk, hogy
+	// a handler 404-et adhasson 500 helyett (és ne a nyers sql hiba menjen ki).
+	if errors.Is(err, sql.ErrNoRows) {
+		return Post{}, ErrPostNotFound
+	}
+	if err != nil {
+		return Post{}, err
+	}
 	if p.ImagePaths == nil {
 		p.ImagePaths = []string{}
 	}
 
-	return p, err
+	return p, nil
 }
 
 func (r *PostgresRepository) Create(p Post) error {

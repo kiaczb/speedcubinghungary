@@ -56,6 +56,7 @@ speedcubinghungary/
 │   │       ├── special/     # Budapest Special: live WCA Live results + recorded DNF times
 │   │       ├── wcalive/     # shared WCA Live transport (GraphQL, Phoenix socket, broadcaster)
 │   │       ├── middleware/  # JSON content-type, JWT auth, RBAC
+│   │       ├── httperr/     # hiba → HTTP válasz (5xx szövege naplóba, nem a kliensnek)
 │   │       ├── config/      # env var loading + validation (fail-fast)
 │   │       ├── db/          # Postgres connection (pgx stdlib driver)
 │   │       ├── router/      # wires repos→services→handlers + routes
@@ -227,8 +228,15 @@ specialHandler, allrounderHandler)`, which only registers routes.
 **There is no DI framework; follow this manual pattern.**
 
 Other Go conventions observed:
-- Errors are surfaced with `http.Error(w, err.Error(), status)` and returned up the
+- Errors are surfaced with `httperr.Write(w, r, status, err)` and returned up the
   stack; no structured error type. `main.go` uses `log.Fatal` for startup failures.
+  ⚠️ **Don't go back to `http.Error(w, err.Error(), status)`.** `httperr.Write`
+  passes the error text through for 4xx (those are our own sentinels, and the
+  caller needs to know what it got wrong) but for **5xx it logs the error and
+  sends a generic message** — a raw `pq:` error names schema tables and columns,
+  a `*url.Error` names the upstream hosts and our query parameters, and neither
+  helps the browser. The status is still the caller's decision: it knows which
+  of its sentinels means what.
 - Enums are string types in `internal/types` (`Role`, `PostTag`) with `UPPER_SNAKE`
   const names and lowercase string values.
 - Comments and some identifiers are **in Hungarian** (e.g. `// kell a cookie-hoz`).
@@ -507,7 +515,7 @@ chi router in `internal/router/router.go`. Global middleware: `middleware.JSON`
 | Method | Path | Auth | Handler |
 | ------ | ---- | ---- | ------- |
 | GET  | `/posts` | public | `post.GetPosts` |
-| GET  | `/posts/{id}` | public | `post.GetPostByID` |
+| GET  | `/posts/{id}` | public | `post.GetPostByID` (404 if the id doesn't exist, 400 if it isn't a UUID — `posts.id` is a `uuid` column, so a malformed id would otherwise reach Postgres as a type error and come back as a 500) |
 | GET  | `/posts/latest` | public | `post.GetLatestPosts` (limit 3) |
 | POST | `/posts` | JWT + `admin` | `post.CreatePost` (accepts **multipart/form-data** with up to `MaxImages` (10) repeated `images` file parts — their order is the gallery order — or the legacy JSON body) |
 | PUT  | `/posts/{id}` | JWT + `admin` | `post.UpdatePost` (multipart or JSON; `image_order` describes the **whole** resulting gallery, see §20; without it the legacy behaviour applies — new `images` are appended and `remove_image=true` clears the gallery; 404 if the id doesn't exist) |
