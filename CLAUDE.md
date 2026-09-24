@@ -107,14 +107,16 @@ as parameters and only registers routes.
   delegate uploads them. Both sources feed the *same* scoring, which runs
   server-side. The series definition (which competitions, points per position,
   how many results count) lives in **code**, `series.go`. See §19.
-- `wcalive`: the **shared WCA Live transport** — GraphQL client +
-  `ResolveCompetitionID`, the Phoenix/Absinthe `SocketClient`, and the keyed
-  `Broadcaster`. Used by both `special` and `allrounder`. ⚠️ Only transport lives
-  here: the **GraphQL queries stay in the feature packages**, because they ask
-  for different things (`special` wants attempts + time limits, `allrounder`
-  wants `ranking`), and one combined query would hit WCA Live's complexity
-  limit. Each feature owns its own `SocketClient` instance — two websockets is
-  cheaper than sharing one session lifecycle.
+- `wcalive`: the **shared WCA Live transport and session lifecycle** — GraphQL
+  client + `ResolveCompetitionID`, the Phoenix/Absinthe `SocketClient`, the keyed
+  `Broadcaster`, and `Session` (viewer refcount, socket start/stop, subscription
+  diffing, reconnect resync). Used by both `special` and `allrounder`.
+  ⚠️ The **GraphQL queries stay in the feature packages**, because they ask for
+  different things (`special` wants attempts + time limits, `allrounder` wants
+  `ranking`), and one combined query would hit WCA Live's complexity limit.
+  Each feature still owns its own `SocketClient` instance (two websockets is
+  cheaper than sharing one connection's state), but the **lifecycle around it is
+  shared** — see §18 for the `Session`/`Watcher` split.
 
 ---
 
@@ -1050,14 +1052,34 @@ at it:
 - `refreshInterval` (2 min) only re-checks whether new rounds opened, for the
   competitions that currently have viewers.
 
-Two concurrency rules that are easy to break:
+### ⚠️ The session lifecycle is SHARED with `allrounder` — don't copy it back
 
+The socket lifecycle (viewer refcount, start/stop, reconnect resync,
+subscription diffing) lives in **`wcalive.Session`** and is used by both
+trackers. It used to be ~250 near-identical lines in each package, and the two
+copies had already drifted.
+
+The feature implements `wcalive.Watcher` — `Reload(ctx)`,
+`WantedSubscriptions()`, `HandleEvent(event)` — and keeps only what genuinely
+differs: **which** competitions are tracked (a map here, one leg in
+`allrounder`), the GraphQL queries, and the snapshot shape. Rules the shared
+layer encodes, each pinned by a test in `wcalive/session_test.go`:
+
+- **The connection exists only while a viewer does.** `Session.AddViewer()`
+  refcounts; the first viewer starts the socket, the last stops it.
+- **`AddViewer` returns `started`, and the caller must use it.** The starter's
+  work is covered by the session's own opening `Reload`; anyone joining a
+  running session has to load what *they* watch. Deciding this from a separate
+  "is it running?" call is a race — two simultaneous viewers can both conclude
+  they don't need to load.
 - **Sessions must not overlap.** `SocketClient` resets its per-connection state
   (`sentKeys`, `topicKey`) per session, so a new session waits on the previous
-  one's `sessionDone`, and `runSession` waits for `socket.Run` to return.
-- **`SetOnConnect` is called once, in `NewTracker`** — not per session, which
-  would race with the socket's own goroutine. It reads the live session context
-  through `currentSessionContext()`.
+  one's `done`, and the session waits for `socket.Run` to return.
+- **`SetOnConnect` is registered once, in `Session.Watch`** — not per session,
+  which would race with the socket's own goroutine.
+- **The `Session` never calls the `Watcher` while holding its own mutex**, and
+  `Running()` is atomic — so a feature may ask "is the session live?" from
+  inside its own lock without a lock-ordering hazard.
 
 ### Why the design is state-based
 
@@ -1303,8 +1325,14 @@ an ordinary `CompetitionRounds` with `Live: true`.
   know) on every page load.
 - `LiveTracker` (tracker.go) is a **single-competition** version of the special
   tracker — the series decides which leg runs, so the viewer-chosen multi-
-  competition machinery is not needed. The lifecycle is the same: the WCA Live
-  socket exists **only while an SSE stream is open**. No background watcher.
+  competition machinery is not needed. The lifecycle is literally the same code:
+  both share `wcalive.Session` (see §18), so the WCA Live socket exists **only
+  while an SSE stream is open**. No background watcher.
+- ⚠️ **A failed round query keeps its previous snapshot** instead of dropping the
+  round. Rebuilding the map from scratch made the live leg's points visibly fall
+  and come back on the next refresh, which reads as lost points; a load where
+  *every* round failed returns an error rather than committing an empty snapshot.
+  Same rule, same reason, in `special` (there it corrupts the A1a3 budget).
 - `GET /allrounder/stream?year=` opens even when no leg is running (it just
   stays quiet), so a competition starting mid-session lights up on its own.
 - ⚠️ **WCA Live gives `best: 0` / `ranking: null` for a competitor who has not
