@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { clientApiUrl } from "@/app/lib/api";
+import { clientJson } from "@/app/lib/api";
 import type { CompetitorOption } from "../types";
 
 export type CompetitorOptionsStatus = "loading" | "ready" | "error";
@@ -26,12 +26,8 @@ export function useCompetitorOptions(path: string | null): CompetitorOptions {
     if (path === null) return;
     let cancelled = false;
 
-    fetch(`${clientApiUrl()}${path}`)
-      .then((res) => {
-        if (!res.ok) throw new Error(`A kérés sikertelen (${res.status})`);
-        return res.json();
-      })
-      .then((options: CompetitorOption[]) => {
+    clientJson<CompetitorOption[]>(path)
+      .then((options) => {
         if (!cancelled) setState({ path, options, status: "ready" });
       })
       .catch((error) => {

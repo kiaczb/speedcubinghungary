@@ -280,8 +280,19 @@ Other Go conventions observed:
   destructive action; use `ConfirmModal` (see `DeletePostButton.tsx` /
   `DeletePredictionButton.tsx` for the pattern: an icon button that opens the
   modal, an async `onConfirm` that does the fetch + `router.refresh()`).
-- **Shared data lives in `app/lib/`**: `api.ts` (`serverApiUrl()` /
-  `clientApiUrl()` — the two-base-URL split below, in one place), `site.ts`
+- **Shared data lives in `app/lib/`**: `api.ts` (**the fetch layer** — the
+  two-base-URL split below plus the four things every call site otherwise has
+  to get right on its own: `serverJson(path, fallback)` for Server Components
+  (`cache: "no-store"`, logs and falls back so an unreachable API leaves an
+  empty page rather than an error screen), `clientFetch(path, init)` /
+  `clientJson(path, init)` for the browser (**always** sends the JWT cookie —
+  forgetting `credentials: "include"` silently sends a logged-out request — and
+  turns a non-ok response into an `ApiError` carrying `status` and the server's
+  message, with friendly Hungarian text for 401/403 and 429). Pass a JSON body
+  as `json:` so the `Content-Type` comes with it; `FormData` goes in `body:`,
+  because the browser must set that header itself for the boundary.
+  ⚠️ `EventSource` is not `fetch`, so the two SSE streams still build their URL
+  from `clientApiUrl()` — that's expected, not a leftover), `site.ts`
   (`NAV_LINKS`, `CONTACT_ITEMS`, `SITE_DESCRIPTION`, used by the navbar, footer
   and contact page), `events.ts` (`eventName()` — the WCA event id → Hungarian
   name table, shared by the allrounder and prediction tools; **don't copy it
@@ -330,9 +341,12 @@ Other Go conventions observed:
   are `"use client"` components.
 - **Two API base URLs**: server-side fetches use `SERVER_API_URL`
   (`http://api:8080`, the Docker service name); browser fetches use
-  `NEXT_PUBLIC_API_URL` (`http://localhost:8080` / public API domain). The posts
-  page falls back through both. **Respect this split** — server code cannot reach
-  `localhost:8080` inside the container.
+  `NEXT_PUBLIC_API_URL` (`http://localhost:8080` / public API domain).
+  **Respect this split** — server code cannot reach `localhost:8080` inside the
+  container. In practice you pick the side by picking the helper (`serverJson`
+  vs `clientFetch`/`clientJson`, see above) rather than by building the URL.
+  ⚠️ `UpcomingEvent.tsx` still calls the WCA API directly instead of going
+  through our own `competition` proxy — known, not yet fixed.
 - Auth on the client is via `UserProvider` (`app/components/UserProvider.tsx`), a
   context calling `/me` and `/logout` with `credentials: "include"`. Use
   `useUser()` to read `{ user, isLoading, logout }`.

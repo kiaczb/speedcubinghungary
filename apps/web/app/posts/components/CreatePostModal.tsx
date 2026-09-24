@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { FaArrowLeft, FaArrowRight } from "react-icons/fa";
 import { badgeMap, PostsItem, TagTypes } from "../types";
 import { MAX_POST_IMAGES, postImageUrl } from "../lib/postImage";
-import { clientApiUrl } from "@/app/lib/api";
+import { clientFetch } from "@/app/lib/api";
 import Button from "@/app/components/ui/Button";
 import Field, { controlClass } from "@/app/components/ui/Field";
 import Modal from "@/app/components/ui/Modal";
@@ -34,8 +34,6 @@ type Props = {
 
 export default function CreatePostModal({ onClose, post }: Props) {
   const router = useRouter();
-  const API_URL = clientApiUrl();
-
   const isEdit = Boolean(post);
 
   const [title, setTitle] = useState(post?.title ?? "");
@@ -171,22 +169,12 @@ export default function CreatePostModal({ onClose, post }: Props) {
 
     setSubmitting(true);
     try {
-      const res = await fetch(
-        isEdit ? `${API_URL}/posts/${post!.id}` : `${API_URL}/posts`,
-        {
-          method: isEdit ? "PUT" : "POST",
-          body: formData,
-          credentials: "include", // JWT cookie küldése
-        },
-      );
-
-      if (!res.ok) {
-        const message = await res.text();
-        throw new Error(
-          message ||
-            (isEdit ? "Hiba a poszt mentésekor" : "Hiba a poszt létrehozásakor"),
-        );
-      }
+      // FormData törzs: a Content-Type fejlécet a böngésző állítja be
+      // (a boundary miatt kézzel NEM szabad megadni) — ezért `body`, nem `json`.
+      await clientFetch(isEdit ? `/posts/${post!.id}` : "/posts", {
+        method: isEdit ? "PUT" : "POST",
+        body: formData,
+      });
 
       router.refresh();
       onClose();

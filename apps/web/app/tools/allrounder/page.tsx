@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { FaExclamationTriangle, FaTrophy } from "react-icons/fa";
 import PageHeader from "@/app/components/ui/PageHeader";
 import StateMessage from "@/app/components/ui/StateMessage";
-import { serverApiUrl } from "@/app/lib/api";
+import { serverJson } from "@/app/lib/api";
 import { formatTimestamp } from "@/app/lib/date";
 import LiveBanner from "./components/LiveBanner";
 import RefreshButton from "./components/RefreshButton";
@@ -28,16 +28,7 @@ type AllRounderPageProps = {
 async function getStandings(year?: string): Promise<Standings | null> {
   const query = year ? `?year=${encodeURIComponent(year)}` : "";
 
-  try {
-    const res = await fetch(`${serverApiUrl()}/allrounder/standings${query}`, {
-      cache: "no-store",
-    });
-    if (!res.ok) return null;
-    return res.json();
-  } catch (error) {
-    console.error("Nem sikerült elérni a backendet:", error);
-    return null;
-  }
+  return serverJson<Standings | null>(`/allrounder/standings${query}`, null);
 }
 
 export default async function AllRounderPage({

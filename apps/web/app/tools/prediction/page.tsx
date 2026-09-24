@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import PageHeader from "@/app/components/ui/PageHeader";
 import PredictionList from "./components/PredictionList";
-import { serverApiUrl } from "@/app/lib/api";
+import { serverJson } from "@/app/lib/api";
 import { PredictionContest } from "./types";
 
 export const metadata: Metadata = {
@@ -11,16 +11,7 @@ export const metadata: Metadata = {
 };
 
 async function getPredictions(): Promise<PredictionContest[]> {
-  try {
-    const res = await fetch(`${serverApiUrl()}/predictions`, {
-      cache: "no-store",
-    });
-    if (!res.ok) return [];
-    return res.json();
-  } catch (error) {
-    console.error("Nem sikerült elérni a backendet:", error);
-    return [];
-  }
+  return serverJson<PredictionContest[]>("/predictions", []);
 }
 
 export default async function PredictionPage() {
