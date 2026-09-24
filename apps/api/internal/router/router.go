@@ -30,6 +30,12 @@ func New(
 ) *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(middleware.JSON)
+	r.Use(middleware.SecurityHeaders)
+
+	// IP-nkénti kérésszám-korlát. A legdrágább végpontjaink a WCA API és a WCA
+	// Live felé proxyznak — korlát nélkül egyetlen gép is rá tudja terhelni
+	// ránk (és rajtunk keresztül a WCA-ra) a forgalmát.
+	r.Use(middleware.RateLimit(cfg, middleware.GlobalRateLimit))
 
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{cfg.FrontendURL}, // Use config
@@ -94,8 +100,14 @@ func New(
 
 	// Auth feature. A bejelentkezés a BACKENDEN indul (/login): ott születik a
 	// CSRF nonce, és ott áll össze a WCA authorize URL — lásd auth/state.go.
-	r.Get("/login", authHandler.Login)
-	r.Get("/login/callback", authHandler.LoginCallback)
+	r.Group(func(r chi.Router) {
+		// Szigorúbb korlát: minden /login hívás egy új CSRF nonce sütit és egy
+		// WCA authorize átirányítást jelent.
+		r.Use(middleware.RateLimit(cfg, middleware.LoginRateLimit))
+
+		r.Get("/login", authHandler.Login)
+		r.Get("/login/callback", authHandler.LoginCallback)
+	})
 
 	// /me route - csak bejelentkezett user-eknek
 	r.Group(func(r chi.Router) {
