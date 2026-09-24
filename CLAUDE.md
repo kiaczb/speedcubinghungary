@@ -398,7 +398,10 @@ WCA Live connection for a leg, §19) and `000012_add_post_images` (replaces
 see §20; the single cover image is backfilled into a one-element array) and
 `000013_add_prediction_contests` (the Tippverseny tables, see §21) and
 `000014_add_prediction_text_question_type` (adds the `'text'` value to
-`prediction_question_type` — a free-text extra question).
+`prediction_question_type` — a free-text extra question) and
+`000015_users_require_wca_id` (renames any blank-`wca_id` row left behind by the
+auth bug described in §9, then adds `CHECK (btrim(wca_id) <> '')` so that state
+cannot recur at the storage layer).
 Applied automatically on API startup via
 `migrate.New("file:///migrations", cfg.DatabaseURL)` (the prod image bakes
 `db/migrations` to `/migrations`).
@@ -517,7 +520,8 @@ chi router in `internal/router/router.go`. Global middleware: `middleware.JSON`
 | GET  | `/allrounder/standings` | public | `allrounder.GetStandings` — a whole season's point standings in one payload (rules + competitions + people). `?year=` is optional; a **missing, unknown or malformed** year falls back to the default season, so there is no error branch — the response's `year` says which one you got |
 | POST | `/allrounder/refresh` | JWT + `admin` | `allrounder.Refresh` — re-fetches the season from the WCA API ignoring the cache TTLs. Admin-only because it generates upstream traffic |
 | GET  | `/allrounder/stream` | public | `allrounder.StreamUpdates` (**SSE**: data-less `update` event whenever the running leg changes on WCA Live; `?year=` optional). Opens successfully even when no leg is running. An open stream is what keeps the WCA Live subscription alive (§19) |
-| GET  | `/login/callback` | public | `auth.LoginCallback` (WCA OAuth redirect target) |
+| GET  | `/login` | public | `auth.Login` — starts the WCA OAuth flow: issues the CSRF nonce cookie and redirects to WCA. Takes `?redirect=<path>` (sanitized). **This is the only login entry point**; the browser never builds the authorize URL (§9) |
+| GET  | `/login/callback` | public | `auth.LoginCallback` (WCA OAuth redirect target; verifies `state` against the nonce cookie before exchanging the code) |
 | GET  | `/me` | JWT | `auth.Me` |
 | POST | `/logout` | JWT | `auth.Logout` |
 | GET  | `/special/competitions` | public | `special.GetCompetitions` — the competition picker. `?query=` searches WCA Live by **name** (any country); without it, the **Hungarian** competitions of the last 60 days plus the upcoming ones. Sorted ongoing → upcoming → past |
@@ -547,35 +551,73 @@ client timeout).
 
 ## 9. Authentication & authorization
 
+**The flow starts on the API, not in the browser.** `GET /login` is the single
+entry point; the frontend only navigates to it. Two reasons, both load-bearing:
+the OAuth `state` must be an unguessable server-issued nonce kept in an
+`HttpOnly` cookie (a browser-built URL cannot do that), and `client_id` /
+`redirect_uri` / `scope` then live in exactly one place instead of drifting
+between `NEXT_PUBLIC_WCA_*` and `WCA_*`.
+
 Flow:
-1. Frontend `LoginButton` redirects to WCA `oauth/authorize` with `client_id`,
-   `redirect_uri`, `scope=public email manage_competitions`, and `state=<pathname>`.
-2. WCA redirects back to the **API** `/login/callback?code=...&state=...`.
-3. `auth.LoginCallback` exchanges the code for a WCA access token, calls WCA `/me`,
-   **upserts** the user (including the WCA `avatar.url` → `users.avatar_url`), mints
-   an HS256 JWT (`UserClaims`: user_id, wca_id, name, avatarURL, roles; 1-hour
-   expiry), and sets it as cookie `auth`. ⚠️ The JWT is minted with
-   `auth.UserClaims` but **parsed back** with `middleware.UserClaims` — both structs
-   must carry the same `json` tags or a field silently drops on round-trip (that's
-   why `avatarURL` exists in both). `/me` echoes the claim's `avatarURL`.
-4. Cookie is `HttpOnly`, `SameSite=Strict`, `Path=/`, `MaxAge=3600`,
-   `Secure` unless `DEPLOYMENT=development`. Then redirects to
-   `FRONTEND_URL + state` (state is sanitized: must start with a single `/`).
+1. `LoginButton` navigates to `NEXT_PUBLIC_BACKEND_LOGIN` (fallback
+   `clientApiUrl() + "/login"`) with `?redirect=<pathname>`.
+2. `auth.Login` sanitizes that path, mints a 32-byte random nonce, stores
+   `<nonce>:<path>` in the short-lived `oauth_state` cookie, and redirects to WCA
+   `oauth/authorize` with `scope=public email` and `state=<nonce>`.
+3. WCA redirects back to the API `/login/callback?code=...&state=...`.
+4. `auth.LoginCallback` **verifies `state` against the cookie before touching the
+   code**, exchanges the code for a WCA access token, calls WCA `/me`, **upserts**
+   the user (including the WCA `avatar.url` → `users.avatar_url`), mints an HS256
+   JWT (`middleware.UserClaims`: user_id, wca_id, name, avatarURL, roles; iat/nbf
+   + 1-hour exp), and sets it as cookie `auth`. `/me` echoes the claim's `avatarURL`.
+5. Cookie is `HttpOnly`, `SameSite=Strict`, `Path=/`, `MaxAge=3600`,
+   `Secure` unless `DEPLOYMENT=development`. Then redirects to `FRONTEND_URL` +
+   the path **taken from the cookie**. Any failure (bad state, missing code,
+   upstream error) logs server-side and redirects to `FRONTEND_URL/?login=failed`
+   — no upstream error text reaches the browser.
+
+⚠️ Invariants that are easy to break (see `internal/auth/state.go`, and the tests
+that pin each one):
+
+- **The WCA response status codes MUST be checked** (`exchangeCode` / `fetchMe`).
+  A 4xx body decodes "successfully" into an empty struct, so skipping the check
+  let the whole flow run to completion and issue a **valid session cookie for a
+  request that never authenticated** — an empty `wca_id` "ghost user" shared by
+  every attacker. An empty `access_token` or `wca_id` is likewise fatal.
+  Migration `000015` adds a `CHECK (btrim(wca_id) <> '')` so the storage layer
+  can't hold that state either.
+- **`oauth_state` is `SameSite=Lax`, not `Strict`.** The return from WCA is a
+  cross-site top-level navigation; a Strict cookie would not be sent back and
+  every login would fail.
+- **`oauth_state` uses `Path=/`.** In test/prod Caddy strips the `/api` prefix,
+  so the browser-visible path is `/api/login/callback` while the API sees
+  `/login/callback`; a `/login`-scoped cookie would work in dev and never come
+  back in prod.
+- **The return path travels in the cookie, not in `state`.** `state` round-trips
+  through the user agent and is attacker-controlled; the cookie is ours. It is
+  sanitized on both ends anyway (`sanitizeRedirectPath` — allow-list, so
+  `//evil`, `/\evil`, CR/LF and cookie-breaking characters all fall back to `/`).
+- **Clear the state cookie BEFORE writing the response.** Every branch ends in
+  `http.Redirect`, which calls `WriteHeader`; a `defer`-red `SetCookie` would
+  silently never reach the browser.
+- **`scope` is `public email`.** The WCA token is used for exactly one `/me` call
+  and then dropped. `manage_competitions` was removed — don't restore it without
+  an actual endpoint that needs it.
 
 Authorization:
 - `middleware.AuthMiddlewareWithConfig(cfg)` reads the `auth` cookie, validates the
-  JWT (rejects non-HMAC algs), and puts `*UserClaims` in request context.
-  Retrieve with `middleware.GetUserFromContext(r)`.
+  JWT, and puts `*UserClaims` in request context. Retrieve with
+  `middleware.GetUserFromContext(r)`. It rejects non-HMAC algs **twice** (the
+  manual `SigningMethodHMAC` check plus `jwt.WithValidMethods`), and passes
+  `jwt.WithExpirationRequired()` — golang-jwt treats a token with **no** `exp` as
+  valid, which would be a never-expiring session.
 - `middleware.RBACMiddleware(types.ROLE_ADMIN, ...)` requires the user to have one
   of the given roles; returns 401 if unauthenticated, 403 if lacking the role.
-- `middleware.AuthMiddleware` (no config) is **deprecated** and always errors — use
-  `AuthMiddlewareWithConfig`.
-
-⚠️ Note (as-is): `auth/service.go` reads WCA/JWT secrets directly from
-`os.Getenv(...)` rather than from the loaded `cfg`, and `auth/handler.go` reads
-`FRONTEND_URL`/`DEPLOYMENT` from env too. The `config` package validates these at
-startup, so they are present — but if you refactor, prefer threading `cfg` through
-rather than adding more `os.Getenv` calls **(inferred preference)**.
+- ⚠️ **`middleware.UserClaims` is the single definition of the token payload** —
+  `auth` signs with it and the middleware parses with it. There used to be a
+  second, identical `auth.UserClaims`, where a mismatched `json` tag silently
+  dropped a field across the round trip (this happened once with `avatarURL`).
+  Don't reintroduce a second copy.
 
 ---
 
@@ -587,7 +629,16 @@ root. Never commit real `.env*` files (git-ignored). Backend config is loaded an
 
 **Required (API fails to start without these):** `DATABASE_URL`, `JWT_SECRET`
 (≥32 chars — generate with `openssl rand -hex 32`), `WCA_CLIENT_ID`,
-`WCA_CLIENT_SECRET`, `WCA_REDIRECT_URI`, `FRONTEND_URL`.
+`WCA_CLIENT_SECRET`, `WCA_REDIRECT_URI`, `FRONTEND_URL`, `DEPLOYMENT`
+(must be exactly `development`, `test` or `production`).
+
+⚠️ **`DEPLOYMENT` and `FRONTEND_URL` deliberately have no default.** They used to
+default to `development` / `http://localhost:3000`, which meant their entry in the
+"required" map could never trigger: a missing `DEPLOYMENT` in production did not
+stop the API, it silently produced **non-`Secure` auth cookies**, and a missing
+`FRONTEND_URL` opened CORS to localhost and redirected there after login. The
+value set is validated too, so a typo (`produciton`) fails fast instead of
+quietly behaving like development. Don't add defaults back.
 
 Other important vars:
 - DB connection (used by `db/postgres.go`): `DB_HOST`, `DB_PORT`, `DB_USER`,
@@ -615,9 +666,13 @@ Other important vars:
   with an empty default. (There is no `WCA_LIVE_WATCHER` kill switch any more —
   the subscription only exists while someone has the page open, §18.)
 - Web: `SERVER_API_URL` (server→api, Docker service name), `NEXT_PUBLIC_API_URL`
-  (browser→api), `NEXT_PUBLIC_WCA_CLIENT_ID`, `NEXT_PUBLIC_WCA_REDIRECT_URI`,
-  `NEXT_PUBLIC_BACKEND_LOGIN`. **`NEXT_PUBLIC_*` are baked into the browser bundle
-  at build time** (Docker build args), so changing them requires a web rebuild.
+  (browser→api), `NEXT_PUBLIC_BACKEND_LOGIN` (the API's `/login` entry point).
+  **`NEXT_PUBLIC_*` are baked into the browser bundle at build time** (Docker build
+  args), so changing them requires a web rebuild. `NEXT_PUBLIC_WCA_CLIENT_ID` and
+  `NEXT_PUBLIC_WCA_REDIRECT_URI` were **removed**: the browser no longer builds the
+  WCA authorize URL (§9), so the OAuth client config lives only in `WCA_*` on the
+  API side. Don't reintroduce them — two sources for the same `redirect_uri` can
+  drift, and the WCA then rejects the token exchange with a confusing error.
 - Compose: `COMPOSE_PROJECT_NAME`, `COMPOSE_PROFILES=proxy` (test/prod),
   `WEB_DOMAIN`/`ACME_EMAIL` (Caddy — single domain, API path-routed under
   `WEB_DOMAIN/api`), `WEB_PORT`/`API_PORT`/
@@ -699,8 +754,9 @@ links in `app/layout.tsx` if needed. **Read the Next 16 docs first** (§3 warnin
   `QuickToolsSection` but **no such routes exist yet** (they 404).
 - ~~The Hungarian All-Rounder tool card links out to `allrounderpoints.vercel.app`~~
   — **resolved**: the app is integrated at `/tools/allrounder`, see §19.
-- `auth/service.go` / `auth/handler.go` bypass the `config` struct and read env
-  directly (§9).
+- ~~`auth/service.go` / `auth/handler.go` bypass the `config` struct and read env
+  directly~~ — **resolved**: both take `*config.Config` (wired in `main.go`), so
+  there are no `os.Getenv` calls left in the `auth` package (§9).
 - `competition_count` / `delegated_count` / `records` are defined but not populated
   by the Go API.
 - No structured logging/observability beyond stdlib `log` + `LOG_LEVEL` (the latter

@@ -1,6 +1,7 @@
 "use client";
 import React from "react";
 import { usePathname } from "next/navigation";
+import { clientApiUrl } from "../lib/api";
 import { useUser } from "./UserProvider";
 import Button from "./ui/Button";
 
@@ -8,24 +9,20 @@ const LoginButton = () => {
   const { user, isLoading, logout } = useUser();
   const pathname = usePathname();
 
+  // A bejelentkezést a BACKEND indítja (GET /login), nem itt építjük a WCA
+  // authorize URL-t.
+  //
+  // Miért: az OAuth `state` a folyamat CSRF-tokenje, ezért kitalálhatatlan,
+  // szerveroldalon generált nonce-nak kell lennie, amit HttpOnly sütiben tárolunk
+  // — böngészőből ezt nem lehet biztonságosan megtenni. Ráadásul így a
+  // client_id / redirect_uri / scope hármas egyetlen helyen (a backend
+  // configjában) él, nem csúszhat el a build időben beégetett NEXT_PUBLIC_*
+  // értékek és a backend WCA_* értékei között.
   const handleLogin = () => {
-    const clientId = process.env.NEXT_PUBLIC_WCA_CLIENT_ID;
-    const redirectUri = encodeURIComponent(
-      process.env.NEXT_PUBLIC_WCA_REDIRECT_URI ||
-        "http://localhost:8080/login/callback",
-    );
+    const loginUrl =
+      process.env.NEXT_PUBLIC_BACKEND_LOGIN || `${clientApiUrl()}/login`;
 
-    const state = encodeURIComponent(pathname || "/");
-
-    const wcaAuthUrl =
-      `https://www.worldcubeassociation.org/oauth/authorize` +
-      `?client_id=${clientId}` +
-      `&redirect_uri=${redirectUri}` +
-      `&response_type=code` +
-      `&scope=public+email+manage_competitions` +
-      `&state=${state}`;
-
-    window.location.href = wcaAuthUrl;
+    window.location.href = `${loginUrl}?redirect=${encodeURIComponent(pathname || "/")}`;
   };
 
   if (isLoading) {

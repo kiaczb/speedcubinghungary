@@ -92,7 +92,9 @@ func New(
 		r.Post("/allrounder/refresh", allrounderHandler.Refresh)
 	})
 
-	// Auth feature
+	// Auth feature. A bejelentkezés a BACKENDEN indul (/login): ott születik a
+	// CSRF nonce, és ott áll össze a WCA authorize URL — lásd auth/state.go.
+	r.Get("/login", authHandler.Login)
 	r.Get("/login/callback", authHandler.LoginCallback)
 
 	// /me route - csak bejelentkezett user-eknek

@@ -83,7 +83,7 @@ func main() {
 	))
 
 	// 8. Auth (WCA OAuth)
-	authHandler := auth.NewHandler(auth.NewService(auth.NewPostgresRepository(dbConn)))
+	authHandler := auth.NewHandler(auth.NewService(auth.NewPostgresRepository(dbConn), cfg), cfg)
 
 	// 9. Create router with config
 	r := router.New(cfg, postHandler, competitionHandler, predictionHandler, authHandler, specialHandler, allrounderHandler)
