@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -47,6 +48,9 @@ type fakeRound struct {
 	number    int
 	timeLimit *liveTimeLimit
 	results   []liveResult
+	// fail: ha be van állítva és igaz, EZ a kör hibával válaszol, a többi
+	// továbbra is kiszolgálódik — így lehet részleges WCA Live kiesést játszani.
+	fail *atomic.Bool
 }
 
 func result(id string, registrantID int, name string, atts []liveAttempt) liveResult {
@@ -149,6 +153,10 @@ func fakeWCALive(t *testing.T, rounds ...fakeRound) *httptest.Server {
 			round, known := byID[id]
 			if !known {
 				_, _ = w.Write([]byte(`{"errors":[{"message":"round not found"}]}`))
+				return
+			}
+			if round.fail != nil && round.fail.Load() {
+				_, _ = w.Write([]byte(`{"errors":[{"message":"round temporarily unavailable"}]}`))
 				return
 			}
 

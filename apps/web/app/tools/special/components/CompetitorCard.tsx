@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { FaExclamationTriangle } from "react-icons/fa";
 import Card from "@/app/components/Cards/Card";
 import { controlClass } from "@/app/components/ui/Field";
@@ -79,11 +79,21 @@ const EditableAttemptCell = ({
   const [value, setValue] = useState(recorded);
   const [busy, setBusy] = useState(false);
   const [invalid, setInvalid] = useState(false);
+  // failed: a mentés elbukott, és a beírt idő MÉG NINCS a szerveren.
+  const [failed, setFailed] = useState<string | null>(null);
+
+  // A most mentés alatt álló érték. Enterre a save() után a fókusz a következő
+  // mezőre ugrik, ami blur-t vált ki — az pedig ugyanarra az értékre indítana
+  // egy MÁSODIK mentést.
+  const savingRef = useRef<string | null>(null);
 
   const [lastRecorded, setLastRecorded] = useState(recorded);
   if (recorded !== lastRecorded) {
     setLastRecorded(recorded);
     setValue(recorded);
+    // A szerveren lévő érték megváltozott, tehát a korábbi mentési hiba már
+    // nem erről az állapotról szól.
+    setFailed(null);
   }
 
   const save = async () => {
@@ -95,17 +105,30 @@ const EditableAttemptCell = ({
       return;
     }
 
+    if (savingRef.current === value) return;
+    savingRef.current = value;
+
     setInvalid(false);
+    setFailed(null);
     setBusy(true);
     try {
       await onRecord(liveResultId, attempt.attemptNumber, parsed);
+    } catch (error) {
+      // ⚠️ Ez az ág NEM hagyható el. A mező tartalma marad, ahogy beírták, és a
+      // cella láthatóan jelzi, hogy nincs elmentve — különben a sikertelen
+      // mentés pontosan úgy néz ki, mint a sikeres (zöld keret, beírt idő), és
+      // verseny közben egy némán elveszett DNF-idő pótolhatatlan.
+      console.error("A DNF idő mentése sikertelen:", error);
+      setFailed(error instanceof Error ? error.message : "Ismeretlen hiba történt.");
     } finally {
+      savingRef.current = null;
       setBusy(false);
     }
   };
 
   return (
     <td className="px-1 py-2 text-center">
+      <div className="relative inline-block">
       <input
         value={value}
         onChange={(event) => {
@@ -132,6 +155,7 @@ const EditableAttemptCell = ({
           if (event.key === "Escape") {
             setValue(recorded);
             setInvalid(false);
+            setFailed(null);
           }
         }}
         autoFocus={autoFocus}
@@ -139,20 +163,40 @@ const EditableAttemptCell = ({
         disabled={busy}
         placeholder="DNF"
         inputMode="numeric"
+        aria-invalid={invalid || failed !== null}
         aria-label={`${attempt.attemptNumber}. kísérlet tényleges ideje`}
         title={
-          attempt.maxElapsedCs != null
-            ? `DNF · legfeljebb ${formatCentiseconds(attempt.maxElapsedCs)}`
-            : "DNF · nincs időlimit"
+          failed !== null
+            ? `NINCS ELMENTVE — ${failed} Próbáld újra (Enter).`
+            : attempt.maxElapsedCs != null
+              ? `DNF · legfeljebb ${formatCentiseconds(attempt.maxElapsedCs)}`
+              : "DNF · nincs időlimit"
         }
         className={`${controlClass} tabular w-22 px-2 py-1.5 text-center font-mono text-sm ${
-          invalid
-            ? "border-brand-red text-brand-red"
+          invalid || failed !== null
+            ? "border-brand-red bg-brand-red/5 text-brand-red"
             : value
               ? "border-brand-green/60 text-foreground"
               : "border-brand-red/50 text-brand-red placeholder:text-brand-red/70"
         }`}
       />
+
+      {/* A hibát nem csak szín jelzi: a piros keret önmagában se a színtévesztő,
+          se a képernyőolvasós használónak nem mond semmit. */}
+      {failed !== null && (
+        <>
+          <span
+            aria-hidden
+            className="pointer-events-none absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-brand-red text-[10px] font-bold leading-none text-white"
+          >
+            !
+          </span>
+          <span role="alert" className="sr-only">
+            {`A(z) ${attempt.attemptNumber}. kísérlet ideje nincs elmentve: ${failed}`}
+          </span>
+        </>
+      )}
+      </div>
     </td>
   );
 };
