@@ -4,7 +4,7 @@ import { useState } from "react";
 import { FaChevronDown } from "react-icons/fa";
 // A `@cubing/icons` a hivatalos WCA versenyszám-ikonokat adja ikonfontként.
 import "@cubing/icons";
-import { eventName } from "../lib/events";
+import { eventName } from "@/app/lib/events";
 import { groupByCompetition, medalAccentClass, medalForRank, medalTextClass } from "../lib/results";
 import type { PersonStandings, SeriesCompetition } from "../types";
 

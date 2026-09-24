@@ -7,7 +7,7 @@ import { clientApiUrl } from "@/app/lib/api";
 import { useBodyScrollLock } from "@/app/lib/useBodyScrollLock";
 import Button from "@/app/components/ui/Button";
 import Field, { controlClass } from "@/app/components/ui/Field";
-import { eventName } from "../lib/events";
+import { eventName } from "@/app/lib/events";
 import { ExtraQuestion } from "../types";
 import ExtraQuestionsEditor from "./ExtraQuestionsEditor";
 
