@@ -92,18 +92,18 @@ func TestTracker_SubscribesOnlyWhileViewersArePresent(t *testing.T) {
 
 	tracker := newTestTracker(server.URL)
 
-	assert.Empty(t, tracker.socket.Subscriptions(), "néző nélkül nincs feliratkozás")
+	assert.Empty(t, tracker.session.Subscriptions(), "néző nélkül nincs feliratkozás")
 
 	closeViewer, err := tracker.AddViewer(testCompetition())
 	require.NoError(t, err)
 
 	assert.Eventually(t, func() bool {
-		return len(tracker.socket.Subscriptions()) == 1
+		return len(tracker.session.Subscriptions()) == 1
 	}, waitTimeout, waitTick, "a néző megjelenésekor fel kell iratkozni")
 
 	closeViewer()
 	assert.Eventually(t, func() bool {
-		return len(tracker.socket.Subscriptions()) == 0
+		return len(tracker.session.Subscriptions()) == 0
 	}, waitTimeout, waitTick, "az utolsó néző távozásakor le kell állni")
 }
 
@@ -121,17 +121,17 @@ func TestTracker_SessionOutlivesFirstViewer(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Eventually(t, func() bool {
-		return len(tracker.socket.Subscriptions()) == 1
+		return len(tracker.session.Subscriptions()) == 1
 	}, waitTimeout, waitTick)
 
 	first()
 	assert.Never(t, func() bool {
-		return len(tracker.socket.Subscriptions()) == 0
+		return len(tracker.session.Subscriptions()) == 0
 	}, neverWindow, waitTick, "amíg van néző, marad a feliratkozás")
 
 	second()
 	assert.Eventually(t, func() bool {
-		return len(tracker.socket.Subscriptions()) == 0
+		return len(tracker.session.Subscriptions()) == 0
 	}, waitTimeout, waitTick)
 }
 
@@ -149,19 +149,19 @@ func TestTracker_CloseViewerIsIdempotent(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
-		return len(tracker.socket.Subscriptions()) == 1
+		return len(tracker.session.Subscriptions()) == 1
 	}, waitTimeout, waitTick)
 
 	first()
 	first()
 
 	assert.Never(t, func() bool {
-		return len(tracker.socket.Subscriptions()) == 0
+		return len(tracker.session.Subscriptions()) == 0
 	}, neverWindow, waitTick, "a kétszer lezárt nézet nem vihet nullába")
 
 	second()
 	assert.Eventually(t, func() bool {
-		return len(tracker.socket.Subscriptions()) == 0
+		return len(tracker.session.Subscriptions()) == 0
 	}, waitTimeout, waitTick)
 }
 
@@ -177,9 +177,9 @@ func TestTracker_SubscribesOnlyToWatchedCompetitions(t *testing.T) {
 	require.NoError(t, err)
 	idle.rounds = map[int]trackedRound{999: {}}
 
-	tracker.syncSubscriptions()
+	tracker.session.SyncSubscriptions()
 
-	assert.Equal(t, []string{subscriptionKey(147464)}, tracker.socket.Subscriptions())
+	assert.Equal(t, []string{subscriptionKey(147464)}, tracker.session.Subscriptions())
 }
 
 func TestTracker_CapsConcurrentlyTrackedCompetitions(t *testing.T) {
