@@ -5,6 +5,8 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -18,16 +20,17 @@ import (
 // stubRepository: csak azt adja vissza, amit a teszt beállít — a lényeg a
 // handler hibaleképezése, nem az SQL.
 type stubRepository struct {
-	post Post
-	err  error
+	post    Post
+	deleted []string
+	err     error
 }
 
-func (s *stubRepository) GetAll() ([]Post, error)         { return nil, s.err }
-func (s *stubRepository) GetLatestPosts() ([]Post, error) { return nil, s.err }
-func (s *stubRepository) GetByID(string) (Post, error)    { return s.post, s.err }
-func (s *stubRepository) Create(Post) error               { return s.err }
-func (s *stubRepository) Update(Post) error               { return s.err }
-func (s *stubRepository) Delete([]string) error           { return s.err }
+func (s *stubRepository) GetAll() ([]Post, error)           { return nil, s.err }
+func (s *stubRepository) GetLatestPosts() ([]Post, error)   { return nil, s.err }
+func (s *stubRepository) GetByID(string) (Post, error)      { return s.post, s.err }
+func (s *stubRepository) Create(Post) error                 { return s.err }
+func (s *stubRepository) Update(Post) error                 { return s.err }
+func (s *stubRepository) Delete([]string) ([]string, error) { return s.deleted, s.err }
 
 func getPostByID(t *testing.T, repo Repository, id string) *httptest.ResponseRecorder {
 	t.Helper()
@@ -96,4 +99,56 @@ func TestDeletePosts_MalformedIDIs400(t *testing.T) {
 // sql.ErrNoRows — erre épül a handler 404-e.
 func TestErrPostNotFound_IsDistinctFromSQLNoRows(t *testing.T) {
 	assert.False(t, errors.Is(ErrPostNotFound, sql.ErrNoRows))
+}
+
+// ⚠️ A poszt törlése korábban csak a DB sort vitte el, a képfájlokat nem: a
+// galéria óta ez posztonként akár 10 fájl, amire soha többé semmi nem
+// hivatkozik, és amit csak kézzel lehetett kitakarítani a volume-ról.
+func TestDeletePosts_RemovesTheImageFiles(t *testing.T) {
+	uploadDir := t.TempDir()
+
+	kept := writeUpload(t, uploadDir, "masik-poszte.png")
+	removed := []string{
+		writeUpload(t, uploadDir, "borito.png"),
+		writeUpload(t, uploadDir, "masodik.png"),
+	}
+
+	handler := NewHandler(NewService(&stubRepository{deleted: removed}), uploadDir)
+
+	recorder := httptest.NewRecorder()
+	handler.DeletePosts(recorder, httptest.NewRequest(
+		http.MethodDelete, "/posts", strings.NewReader(`{"ids":["`+knownID+`"]}`)))
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	for _, path := range removed {
+		assert.NoFileExists(t, filepath.Join(uploadDir, filepath.Base(path)),
+			"a törölt poszt képére már semmi nem hivatkozik")
+	}
+	assert.FileExists(t, filepath.Join(uploadDir, filepath.Base(kept)),
+		"másik poszt képéhez nem nyúlunk")
+}
+
+// Ha a törlés félúton hibázik, a DB sorok egy része már eltűnt — a
+// visszakapott útvonalak fájljait akkor is el kell takarítani.
+func TestDeletePosts_CleansUpEvenWhenTheDeleteFails(t *testing.T) {
+	uploadDir := t.TempDir()
+	orphan := writeUpload(t, uploadDir, "felig-torolt.png")
+
+	repo := &stubRepository{deleted: []string{orphan}, err: errors.New("pq: connection reset")}
+	handler := NewHandler(NewService(repo), uploadDir)
+
+	recorder := httptest.NewRecorder()
+	handler.DeletePosts(recorder, httptest.NewRequest(
+		http.MethodDelete, "/posts", strings.NewReader(`{"ids":["`+knownID+`"]}`)))
+
+	require.Equal(t, http.StatusInternalServerError, recorder.Code)
+	assert.NoFileExists(t, filepath.Join(uploadDir, filepath.Base(orphan)))
+}
+
+func writeUpload(t *testing.T, uploadDir, name string) string {
+	t.Helper()
+
+	require.NoError(t, os.WriteFile(filepath.Join(uploadDir, name), []byte("kep"), 0o644))
+	return PublicUploadPath + "/" + name
 }

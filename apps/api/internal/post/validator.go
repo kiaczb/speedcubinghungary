@@ -7,7 +7,7 @@ import (
 
 var (
 	ErrInvalidID    = errors.New("invalid post ID")
-	ErrInvalidTag	= errors.New("invalid tag")
+	ErrInvalidTag   = errors.New("invalid tag")
 	ErrEmptyTitle   = errors.New("title cannot be empty")
 	ErrShortContent = errors.New("content must be at least 20 characters")
 	ErrPostNotFound = errors.New("post not found")

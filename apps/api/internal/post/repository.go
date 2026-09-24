@@ -13,9 +13,10 @@ type Repository interface {
 	GetByID(id string) (Post, error)
 	Create(post Post) error
 	Update(post Post) error
-	Delete(ids []string) error
+	// Delete visszaadja a törölt posztok képútvonalait: azokra a fájlokra
+	// ezután semmi nem hivatkozik, a hívó dolga letörölni őket a volume-ról.
+	Delete(ids []string) ([]string, error)
 }
-
 
 type PostgresRepository struct {
 	db *sql.DB
@@ -59,7 +60,7 @@ func (r *PostgresRepository) GetAll() ([]Post, error) {
 
 	return posts, rows.Err()
 }
-func (r *PostgresRepository) GetLatestPosts() ([]Post, error){
+func (r *PostgresRepository) GetLatestPosts() ([]Post, error) {
 	rows, err := r.db.Query(`
 		SELECT id, tag, title, content, image_paths, created_at
 		FROM posts
@@ -67,16 +68,16 @@ func (r *PostgresRepository) GetLatestPosts() ([]Post, error){
 		LIMIT 3
 	`)
 	if err != nil {
-	  return nil, err
+		return nil, err
 	}
 	defer rows.Close()
 
 	var posts = make([]Post, 0)
 
-	for rows.Next(){
+	for rows.Next() {
 		var p Post
 		err := rows.Scan(&p.ID, &p.Tag, &p.Title, &p.Content, pq.Array(&p.ImagePaths), &p.CreatedAt)
-		if err != nil{
+		if err != nil {
 			return nil, err
 		}
 		if p.ImagePaths == nil {
@@ -117,17 +118,36 @@ func (r *PostgresRepository) Create(p Post) error {
 	return err
 }
 
-func (r *PostgresRepository) Delete(ids []string) error {
-    if len(ids) == 0 {
-        return nil
-    }
+func (r *PostgresRepository) Delete(ids []string) ([]string, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
 
-    _, err := r.db.Exec(`
-        DELETE FROM posts
-        WHERE id = ANY($1)
-    `, pq.Array(ids))
+	// RETURNING: a képútvonalakat a törléssel EGY lekérdezésben kérjük vissza.
+	// Külön SELECT + DELETE két lépés lenne, ahol a köztes időben változhat a
+	// galéria — és pont olyan fájlt törölnénk, amire még hivatkozik valami.
+	rows, err := r.db.Query(`
+		DELETE FROM posts
+		WHERE id = ANY($1)
+		RETURNING image_paths
+	`, pq.Array(ids))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
 
-    return err
+	var paths []string
+	for rows.Next() {
+		var postPaths []string
+		if err := rows.Scan(pq.Array(&postPaths)); err != nil {
+			// A sorok EKKOR MÁR törlődtek, ezért amit sikerült kiolvasni, azt
+			// a hiba mellett is visszaadjuk — legalább azok a fájlok eltűnnek.
+			return paths, err
+		}
+		paths = append(paths, postPaths...)
+	}
+
+	return paths, rows.Err()
 }
 
 func (r *PostgresRepository) Update(p Post) error {
