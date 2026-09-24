@@ -74,8 +74,6 @@ services:
       NODE_ENV: ${NODE_ENV}
       SERVER_API_URL: ${SERVER_API_URL}
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
-      NEXT_PUBLIC_WCA_CLIENT_ID: ${NEXT_PUBLIC_WCA_CLIENT_ID}
-      NEXT_PUBLIC_WCA_REDIRECT_URI: ${NEXT_PUBLIC_WCA_REDIRECT_URI}
       NEXT_PUBLIC_BACKEND_LOGIN: ${NEXT_PUBLIC_BACKEND_LOGIN}
     # No host port published here either; Caddy fronts it in test/prod and the
     # dev override re-publishes it for localhost work.

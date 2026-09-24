@@ -27,8 +27,15 @@ type Config struct {
 // Load loads and validates environment variables
 func Load() (*Config, error) {
 	cfg := &Config{
-		Deployment:      getEnv("DEPLOYMENT", "development"),
-		FrontendURL:     getEnv("FRONTEND_URL", "http://localhost:3000"),
+		// ⚠️ DEPLOYMENT és FRONTEND_URL szándékosan DEFAULT NÉLKÜL töltődik:
+		// mindkettő biztonsági következménnyel jár (a DEPLOYMENT szabja meg az
+		// auth cookie `Secure` flagjét, a FRONTEND_URL a CORS origint és a login
+		// utáni átirányítás célját). Ha lenne rájuk default, a lenti "kötelező"
+		// ellenőrzés sosem csapna le, és egy hiányzó DEPLOYMENT prodban NEM
+		// leállást, hanem némán fejlesztői módot — azaz Secure NÉLKÜLI auth
+		// cookie-t — eredményezne.
+		Deployment:      getEnv("DEPLOYMENT", ""),
+		FrontendURL:     getEnv("FRONTEND_URL", ""),
 		DatabaseURL:     getEnv("DATABASE_URL", ""),
 		JWTSecret:       getEnv("JWT_SECRET", ""),
 		WCAClientID:     getEnv("WCA_CLIENT_ID", ""),
@@ -56,6 +63,7 @@ func (c *Config) Validate() error {
 		"WCA_CLIENT_SECRET": c.WCAClientSecret,
 		"WCA_REDIRECT_URI":  c.WCARedirectURI,
 		"FRONTEND_URL":      c.FrontendURL,
+		"DEPLOYMENT":        c.Deployment,
 	}
 
 	var missing []string
@@ -67,6 +75,15 @@ func (c *Config) Validate() error {
 
 	if len(missing) > 0 {
 		return fmt.Errorf("missing required environment variables: %v\n\nPlease check your .env file or environment setup", missing)
+	}
+
+	// A DEPLOYMENT értékkészletét is ellenőrizzük: egy elgépelt "produciton"
+	// nem üres, tehát a fenti ellenőrzésen átcsúszna, viszont az IsProduction()
+	// hamisat adna rá — az elgépelés így némán viselkedésváltozás lenne.
+	switch c.Deployment {
+	case "development", "test", "production":
+	default:
+		return fmt.Errorf("DEPLOYMENT must be one of development|test|production, got %q", c.Deployment)
 	}
 
 	// Validate JWT_SECRET length (should be at least 32 bytes / 64 hex chars)

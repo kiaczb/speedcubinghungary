@@ -16,12 +16,19 @@ const userContextKey = contextKey("user")
 
 var UserClaimsContextKey = userContextKey
 
+// UserClaims a saját JWT-nk tartalma. ⚠️ Ez az EGYETLEN definíciója: az auth
+// csomag ezzel ÍRJA alá a tokent (auth/service.go), ez a middleware pedig
+// ezzel olvassa vissza. Korábban két külön struct volt (auth.UserClaims és
+// middleware.UserClaims) azonos mezőkkel — ott egy json tag elgépelése némán
+// eldobott volna egy mezőt a token kiállítása és beolvasása között (ez az
+// avatarURL-lel egyszer meg is történt). Ne másold vissza egy második
+// példányba: a token szerződése egy helyen legyen.
 type UserClaims struct {
-	UserID int    `json:"user_id"`
-	WCAID  string `json:"wca_id"`
-	Name   string `json:"name"`
-	AvatarURL string `json:"avatarURL"`
-	Roles []types.Role `json:"roles"` // RBAC miatt string
+	UserID    int          `json:"user_id"`
+	WCAID     string       `json:"wca_id"`
+	Name      string       `json:"name"`
+	AvatarURL string       `json:"avatarURL"`
+	Roles     []types.Role `json:"roles"` // RBAC miatt string
 	jwt.RegisteredClaims
 }
 
@@ -37,13 +44,27 @@ func AuthMiddlewareWithConfig(cfg *config.Config) func(http.Handler) http.Handle
 
 			tokenString := cookie.Value
 
-			token, err := jwt.ParseWithClaims(tokenString, &UserClaims{}, func(token *jwt.Token) (interface{}, error) {
-				// KÖTELEZŐ: Ellenőrizzük, hogy az algoritmus HMAC-e!
-				if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-					return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-				}
-				return []byte(cfg.JWTSecret), nil
-			})
+			token, err := jwt.ParseWithClaims(
+				tokenString,
+				&UserClaims{},
+				func(token *jwt.Token) (interface{}, error) {
+					// KÖTELEZŐ: Ellenőrizzük, hogy az algoritmus HMAC-e!
+					if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+						return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+					}
+					return []byte(cfg.JWTSecret), nil
+				},
+				// WithValidMethods: a fenti kézi ellenőrzés mellett a könyvtár
+				// szintjén is leszűkítjük az elfogadott algoritmust (alg-confusion
+				// elleni öv+nadrágtartó; a "none" alg így a kulcsfüggvény meghívása
+				// ELŐTT elbukik).
+				jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}),
+				// WithExpirationRequired: a golang-jwt alapból ÉRVÉNYESNEK veszi az
+				// `exp` nélküli tokent, ami örök életű munkamenetet jelentene. Mi
+				// mindig állítunk lejáratot (auth/service.go), ezt itt kötelezővé is
+				// tesszük, hogy egy jövőbeli kiállítási ág se csúszhasson át.
+				jwt.WithExpirationRequired(),
+			)
 
 			if err != nil || !token.Valid {
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
