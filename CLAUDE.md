@@ -274,7 +274,9 @@ Other Go conventions observed:
 - **Shared data lives in `app/lib/`**: `api.ts` (`serverApiUrl()` /
   `clientApiUrl()` — the two-base-URL split below, in one place), `site.ts`
   (`NAV_LINKS`, `CONTACT_ITEMS`, `SITE_DESCRIPTION`, used by the navbar, footer
-  and contact page), and `useBodyScrollLock.ts` (locks background scroll while
+  and contact page), `events.ts` (`eventName()` — the WCA event id → Hungarian
+  name table, shared by the allrounder and prediction tools; **don't copy it
+  back into a tool**), and `useBodyScrollLock.ts` (locks background scroll while
   a modal is open — used by `ConfirmModal`, `CreatePostModal`,
   `CreatePredictionModal`, `RulesModal`). Add nav/contact entries there, not
   per-component.
@@ -1520,9 +1522,10 @@ Az admin `CreatePredictionModal` (`components/CreatePredictionModal.tsx`):
 - Verseny-választó a `GET /competitions/upcoming`-ból (böngészőből,
   `clientApiUrl()`), amely most már `eventIds`-t is ad versenyenként (lásd §8)
   — ebből épül fel a dobogó-jelölők listája versenyenként, `@cubing/icons`
-  ikonokkal, `app/tools/prediction/lib/events.ts` névtérképpel (ugyanaz a
-  minta, mint az allrounder toolban, §19, de külön fájl — a két tool
-  egymástól függetlenül fejlődik).
+  ikonokkal, a KÖZÖS `app/lib/events.ts` névtérképpel (ugyanazt használja az
+  allrounder tool is, §19 — a WCA versenyszám-nevei nem toolonkénti
+  terméklogika, és két példánynál egy új versenyszám az egyik felületen némán
+  nyers azonosítóként jelenne meg).
 - Extra kérdés-szerkesztő (`ExtraQuestionsEditor.tsx`): tetszőleges számú sor,
   típusonként (Versenyző/Idő/Szám/Szabad szöveg) választható select-tel.
 - A POST body RFC3339 `predictionDeadline`-t küld

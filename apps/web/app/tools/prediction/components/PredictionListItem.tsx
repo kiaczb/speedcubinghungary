@@ -8,7 +8,7 @@ import {
 } from "react-icons/fa";
 import Card from "@/app/components/Cards/Card";
 import Badge from "@/app/components/Badge";
-import { eventName } from "../lib/events";
+import { eventName } from "@/app/lib/events";
 import { PredictionContest, statusBadgeMap } from "../types";
 import DeletePredictionButton from "./DeletePredictionButton";
 

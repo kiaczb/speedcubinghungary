@@ -1,7 +1,7 @@
 "use client";
 
 import "@cubing/icons";
-import { eventName } from "../lib/events";
+import { eventName } from "@/app/lib/events";
 import { useCompetitorOptions } from "../lib/useCompetitorOptions";
 import CompetitorInput from "./CompetitorInput";
 
