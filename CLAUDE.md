@@ -771,6 +771,7 @@ links in `app/layout.tsx` if needed. **Read the Next 16 docs first** (§3 warnin
   by the Go API.
 - No structured logging/observability beyond stdlib `log` + `LOG_LEVEL` (the latter
   is loaded into `cfg` but **not consumed** by any logger yet).
+- ~~No rate limiting anywhere, and no CSP~~ — **resolved**, see §14.
 - `apps/api/tmp/` (air build output) and `__pycache__/` dirs are build artifacts.
 - No Redis / message queue / object storage in the stack — the only data store is
   Postgres. Don't assume a cache/queue layer exists.
@@ -843,6 +844,25 @@ links in `app/layout.tsx` if needed. **Read the Next 16 docs first** (§3 warnin
 
 - JWT is HS256 with a validated ≥32-char secret; the auth middleware **rejects
   non-HMAC signing algorithms** (alg-confusion guard) — keep that check.
+- **Rate limiting** is `middleware.RateLimit(cfg, limit)` — a fixed one-minute
+  window per client IP, applied globally (`GlobalRateLimit`, 300) with a
+  stricter bucket on `/login` + `/login/callback` (`LoginRateLimit`, 20). It is
+  **in-memory and per-process**; there is no Redis in the stack (§12) and one
+  API container runs, so this is the layer to swap for shared storage if that
+  ever changes. ⚠️ The client IP comes from the **last** `X-Forwarded-For`
+  entry (Caddy appends what it actually saw, so a client-supplied value sits in
+  front of it) and the header is only trusted when `DEPLOYMENT != development`
+  — in dev nothing proxies us, so it would be free to forge.
+- **CSP and the other response headers** live in `apps/web/next.config.ts`
+  (`headers()`), plus `X-Content-Type-Options: nosniff` from
+  `middleware.SecurityHeaders` on the API, which matters for the
+  attacker-influenced bytes served at `/uploads/*`. ⚠️ Two things to know:
+  `headers()` is evaluated at **build time**, so `connect-src`'s API origin is
+  baked in from `NEXT_PUBLIC_API_URL` like every other `NEXT_PUBLIC_*` (§10);
+  and `script-src` deliberately keeps `'unsafe-inline'`, because the strict
+  nonce variant needs a `proxy.ts` and forces **every** page to render
+  dynamically — that is a separate architectural decision, not a side effect of
+  adding a header.
 - Auth cookie is `HttpOnly` + `SameSite=Strict` + `Secure` (outside dev). CORS
   allows only `FRONTEND_URL` with credentials.
 - OAuth `state` is sanitized before use in the redirect (must be a single-slash
