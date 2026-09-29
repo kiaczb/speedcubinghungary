@@ -876,15 +876,23 @@ links in `app/layout.tsx` if needed. **Read the Next 16 docs first** (§3 warnin
 
 - JWT is HS256 with a validated ≥32-char secret; the auth middleware **rejects
   non-HMAC signing algorithms** (alg-confusion guard) — keep that check.
-- **Rate limiting** is `middleware.RateLimit(cfg, limit)` — a fixed one-minute
-  window per client IP, applied globally (`GlobalRateLimit`, 300) with a
-  stricter bucket on `/login` + `/login/callback` (`LoginRateLimit`, 20). It is
-  **in-memory and per-process**; there is no Redis in the stack (§12) and one
-  API container runs, so this is the layer to swap for shared storage if that
-  ever changes. ⚠️ The client IP comes from the **last** `X-Forwarded-For`
-  entry (Caddy appends what it actually saw, so a client-supplied value sits in
-  front of it) and the header is only trusted when `DEPLOYMENT != development`
-  — in dev nothing proxies us, so it would be free to forge.
+- **Rate limiting is per-IP ONLY on `/login` + `/login/callback`**
+  (`middleware.RateLimit(cfg, LoginRateLimit)`, 60/min — a login is two
+  requests). ⚠️ **Never put a global or per-route per-IP limit on anything the
+  pages use.** Two reasons, both learned the hard way: (1) Server Components
+  call the API from the web container over the Docker network with no
+  `X-Forwarded-For`, so *every visitor's* SSR request shares one key — the web
+  container's IP — and when that bucket fills `serverJson` silently returns
+  its fallback, i.e. empty news/posts/standings with no error; (2) the live
+  tools are used at the venue, where everyone is behind one Wi-Fi IP and the
+  Special page refetches the report per viewer on every live update.
+  **WCA protection lives on the outbound side instead:**
+  `competition.WCARepository` holds a shared semaphore (`maxConcurrentUpstream`,
+  6 in flight, 15 s queue timeout, 16 MiB body cap), which bounds what we send
+  the WCA regardless of who asks or from where — including deliberate cache
+  misses with made-up ids. The limiter is in-memory and per-process (no Redis,
+  §12). The client IP is the **last** `X-Forwarded-For` entry (Caddy appends
+  what it actually saw) and the header is only trusted outside development.
 - **CSP and the other response headers** live in `apps/web/next.config.ts`
   (`headers()`), plus `X-Content-Type-Options: nosniff` from
   `middleware.SecurityHeaders` on the API, which matters for the
