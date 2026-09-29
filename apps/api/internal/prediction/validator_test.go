@@ -1,6 +1,7 @@
 package prediction
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -110,4 +111,57 @@ func TestValidateNewContest_ExtraQuestions(t *testing.T) {
 			assert.Equal(t, tt.wantErr, err)
 		})
 	}
+}
+
+// A (contest_id, event_id) elsődleges kulcs: a duplikátum korábban csak az
+// INSERT-nél, kulcssértésként bukott el — 500-ként, 400 helyett.
+func TestValidateNewContest_RejectsDuplicateAndMalformedPodiumEvents(t *testing.T) {
+	competitionID, deadline, _, questions := validNewContest()
+
+	assert.ErrorIs(t, ValidateNewContest(competitionID, deadline, []string{"333", "333"}, questions),
+		ErrDuplicatePodiumEvent)
+	assert.ErrorIs(t, ValidateNewContest(competitionID, deadline, []string{"333; DROP"}, questions),
+		ErrInvalidPodiumEvent)
+
+	tooMany := make([]string, MaxPodiumEvents+1)
+	for i := range tooMany {
+		tooMany[i] = "e" + strings.Repeat("x", i%10) + string(rune('a'+i%26))
+	}
+	assert.ErrorIs(t, ValidateNewContest(competitionID, deadline, tooMany, questions),
+		ErrTooManyPodiumEvents)
+}
+
+// A csak szóközből álló prompt nem üres a Go szemében, de a felületen üres
+// kérdésként jelenne meg.
+func TestValidateNewContest_RejectsBlankAndOversizedPrompts(t *testing.T) {
+	competitionID, deadline, podiumEventIDs, _ := validNewContest()
+
+	blank := []ExtraQuestion{{Prompt: "   \t ", Type: types.QUESTION_TEXT}}
+	assert.ErrorIs(t, ValidateNewContest(competitionID, deadline, podiumEventIDs, blank),
+		ErrEmptyQuestionPrompt)
+
+	long := []ExtraQuestion{{Prompt: strings.Repeat("é", MaxPromptLength+1), Type: types.QUESTION_TEXT}}
+	assert.ErrorIs(t, ValidateNewContest(competitionID, deadline, podiumEventIDs, long),
+		ErrQuestionPromptLong)
+
+	tooMany := make([]ExtraQuestion, MaxExtraQuestions+1)
+	for i := range tooMany {
+		tooMany[i] = ExtraQuestion{Prompt: "Kérdés", Type: types.QUESTION_TEXT}
+	}
+	assert.ErrorIs(t, ValidateNewContest(competitionID, deadline, podiumEventIDs, tooMany),
+		ErrTooManyQuestions)
+}
+
+// Minden validációs hiba ErrValidation is — a handler erre az egyre nézve ad
+// 400-at, így egy új szabály nem eshet ki a leképezésből.
+func TestValidationErrorsShareOneRoot(t *testing.T) {
+	for _, err := range []error{
+		ErrInvalidContestID, ErrInvalidCompetitionID, ErrPastDeadline,
+		ErrNoPodiumEvents, ErrTooManyPodiumEvents, ErrInvalidPodiumEvent,
+		ErrDuplicatePodiumEvent, ErrTooManyQuestions, ErrInvalidQuestionType,
+		ErrEmptyQuestionPrompt, ErrQuestionPromptLong,
+	} {
+		assert.ErrorIs(t, err, ErrValidation, err.Error())
+	}
+	assert.NotErrorIs(t, ErrContestNotFound, ErrValidation)
 }

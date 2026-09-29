@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"speedcubinghungary/internal/httperr"
+	"speedcubinghungary/internal/middleware"
 	"time"
 
 	"speedcubinghungary/internal/types"
@@ -41,6 +42,12 @@ type createContestRequest struct {
 
 // CreateContest handles POST /predictions.
 func (h *Handler) CreateContest(w http.ResponseWriter, r *http.Request) {
+	user := middleware.GetUserFromContext(r)
+	if user == nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	var req createContestRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid json", http.StatusBadRequest)
@@ -58,14 +65,8 @@ func (h *Handler) CreateContest(w http.ResponseWriter, r *http.Request) {
 		questions[i] = NewExtraQuestion{Prompt: q.Prompt, Type: q.Type}
 	}
 
-	if err := h.service.CreateContest(req.CompetitionID, deadline, req.PodiumEventIDs, questions); err != nil {
-		status := http.StatusInternalServerError
-		if errors.Is(err, ErrInvalidCompetitionID) || errors.Is(err, ErrPastDeadline) ||
-			errors.Is(err, ErrNoPodiumEvents) || errors.Is(err, ErrInvalidQuestionType) ||
-			errors.Is(err, ErrEmptyQuestionPrompt) {
-			status = http.StatusBadRequest
-		}
-		httperr.Write(w, r, status, err)
+	if err := h.service.CreateContest(req.CompetitionID, deadline, req.PodiumEventIDs, questions, user.UserID); err != nil {
+		httperr.Write(w, r, errorStatus(err), err)
 		return
 	}
 
@@ -81,11 +82,18 @@ func (h *Handler) DeleteContest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.service.DeleteContest(id); err != nil {
-		status := http.StatusInternalServerError
-		if errors.Is(err, ErrContestNotFound) {
-			status = http.StatusNotFound
-		}
-		httperr.Write(w, r, status, err)
+		httperr.Write(w, r, errorStatus(err), err)
 		return
+	}
+}
+
+func errorStatus(err error) int {
+	switch {
+	case errors.Is(err, ErrValidation):
+		return http.StatusBadRequest
+	case errors.Is(err, ErrContestNotFound):
+		return http.StatusNotFound
+	default:
+		return http.StatusInternalServerError
 	}
 }

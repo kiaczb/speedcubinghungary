@@ -3,6 +3,7 @@ package prediction
 import (
 	"errors"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -151,10 +152,10 @@ func buildContest(row contestRow, comp competition.Competition, podiumEventIDs [
 // CreateContest létrehoz egy tippversenyt. A verseny-metaadatokat (név,
 // város, dátum) nem itt validáljuk — a competitionID a WCA-tól jön, a
 // listázáskor derül ki, ha érvénytelen (lásd GetContests).
-func (s *Service) CreateContest(competitionID string, deadline time.Time, podiumEventIDs []string, questions []NewExtraQuestion) error {
+func (s *Service) CreateContest(competitionID string, deadline time.Time, podiumEventIDs []string, questions []NewExtraQuestion, createdBy int) error {
 	extraQuestions := make([]ExtraQuestion, len(questions))
 	for i, q := range questions {
-		extraQuestions[i] = ExtraQuestion{Prompt: q.Prompt, Type: q.Type}
+		extraQuestions[i] = ExtraQuestion{Prompt: strings.TrimSpace(q.Prompt), Type: q.Type}
 	}
 
 	if err := ValidateNewContest(competitionID, deadline, podiumEventIDs, extraQuestions); err != nil {
@@ -165,10 +166,11 @@ func (s *Service) CreateContest(competitionID string, deadline time.Time, podium
 		ID:                 uuid.NewString(),
 		CompetitionWCAID:   competitionID,
 		PredictionDeadline: deadline,
+		CreatedBy:          createdBy,
 	}
 
-	questionRows := make([]extraQuestionRow, len(questions))
-	for i, q := range questions {
+	questionRows := make([]extraQuestionRow, len(extraQuestions))
+	for i, q := range extraQuestions {
 		questionRows[i] = extraQuestionRow{
 			ID:      uuid.NewString(),
 			Prompt:  q.Prompt,
@@ -183,5 +185,8 @@ func (s *Service) CreateContest(competitionID string, deadline time.Time, podium
 // DeleteContest töröl egy tippversenyt. A dobogó-versenyszámok és az extra
 // kérdések a DB-beli ON DELETE CASCADE miatt vele együtt törlődnek.
 func (s *Service) DeleteContest(id string) error {
+	if err := validContestID(id); err != nil {
+		return err
+	}
 	return s.repo.Delete(id)
 }
