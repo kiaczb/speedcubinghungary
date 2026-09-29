@@ -1509,12 +1509,14 @@ backend ma sosem ad vissza.
 
 **A verseny metaadatai (név, város, dátum) NINCSENEK nálunk tárolva.** A
 `prediction_contests.competition_wca_id` csak egy szöveges azonosító, FK
-nélkül — ugyanaz a minta, mint a `special_competitions`-nál (§18): a verseny a
-WCA-tól jön, mi csak az *ID*-t tartjuk meg. Listázáskor a
-`prediction.Service.GetContests` a `competition.Service.GetUpcomingHungarian`-t
-hívja, és a választ `competitionId` szerint indexeli be — ha a WCA API hibázik,
-a tippverseny akkor is megjelenik, csak a verseny neve a nyers `competition_wca_id`
-lesz (lásd `buildContest` a `service.go`-ban). Emiatt `prediction.Service`
+nélkül: a verseny a WCA-tól jön, mi csak az *ID*-t tartjuk meg. Listázáskor a
+`prediction.Service.GetContests` minden versenyt **ID szerint** kér le
+(`competition.Service.GetCompetition` → WCA `/competitions/{id}`, 15 percig
+gyorsítótárazva) — ha a WCA API hibázik, a tippverseny akkor is megjelenik, csak
+a verseny neve a nyers `competition_wca_id` lesz (lásd `buildContest`), és a
+hiba a naplóba kerül. ⚠️ **Ne a `GetUpcomingHungarian`-ből töltsd:** az a
+verseny végével kiejti a versenyt, és a tippverseny pont az
+eredményhirdetéskor veszítette el a nevét, dátumát és helyszínét. Emiatt `prediction.Service`
 egy szűk `CompetitionLookup` interfészen keresztül függ a competition csomagtól
 (nem a konkrét `*competition.Service`-en), hogy a tesztelhetőség és a réteghatár
 tiszta maradjon.

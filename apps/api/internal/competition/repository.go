@@ -40,8 +40,13 @@ const (
 
 var errUpstreamBusy = errors.New("too many concurrent WCA API requests")
 
+// ErrNotFound is returned when the WCA API answers 404 — the id is well-formed
+// but the WCA does not know it (or has nothing published under it yet).
+var ErrNotFound = errors.New("not found on the WCA API")
+
 // Repository defines read access to competition data.
 type Repository interface {
+	GetCompetition(competitionID string) (wcaCompetition, error)
 	GetUpcomingByCountry(countryISO2 string) ([]wcaCompetition, error)
 	GetPsychSheet(competitionID, eventID string) (wcaPsychSheet, error)
 	GetWCIF(competitionID string) (wcaWCIF, error)
@@ -95,6 +100,14 @@ func (r *WCARepository) GetUpcomingByCountry(countryISO2 string) ([]wcaCompetiti
 	return all, nil
 }
 
+// GetCompetition fetches one competition by id, whatever its date — unlike
+// GetUpcomingByCountry, which only sees competitions that have not ended yet.
+func (r *WCARepository) GetCompetition(competitionID string) (wcaCompetition, error) {
+	var competition wcaCompetition
+	err := r.getJSON(fmt.Sprintf("%s/%s", r.baseURL, url.PathEscape(competitionID)), &competition)
+	return competition, err
+}
+
 func (r *WCARepository) GetPsychSheet(competitionID, eventID string) (wcaPsychSheet, error) {
 	var sheet wcaPsychSheet
 	err := r.getJSON(fmt.Sprintf("%s/%s/psych-sheet/%s", r.baseURL, url.PathEscape(competitionID), url.PathEscape(eventID)), &sheet)
@@ -124,7 +137,10 @@ func (r *WCARepository) getJSON(reqURL string, out any) error {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
+	switch {
+	case resp.StatusCode == http.StatusNotFound:
+		return ErrNotFound
+	case resp.StatusCode != http.StatusOK:
 		return fmt.Errorf("WCA API returned status %d", resp.StatusCode)
 	}
 

@@ -39,9 +39,10 @@ type cacheEntry[T any] struct {
 type Service struct {
 	repo Repository
 
-	mu          sync.Mutex
-	psychSheets map[string]cacheEntry[[]PsychSheetEntry]
-	competitors map[string]cacheEntry[[]Competitor]
+	mu           sync.Mutex
+	competitions map[string]cacheEntry[Competition]
+	psychSheets  map[string]cacheEntry[[]PsychSheetEntry]
+	competitors  map[string]cacheEntry[[]Competitor]
 	// flight collapses concurrent misses for the same key into one upstream
 	// request — React StrictMode alone doubles every fetch in development.
 	flight singleflight.Group
@@ -49,9 +50,10 @@ type Service struct {
 
 func NewService(repo Repository) *Service {
 	return &Service{
-		repo:        repo,
-		psychSheets: make(map[string]cacheEntry[[]PsychSheetEntry]),
-		competitors: make(map[string]cacheEntry[[]Competitor]),
+		repo:         repo,
+		competitions: make(map[string]cacheEntry[Competition]),
+		psychSheets:  make(map[string]cacheEntry[[]PsychSheetEntry]),
+		competitors:  make(map[string]cacheEntry[[]Competitor]),
 	}
 }
 
@@ -65,19 +67,42 @@ func (s *Service) GetUpcomingHungarian() ([]Competition, error) {
 
 	competitions := make([]Competition, 0, len(raw))
 	for _, c := range raw {
-		competitions = append(competitions, Competition{
-			ID:        c.ID,
-			Name:      c.Name,
-			StartDate: c.StartDate,
-			EndDate:   c.EndDate,
-			City:      c.City,
-			Country:   countryName(c.CountryISO2),
-			URL:       c.URL,
-			EventIDs:  c.EventIDs,
-		})
+		competitions = append(competitions, toCompetition(c))
 	}
 
 	return competitions, nil
+}
+
+// GetCompetition returns one competition by id, whatever its date. Use this —
+// not GetUpcomingHungarian — to describe a competition you already know the id
+// of: the upcoming list drops a competition once it is over, which is exactly
+// when a prediction contest about it is most interesting. ErrNotFound means
+// the WCA does not know the id.
+func (s *Service) GetCompetition(competitionID string) (Competition, error) {
+	if !idPattern.MatchString(competitionID) {
+		return Competition{}, ErrInvalidID
+	}
+
+	return cached(s, s.competitions, "competition:"+competitionID, func() (Competition, error) {
+		raw, err := s.repo.GetCompetition(competitionID)
+		if err != nil {
+			return Competition{}, err
+		}
+		return toCompetition(raw), nil
+	})
+}
+
+func toCompetition(c wcaCompetition) Competition {
+	return Competition{
+		ID:        c.ID,
+		Name:      c.Name,
+		StartDate: c.StartDate,
+		EndDate:   c.EndDate,
+		City:      c.City,
+		Country:   countryName(c.CountryISO2),
+		URL:       c.URL,
+		EventIDs:  c.EventIDs,
+	}
 }
 
 // countryName resolves an ISO2 code to a readable name, falling back to the
