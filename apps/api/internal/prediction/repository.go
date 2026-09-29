@@ -17,6 +17,8 @@ type contestRow struct {
 	CompetitionWCAID   string
 	PredictionDeadline time.Time
 	CreatedAt          time.Time
+	// CreatedBy a létrehozó admin users.id-ja — csak íráskor töltjük.
+	CreatedBy int
 }
 
 // extraQuestionRow a prediction_extra_questions tábla nyers sora.
@@ -137,9 +139,9 @@ func (r *PostgresRepository) Create(row contestRow, podiumEventIDs []string, que
 	defer tx.Rollback()
 
 	_, err = tx.Exec(`
-		INSERT INTO prediction_contests (id, competition_wca_id, prediction_deadline)
-		VALUES ($1, $2, $3)
-	`, row.ID, row.CompetitionWCAID, row.PredictionDeadline)
+		INSERT INTO prediction_contests (id, competition_wca_id, prediction_deadline, created_by)
+		VALUES ($1, $2, $3, $4)
+	`, row.ID, row.CompetitionWCAID, row.PredictionDeadline, row.CreatedBy)
 	if err != nil {
 		return err
 	}

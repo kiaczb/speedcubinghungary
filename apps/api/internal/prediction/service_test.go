@@ -88,3 +88,42 @@ func TestGetContests_FallsBackToTheIDWhenTheLookupFails(t *testing.T) {
 
 	assert.Equal(t, "Valami2026", contests[0].CompetitionName)
 }
+
+// A prediction_contests.id UUID: egy nem UUID azonosító korábban lejutott a
+// Postgresig, és típushibaként 500-at adott.
+func TestDeleteContest_RejectsANonUUIDBeforeTheDatabase(t *testing.T) {
+	repo := &stubRepository{}
+
+	err := NewService(repo, stubLookup{}).DeleteContest("nem-uuid")
+
+	assert.ErrorIs(t, err, ErrValidation)
+	assert.Empty(t, repo.deletedID, "az adatbázisig el sem juthat")
+}
+
+// A created_by oszlopot korábban semmi nem töltötte; a prompt levágva kerül
+// tárolásra, hogy a felületen ne legyenek láthatatlan szóközök.
+func TestCreateContest_RecordsTheCreatorAndTrimsPrompts(t *testing.T) {
+	repo := &capturingRepository{}
+
+	err := NewService(repo, stubLookup{}).CreateContest(
+		"HungarianOpen2026", time.Now().Add(time.Hour), []string{"333"},
+		[]NewExtraQuestion{{Prompt: "  Hány rekord születik?  ", Type: "number"}},
+		42,
+	)
+	require.NoError(t, err)
+
+	assert.Equal(t, 42, repo.row.CreatedBy)
+	require.Len(t, repo.questions, 1)
+	assert.Equal(t, "Hány rekord születik?", repo.questions[0].Prompt)
+}
+
+type capturingRepository struct {
+	stubRepository
+	row       contestRow
+	questions []extraQuestionRow
+}
+
+func (c *capturingRepository) Create(row contestRow, _ []string, questions []extraQuestionRow) error {
+	c.row, c.questions = row, questions
+	return nil
+}
