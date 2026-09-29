@@ -6,9 +6,10 @@ import (
 	"fmt"
 	"log"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
+
+	"speedcubinghungary/internal/wcalive"
 )
 
 const (
@@ -19,17 +20,17 @@ const (
 
 type LiveTracker struct {
 	client      *LiveClient
-	socket      *SocketClient
-	broadcaster *Broadcaster
+	broadcaster *wcalive.Broadcaster
+
+	// session a WCA Live kapcsolat életciklusa — közös a special csomaggal,
+	// lásd internal/wcalive/session.go. Itt CSAK az marad, ami az All-Rounder
+	// sajátja: egyszerre EGY állomást követünk (a sorozat dönti el, melyiket),
+	// ezért nincs szükség a special többversenyes gépezetére.
+	session *wcalive.Session
 
 	mu      sync.Mutex
 	tracked *trackedCompetition
-
-	viewers        int
-	sessionRunning bool
-	stopSession    context.CancelFunc
-	sessionCtx     context.Context
-	sessionDone    chan struct{}
+	viewers int
 }
 
 type trackedCompetition struct {
@@ -45,29 +46,16 @@ type trackedCompetition struct {
 	trackedSince time.Time
 }
 
-func NewLiveTracker(client *LiveClient, socket *SocketClient, broadcaster *Broadcaster) *LiveTracker {
+func NewLiveTracker(client *LiveClient, socket *wcalive.SocketClient, broadcaster *wcalive.Broadcaster) *LiveTracker {
 	tracker := &LiveTracker{
 		client:      client,
-		socket:      socket,
 		broadcaster: broadcaster,
+		session:     wcalive.NewSession("allrounder", socket, liveRefreshInterval),
 	}
 
-	socket.SetOnConnect(func() {
-		log.Printf("[allrounder] socket (re)connected, resyncing rounds")
-		tracker.refresh(tracker.currentSessionContext())
-	})
+	tracker.session.Watch(tracker)
 
 	return tracker
-}
-
-func (t *LiveTracker) currentSessionContext() context.Context {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	if t.sessionCtx == nil {
-		return context.Background()
-	}
-	return t.sessionCtx
 }
 
 func (t *LiveTracker) Rounds(ctx context.Context, competitionWCAID string, liveCompetitionID, year int) ([]RoundResults, error) {
@@ -83,18 +71,22 @@ func (t *LiveTracker) Rounds(ctx context.Context, competitionWCAID string, liveC
 func (t *LiveTracker) AddViewer(competitionWCAID string, liveCompetitionID, year int) func() {
 	entry := t.entry(competitionWCAID, liveCompetitionID, year)
 
+	// ⚠️ A nézőszámot a session INDÍTÁSA ELŐTT kell növelni: az induló session
+	// első dolga egy Reload, az pedig néző nélkül nem csinál semmit. Fordított
+	// sorrendben a nyitó betöltés kimaradhatna, és az állomás csak a következő
+	// (2 perces) frissítéskor jelenne meg.
 	t.mu.Lock()
 	t.viewers++
-	startSession := t.viewers == 1
-	if startSession {
+	if t.viewers == 1 {
 		entry.trackedSince = time.Now()
-		t.startSessionLocked()
 	}
-	sessionCtx := t.sessionCtx
 	t.mu.Unlock()
 
-	if !startSession {
-		go t.ensureLoaded(sessionCtx, entry)
+	releaseSession, startedSession := t.session.AddViewer()
+
+	if !startedSession {
+		// A session már futott: a saját állomásunkat külön kell betöltetni.
+		go t.ensureLoaded(t.session.Context(), entry)
 	}
 
 	var once sync.Once
@@ -102,21 +94,12 @@ func (t *LiveTracker) AddViewer(competitionWCAID string, liveCompetitionID, year
 		once.Do(func() {
 			t.mu.Lock()
 			t.viewers--
-			last := t.viewers == 0
-			stop := t.stopSession
-			if last {
-				t.sessionRunning = false
-				t.stopSession = nil
-				t.sessionCtx = nil
-				if t.tracked != nil {
-					t.tracked.trackedSince = time.Time{}
-				}
+			if t.viewers == 0 && t.tracked != nil {
+				t.tracked.trackedSince = time.Time{}
 			}
 			t.mu.Unlock()
 
-			if last && stop != nil {
-				stop()
-			}
+			releaseSession()
 		})
 	}
 }
@@ -148,7 +131,7 @@ func (t *LiveTracker) cachedRounds(entry *trackedCompetition) ([]RoundResults, b
 		return nil, false
 	}
 
-	live := t.sessionRunning && t.viewers > 0 && entry.loadedAt.After(entry.trackedSince)
+	live := t.session.Running() && t.viewers > 0 && entry.loadedAt.After(entry.trackedSince)
 	if !live && time.Since(entry.loadedAt) > liveCacheTTL {
 		return nil, false
 	}
@@ -185,6 +168,7 @@ func (t *LiveTracker) load(ctx context.Context, entry *trackedCompetition) ([]Ro
 		slots  = make(chan struct{}, liveRoundConcurrency)
 		rounds = make(map[int]RoundResults, len(identities))
 		byID   = make(map[int]roundIdentity, len(identities))
+		failed = make(map[int]bool)
 	)
 
 	for _, identity := range identities {
@@ -200,6 +184,10 @@ func (t *LiveTracker) load(ctx context.Context, entry *trackedCompetition) ([]Ro
 			round, err := t.client.GetRound(ctx, identity.LiveRoundID)
 			if err != nil {
 				log.Printf("[allrounder] failed to query round %d: %v", identity.LiveRoundID, err)
+
+				mu.Lock()
+				failed[identity.LiveRoundID] = true
+				mu.Unlock()
 				return
 			}
 
@@ -211,16 +199,31 @@ func (t *LiveTracker) load(ctx context.Context, entry *trackedCompetition) ([]Ro
 
 	wg.Wait()
 
+	// Ha egyetlen kör sem jött le, az elérhetetlen upstream, nem részleges hiba:
+	// ne írjuk felül a meglévő állapotot, és a loadedAt-ot se frissítsük.
+	if len(failed) > 0 && len(rounds) == 0 {
+		return nil, fmt.Errorf("every round query failed for %s", entry.competitionWCAID)
+	}
+
 	t.mu.Lock()
+	// ⚠️ Egy kör lekérési hibája NEM törölheti a kör addigi eredményeit: a map
+	// teljes cseréjével az élő állomás pontjai látványosan lecsökkennének, majd
+	// a következő frissítéskor visszajönnének — a versenyzőnek ez elvesztett
+	// pontnak látszik. A hibás körök ezért az ELŐZŐ pillanatképükkel élnek tovább.
+	for roundID := range failed {
+		if previous, known := entry.rounds[roundID]; known {
+			rounds[roundID] = previous
+		}
+	}
+
 	entry.identities = byID
 	entry.rounds = rounds
 	entry.loadedAt = time.Now()
 	collected := collectRounds(entry)
-	sessionRunning := t.sessionRunning
 	t.mu.Unlock()
 
-	if sessionRunning {
-		t.syncSubscriptions()
+	if t.session.Running() {
+		t.session.SyncSubscriptions()
 	}
 
 	return collected, nil
@@ -232,7 +235,7 @@ func (t *LiveTracker) ensureLoaded(ctx context.Context, entry *trackedCompetitio
 	}
 
 	if _, fresh := t.cachedRounds(entry); fresh {
-		t.syncSubscriptions()
+		t.session.SyncSubscriptions()
 		return
 	}
 
@@ -241,61 +244,9 @@ func (t *LiveTracker) ensureLoaded(ctx context.Context, entry *trackedCompetitio
 	}
 }
 
-func (t *LiveTracker) startSessionLocked() {
-	previous := t.sessionDone
-
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
-
-	t.stopSession = cancel
-	t.sessionCtx = ctx
-	t.sessionDone = done
-	t.sessionRunning = true
-
-	go func() {
-		defer close(done)
-		if previous != nil {
-			<-previous
-		}
-		t.runSession(ctx)
-	}()
-}
-
-func (t *LiveTracker) runSession(ctx context.Context) {
-	log.Printf("[allrounder] live session starting")
-
-	socketDone := make(chan struct{})
-	go func() {
-		defer close(socketDone)
-		t.socket.Run(ctx)
-	}()
-
-	defer func() {
-		<-socketDone
-		t.clearSubscriptions()
-		log.Printf("[allrounder] live session stopped")
-	}()
-
-	t.refresh(ctx)
-
-	ticker := time.NewTicker(liveRefreshInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-
-		case <-ticker.C:
-			t.refresh(ctx)
-
-		case event := <-t.socket.Events():
-			t.handleEvent(event)
-		}
-	}
-}
-
-func (t *LiveTracker) refresh(ctx context.Context) {
+// Reload a wcalive.Watcher tagja: a session indulásakor, a socket
+// (újra)kapcsolódásakor és a frissítési időzítőre hívódik.
+func (t *LiveTracker) Reload(ctx context.Context) {
 	t.mu.Lock()
 	entry := t.tracked
 	watched := t.viewers > 0
@@ -310,8 +261,10 @@ func (t *LiveTracker) refresh(ctx context.Context) {
 	}
 }
 
-func (t *LiveTracker) handleEvent(event SubscriptionEvent) {
-	roundID, err := roundIDFromKey(event.Key)
+// HandleEvent a wcalive.Watcher tagja. Minden roundUpdated esemény TELJES
+// kör-pillanatképet hoz, ezért a kimaradt vagy duplikált esemény magától gyógyul.
+func (t *LiveTracker) HandleEvent(event wcalive.SubscriptionEvent) {
+	roundID, err := wcalive.RoundIDFromKey(event.Key)
 	if err != nil {
 		log.Printf("[allrounder] ignoring event with unexpected key %q", event.Key)
 		return
@@ -353,45 +306,23 @@ func (t *LiveTracker) handleEvent(event SubscriptionEvent) {
 	}
 }
 
-func (t *LiveTracker) syncSubscriptions() {
+// WantedSubscriptions a wcalive.Watcher tagja: az éppen figyelt állomás nyitott
+// köreire akarunk feliratkozni. Néző nélkül üres, így a session elengedi őket.
+func (t *LiveTracker) WantedSubscriptions() map[string]wcalive.Subscription {
 	t.mu.Lock()
-	wanted := make(map[string]int)
-	if t.tracked != nil && t.viewers > 0 {
-		for roundID := range t.tracked.identities {
-			wanted[subscriptionKey(roundID)] = roundID
+	defer t.mu.Unlock()
+
+	wanted := make(map[string]wcalive.Subscription)
+	if t.tracked == nil || t.viewers == 0 {
+		return wanted
+	}
+
+	for roundID := range t.tracked.identities {
+		wanted[wcalive.RoundSubscriptionKey(roundID)] = wcalive.Subscription{
+			Query:     RoundRankingSubscription,
+			Variables: map[string]any{"id": strconv.Itoa(roundID)},
 		}
 	}
-	t.mu.Unlock()
 
-	for _, key := range t.socket.Subscriptions() {
-		if _, keep := wanted[key]; !keep {
-			t.socket.Unsubscribe(key)
-		}
-	}
-
-	for key, roundID := range wanted {
-		t.socket.Subscribe(key, RoundRankingSubscription, map[string]any{
-			"id": strconv.Itoa(roundID),
-		})
-	}
-}
-
-func (t *LiveTracker) clearSubscriptions() {
-	for _, key := range t.socket.Subscriptions() {
-		t.socket.Unsubscribe(key)
-	}
-}
-
-const subscriptionKeyPrefix = "round:"
-
-func subscriptionKey(roundID int) string {
-	return subscriptionKeyPrefix + strconv.Itoa(roundID)
-}
-
-func roundIDFromKey(key string) (int, error) {
-	trimmed, found := strings.CutPrefix(key, subscriptionKeyPrefix)
-	if !found {
-		return 0, fmt.Errorf("subscription key %q has no %q prefix", key, subscriptionKeyPrefix)
-	}
-	return strconv.Atoi(trimmed)
+	return wanted
 }

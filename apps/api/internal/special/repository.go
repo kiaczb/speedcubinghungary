@@ -41,8 +41,7 @@ func (r *PostgresRepository) EnsureCompetition(c Competition, userID int) error 
 
 func (r *PostgresRepository) ListRecordedTimes(competitionWCAID string) ([]RecordedTime, error) {
 	rows, err := r.db.Query(`
-		SELECT live_result_id, attempt_number, elapsed_cs,
-		       COALESCE(elapsed_note, ''), recorded_by, recorded_at
+		SELECT live_result_id, attempt_number, elapsed_cs
 		FROM special_dnf_attempts
 		WHERE competition_wca_id = $1
 	`, competitionWCAID)
@@ -52,29 +51,11 @@ func (r *PostgresRepository) ListRecordedTimes(competitionWCAID string) ([]Recor
 	defer rows.Close()
 
 	recorded := make([]RecordedTime, 0)
-
 	for rows.Next() {
-		var (
-			t          RecordedTime
-			recordedBy sql.NullInt64
-			recordedAt sql.NullTime
-		)
-
-		if err := rows.Scan(
-			&t.LiveResultID, &t.AttemptNumber, &t.ElapsedCs,
-			&t.Note, &recordedBy, &recordedAt,
-		); err != nil {
+		var t RecordedTime
+		if err := rows.Scan(&t.LiveResultID, &t.AttemptNumber, &t.ElapsedCs); err != nil {
 			return nil, err
 		}
-
-		if recordedBy.Valid {
-			id := int(recordedBy.Int64)
-			t.RecordedBy = &id
-		}
-		if recordedAt.Valid {
-			t.RecordedAt = recordedAt.Time
-		}
-
 		recorded = append(recorded, t)
 	}
 

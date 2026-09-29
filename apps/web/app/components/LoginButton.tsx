@@ -1,31 +1,18 @@
 "use client";
 import React from "react";
 import { usePathname } from "next/navigation";
+import { clientApiUrl } from "../lib/api";
 import { useUser } from "./UserProvider";
 import Button from "./ui/Button";
 
 const LoginButton = () => {
-  const { user, isLoading, logout } = useUser();
+  const { user, isAdmin, isLoading, logout } = useUser();
   const pathname = usePathname();
 
+  // A bejelentkezést a backend indítja (GET /login): ott születik az OAuth
+  // CSRF nonce, és ott áll össze a WCA authorize URL.
   const handleLogin = () => {
-    const clientId = process.env.NEXT_PUBLIC_WCA_CLIENT_ID;
-    const redirectUri = encodeURIComponent(
-      process.env.NEXT_PUBLIC_WCA_REDIRECT_URI ||
-        "http://localhost:8080/login/callback",
-    );
-
-    const state = encodeURIComponent(pathname || "/");
-
-    const wcaAuthUrl =
-      `https://www.worldcubeassociation.org/oauth/authorize` +
-      `?client_id=${clientId}` +
-      `&redirect_uri=${redirectUri}` +
-      `&response_type=code` +
-      `&scope=public+email+manage_competitions` +
-      `&state=${state}`;
-
-    window.location.href = wcaAuthUrl;
+    window.location.href = `${clientApiUrl()}/login?redirect=${encodeURIComponent(pathname || "/")}`;
   };
 
   if (isLoading) {
@@ -38,8 +25,6 @@ const LoginButton = () => {
   }
 
   if (user) {
-    const isAdmin = user.roles.includes("admin");
-
     return (
       <div className="flex items-center gap-2">
         {isAdmin && (

@@ -56,6 +56,7 @@ speedcubinghungary/
 │   │       ├── special/     # Budapest Special: live WCA Live results + recorded DNF times
 │   │       ├── wcalive/     # shared WCA Live transport (GraphQL, Phoenix socket, broadcaster)
 │   │       ├── middleware/  # JSON content-type, JWT auth, RBAC
+│   │       ├── httperr/     # hiba → HTTP válasz (5xx szövege naplóba, nem a kliensnek)
 │   │       ├── config/      # env var loading + validation (fail-fast)
 │   │       ├── db/          # Postgres connection (pgx stdlib driver)
 │   │       ├── router/      # wires repos→services→handlers + routes
@@ -83,7 +84,9 @@ speedcubinghungary/
 
 Each feature package (`auth`, `post`, `competition`) follows the same **layered
 vertical slice**: `model.go` (types) → `repository.go` (data access) → `service.go`
-(business logic) → `handler.go` (HTTP). Wiring happens in `internal/router/router.go`.
+(business logic) → `handler.go` (HTTP). Wiring (repo → service → handler) happens
+in `cmd/server/main.go`; `internal/router/router.go` takes the finished handlers
+as parameters and only registers routes.
 
 - `auth`: exchanges WCA OAuth code for a WCA token, calls WCA `/me`, upserts the
   user, mints the app JWT cookie. Owns the `users` table.
@@ -105,14 +108,16 @@ vertical slice**: `model.go` (types) → `repository.go` (data access) → `serv
   delegate uploads them. Both sources feed the *same* scoring, which runs
   server-side. The series definition (which competitions, points per position,
   how many results count) lives in **code**, `series.go`. See §19.
-- `wcalive`: the **shared WCA Live transport** — GraphQL client +
-  `ResolveCompetitionID`, the Phoenix/Absinthe `SocketClient`, and the keyed
-  `Broadcaster`. Used by both `special` and `allrounder`. ⚠️ Only transport lives
-  here: the **GraphQL queries stay in the feature packages**, because they ask
-  for different things (`special` wants attempts + time limits, `allrounder`
-  wants `ranking`), and one combined query would hit WCA Live's complexity
-  limit. Each feature owns its own `SocketClient` instance — two websockets is
-  cheaper than sharing one session lifecycle.
+- `wcalive`: the **shared WCA Live transport and session lifecycle** — GraphQL
+  client + `ResolveCompetitionID`, the Phoenix/Absinthe `SocketClient`, the keyed
+  `Broadcaster`, and `Session` (viewer refcount, socket start/stop, subscription
+  diffing, reconnect resync). Used by both `special` and `allrounder`.
+  ⚠️ The **GraphQL queries stay in the feature packages**, because they ask for
+  different things (`special` wants attempts + time limits, `allrounder` wants
+  `ranking`), and one combined query would hit WCA Live's complexity limit.
+  Each feature still owns its own `SocketClient` instance (two websockets is
+  cheaper than sharing one connection's state), but the **lifecycle around it is
+  shared** — see §18 for the `Session`/`Watcher` split.
 
 ---
 
@@ -216,12 +221,22 @@ Every feature is a package under `internal/<feature>/` with the same four files:
 4. **`handler.go`** — HTTP handlers on a `Handler` struct holding the service.
    Decode request, call service, encode JSON response / `http.Error`. `NewHandler(service)`.
 
-Wiring is manual constructor injection in `router.New` — `repo → service → handler`,
-then register routes. **There is no DI framework; follow this manual pattern.**
+Wiring is manual constructor injection in `cmd/server/main.go` — `repo → service →
+handler`, one block per feature, then the finished handlers are passed into
+`router.New(cfg, postHandler, competitionHandler, predictionHandler, authHandler,
+specialHandler, allrounderHandler)`, which only registers routes.
+**There is no DI framework; follow this manual pattern.**
 
 Other Go conventions observed:
-- Errors are surfaced with `http.Error(w, err.Error(), status)` and returned up the
+- Errors are surfaced with `httperr.Write(w, r, status, err)` and returned up the
   stack; no structured error type. `main.go` uses `log.Fatal` for startup failures.
+  ⚠️ **Don't go back to `http.Error(w, err.Error(), status)`.** `httperr.Write`
+  passes the error text through for 4xx (those are our own sentinels, and the
+  caller needs to know what it got wrong) but for **5xx it logs the error and
+  sends a generic message** — a raw `pq:` error names schema tables and columns,
+  a `*url.Error` names the upstream hosts and our query parameters, and neither
+  helps the browser. The status is still the caller's decision: it knows which
+  of its sentinels means what.
 - Enums are string types in `internal/types` (`Role`, `PostTag`) with `UPPER_SNAKE`
   const names and lowercase string values.
 - Comments and some identifiers are **in Hungarian** (e.g. `// kell a cookie-hoz`).
@@ -244,14 +259,65 @@ Other Go conventions observed:
 - **Shared primitives live in `app/components/ui/`**: `Button` (variants
   `primary`/`secondary`/`ghost`/`danger`/`inverse`; renders `<button>`,
   `<Link>`, or external `<a>` based on `href`/`external`), `Field` (+ the
-  exported `controlClass` for inputs), `PageHeader`, `StateMessage`. Plus
-  `app/components/Cards/Card.tsx` (variants `elevated`/`outlined`/`inverse`,
-  `padding`, `interactive`) and `app/components/Badge.tsx`. **Reuse these
-  instead of hand-rolling a button/card/field.**
-- **Shared data lives in `app/lib/`**: `api.ts` (`serverApiUrl()` /
-  `clientApiUrl()` — the two-base-URL split below, in one place) and `site.ts`
+  exported `controlClass` for inputs), `PageHeader`, `StateMessage`,
+  `Modal` (**the shell every modal is built on**: backdrop, panel, header bar,
+  Escape, backdrop click, scroll lock — which also pads `body` by the
+  scrollbar's width, otherwise the page shifts right when the scrollbar
+  disappears — and the **focus trap**. Tab cycles
+  inside the panel, focus lands there on open and returns to whatever opened it
+  on close. The backdrop closes it only when the pointer went down **and** up
+  on the backdrop — a text selection that starts in a field and ends outside
+  would otherwise wipe a half-filled form. Props: `title`, `onClose`, `size`
+  (`sm` confirmation / `md` reading, the default / `lg` form), `role`,
+  `closeDisabled` (blocks every way out while a request is in flight),
+  `hideHeader` for a dialog that renders its own title, `initialFocusRef`.
+  ⚠️ Don't hand-roll a backdrop + panel again — the four that existed had each
+  dropped the focus trap, so Tab walked out of the dialog into the page behind
+  it),
+  `ConfirmModal` (delete confirmation, built on `Modal`; takes `title`,
+  `description` (any ReactNode — it renders in a `div`),
+  `onConfirm: () => Promise<void>`, `onClose`; the buttons read
+  "Mégse"/"Törlés"; manages its own submitting/error state and closes itself
+  on a successful `onConfirm`). Plus
+  `app/components/Cards/Card.tsx` (`padding`, `interactive`) and
+  `app/components/Badge.tsx`. **Reuse these
+  instead of hand-rolling a button/card/field/confirm dialog** — in
+  particular, never use the native `window.confirm`/`window.alert` for a
+  destructive action; use `ConfirmModal` (see `DeletePostButton.tsx` /
+  `DeletePredictionButton.tsx` for the pattern: an icon button that opens the
+  modal, an async `onConfirm` that does the fetch + `router.refresh()`).
+- **Shared data lives in `app/lib/`**: `api.ts` (**the fetch layer** — the
+  two-base-URL split below plus the four things every call site otherwise has
+  to get right on its own: `serverJson(path, fallback)` for Server Components
+  (`cache: "no-store"`, logs and falls back so an unreachable API leaves an
+  empty page rather than an error screen; its `catch` starts with
+  `unstable_rethrow`, because a no-store fetch signals "render dynamically"
+  by throwing, and swallowing that is a Next misuse), `clientFetch(path, init)` /
+  `clientJson(path, init)` for the browser (**always** sends the JWT cookie —
+  forgetting `credentials: "include"` silently sends a logged-out request — and
+  turns a non-ok response into an `ApiError` carrying `status` and the server's
+  message, with friendly Hungarian text for 401/403 and 429). Pass a JSON body
+  as `json:` so the `Content-Type` comes with it; `FormData` goes in `body:`,
+  because the browser must set that header itself for the boundary.
+  ⚠️ `EventSource` is not `fetch`, so the two SSE streams still build their URL
+  from `clientApiUrl()` — that's expected, not a leftover), `site.ts`
   (`NAV_LINKS`, `CONTACT_ITEMS`, `SITE_DESCRIPTION`, used by the navbar, footer
-  and contact page). Add nav/contact entries there, not per-component.
+  and contact page), `events.ts` (`eventName()` — the WCA event id → Hungarian
+  name table, shared by the allrounder and prediction tools; **don't copy it
+  back into a tool**), `date.ts` (every date/time the UI renders — `hu-HU` and
+  **pinned to `Europe/Budapest`**, because `toLocaleDateString` otherwise uses
+  the runtime's zone and a Server Component runs in the container's UTC while a
+  client component runs on the visitor's machine; near midnight the same date
+  rendered as two different days. Add a new shape here rather than writing
+  another `toLocaleDateString` in a component), `time.ts` (WCA-style digit-only time entry, shared by
+  the prediction form and the Special DNF cell: `formatTimeInput()` formats
+  while typing and returns `null` for a keystroke it refuses — the caller
+  keeps the previous value; `parseTimeInput()` is the **only** validity check
+  and every caller must run it before using the value. ⚠️ The formatter
+  deliberately lets `1:75.00` through as an intermediate state: digits fill
+  from the right, so typing `16:05.00` passes through `1:60.50`, and rejecting
+  that would make whole minute ranges untypeable). Add nav/contact entries in
+  `site.ts`, not per-component.
 - **Dark mode is implemented and follows the OS** (`prefers-color-scheme`; no
   toggle, no class strategy, so no JS and no hydration flash). It works by
   **redefining the design tokens** in a `@media (prefers-color-scheme: dark)`
@@ -281,12 +347,16 @@ Other Go conventions observed:
   are `"use client"` components.
 - **Two API base URLs**: server-side fetches use `SERVER_API_URL`
   (`http://api:8080`, the Docker service name); browser fetches use
-  `NEXT_PUBLIC_API_URL` (`http://localhost:8080` / public API domain). The posts
-  page falls back through both. **Respect this split** — server code cannot reach
-  `localhost:8080` inside the container.
+  `NEXT_PUBLIC_API_URL` (`http://localhost:8080` / public API domain).
+  **Respect this split** — server code cannot reach `localhost:8080` inside the
+  container. In practice you pick the side by picking the helper (`serverJson`
+  vs `clientFetch`/`clientJson`, see above) rather than by building the URL.
+  **No frontend code calls the WCA API directly** — the home page's "next
+  competition" card reads our `/competitions/upcoming` like the calendar does.
 - Auth on the client is via `UserProvider` (`app/components/UserProvider.tsx`), a
   context calling `/me` and `/logout` with `credentials: "include"`. Use
-  `useUser()` to read `{ user, isLoading, logout }`.
+  `useUser()` to read `{ user, isAdmin, isLoading, logout }` — gate admin UI on
+  `isAdmin` rather than re-checking `roles` (the server enforces it anyway).
 - Styling is Tailwind v4 utility classes inline in JSX. UI copy is largely Hungarian.
 - **The post editor is Markdown-based, deliberately.** `CreatePostModal` uses
   `app/posts/components/MarkdownEditor.tsx` — a formatting toolbar that inserts
@@ -374,7 +444,13 @@ column off `special_dnf_attempts` — official results are no longer stored, §1
 `live_competition_id` on `allrounder_syncs` — this is what bounds when we open a
 WCA Live connection for a leg, §19) and `000012_add_post_images` (replaces
 `posts.image_path` with `posts.image_paths TEXT[]` — a post is a gallery now,
-see §20; the single cover image is backfilled into a one-element array).
+see §20; the single cover image is backfilled into a one-element array) and
+`000013_add_prediction_contests` (the Tippverseny tables, see §21) and
+`000014_add_prediction_text_question_type` (adds the `'text'` value to
+`prediction_question_type` — a free-text extra question) and
+`000015_users_require_wca_id` (renames any blank-`wca_id` row left behind by the
+auth bug described in §9, then adds `CHECK (btrim(wca_id) <> '')` so that state
+cannot recur at the storage layer).
 Applied automatically on API startup via
 `migrate.New("file:///migrations", cfg.DatabaseURL)` (the prod image bakes
 `db/migrations` to `/migrations`).
@@ -433,15 +509,33 @@ allrounder_results(competition_wca_id → allrounder_syncs, ordinal INT,
         PRIMARY KEY (competition_wca_id, ordinal))
 -- ⚠️ Az `ordinal` a WCA API válaszTÖMBJÉBEN elfoglalt hely, és a pontszámítás
 -- SORRENDFÜGGŐ (§19) — nem dekoráció, hanem a számítás bemenete.
+
+-- 000013: Tippverseny (§21). Csak a LÉTREHOZÁS + LISTÁZÁS van kész — a tippek
+-- leadása és a kiértékelés még nincs megépítve. A verseny NEVE/városa/dátuma
+-- NINCS itt tárolva (nincs FK sem competition_wca_id-re) — azt a listázáskor
+-- a competition csomag adja hozzá élőben a WCA API-ból, ugyanúgy, mint a
+-- /competitions/upcoming végpontnál. A `status` (nyitott/lezárt) számított
+-- érték a prediction_deadline-ból, nem oszlop.
+prediction_contests(id UUID PK, competition_wca_id TEXT, prediction_deadline TIMESTAMPTZ,
+        created_by → users(id), created_at, updated_at)
+
+prediction_podium_events(contest_id → prediction_contests, event_id TEXT,
+        PRIMARY KEY (contest_id, event_id))  -- amikhez dobogó-tippet (1-2-3. hely) kell leadni
+
+prediction_question_type ENUM ('person','time','number','text')  -- 'text': 000014
+
+prediction_extra_questions(id UUID PK, contest_id → prediction_contests,
+        prompt TEXT, type prediction_question_type, ordinal INT)
+        -- admin szabad kérdései, pl. "Hány rekord születik?" (number)
 ```
 
 Notes / current state:
 - `posts.id` is a `uuid.NewString()` generated in the service (not a DB default).
 - `users.roles` is JSONB; login upsert **preserves existing roles** and only seeds
   `["user"]` on first insert (see `auth/repository.go` `Upsert` `ON CONFLICT`).
-- `records` is written by the Python job (`SaveRecords`); the Go API does not touch
-  it yet. `competition_count`/`delegated_count` on users are read by the API but
-  populated elsewhere **(inferred: by the Python job / future work)**.
+- `records` and `users.competition_count`/`delegated_count` are written and read
+  only by the Python job (`SaveRecords`, `upsert_person`); the Go API does not
+  touch them.
 - Competition data is **not** persisted — it is proxied live from WCA per request.
 
 ### Adding a migration
@@ -453,24 +547,34 @@ empty by design).
 
 ## 8. API architecture & endpoints
 
-chi router in `internal/router/router.go`. Global middleware: `middleware.JSON`
-(sets `Content-Type: application/json`) and CORS (allows `cfg.FrontendURL`,
-`AllowCredentials: true` for the cookie).
+chi router in `internal/router/router.go`. Global middleware:
+`middleware.SecurityHeaders` (`nosniff`) and CORS (allows `cfg.FrontendURL`,
+`AllowCredentials: true` for the cookie). `middleware.JSON` (sets
+`Content-Type: application/json`) wraps **only the JSON route group**; the
+non-JSON routes — `/uploads/*`, the two SSE streams and the `/login` redirects —
+are registered outside it, so they set their own Content-Type (§17). Every
+admin route sits in one `Auth + RBAC(admin)` group.
 
 | Method | Path | Auth | Handler |
 | ------ | ---- | ---- | ------- |
 | GET  | `/posts` | public | `post.GetPosts` |
-| GET  | `/posts/{id}` | public | `post.GetPostByID` |
+| GET  | `/posts/{id}` | public | `post.GetPostByID` (404 if the id doesn't exist, 400 if it isn't a UUID — `posts.id` is a `uuid` column, so a malformed id would otherwise reach Postgres as a type error and come back as a 500) |
 | GET  | `/posts/latest` | public | `post.GetLatestPosts` (limit 3) |
-| POST | `/posts` | JWT + `admin` | `post.CreatePost` (accepts **multipart/form-data** with up to `MaxImages` (10) repeated `images` file parts — their order is the gallery order — or the legacy JSON body) |
-| PUT  | `/posts/{id}` | JWT + `admin` | `post.UpdatePost` (multipart or JSON; `image_order` describes the **whole** resulting gallery, see §20; without it the legacy behaviour applies — new `images` are appended and `remove_image=true` clears the gallery; 404 if the id doesn't exist) |
+| POST | `/posts` | JWT + `admin` | `post.CreatePost` (**multipart/form-data only**: `tag`, `title`, `content` + up to `MaxImages` (10) repeated `images` file parts — their order is the gallery order) |
+| PUT  | `/posts/{id}` | JWT + `admin` | `post.UpdatePost` (multipart; the **required** `image_order` describes the whole resulting gallery, see §20; 404 if the id doesn't exist) |
 | GET  | `/uploads/*` | public | static file server over `cfg.UploadDir` (post images) |
-| DELETE | `/posts` | JWT + `admin` | `post.DeletePosts` (body `{ids:[]}`) |
-| GET  | `/competitions/upcoming` | public | `competition.GetUpcoming` (HU only) |
+| DELETE | `/posts` | JWT + `admin` | `post.DeletePosts` (body `{ids:[]}`; also deletes the posts' image files from the volume, see §20) |
+| GET  | `/competitions/upcoming` | public | `competition.GetUpcoming` (HU only; DTO includes `eventIds` — the WCA API's `event_ids` passed straight through, no extra request) |
+| GET  | `/competitions/{id}/psych-sheet/{eventId}` | public | `competition.GetPsychSheet` — proxy of the WCA psych sheet (PR-ranked start list) for one event: `[{name, wcaId, position}]`, `position` 0 = no PR yet, `wcaId` empty for newcomers. Ids validated against `^[A-Za-z0-9]{1,64}$` (400), an id the WCA doesn't know 404, upstream failure 502. **Cached 15 min + singleflight**, expired entries swept, see §21 |
+| GET  | `/competitions/{id}/competitors` | public | `competition.GetCompetitors` — every accepted, competing registrant from the public WCIF, sorted by name: `[{name, wcaId}]`. (The WCA `/registrations` endpoint only carries user ids, no names — that's why WCIF.) Same validation/caching as above |
+| GET  | `/predictions` | public | `prediction.GetContests` — every tippverseny, `competitionName`/`City`/`Country`/`StartDate` enriched live from `competition.Service.GetUpcomingHungarian` (not stored, see §21). `status` is computed from `predictionDeadline`, never `"evaluated"` yet |
+| POST | `/predictions` | JWT + `admin` | `prediction.CreateContest` (JSON body `{competitionId, predictionDeadline (RFC3339), podiumEventIds[], extraQuestions: [{prompt, type: "person"\|"time"\|"number"\|"text"}]}`; 400 on a past deadline, an empty/duplicated/malformed `podiumEventIds` (max 20), or an invalid/blank question (max 20, prompt ≤ 300 chars, stored trimmed). Records the admin in `created_by`. Every validation error wraps `prediction.ErrValidation`, which is the one thing the handler checks for 400 — add new rules as `validationError`, not to a status chain) |
+| DELETE | `/predictions/{id}` | JWT + `admin` | `prediction.DeleteContest` — deletes the contest row; `prediction_podium_events`/`prediction_extra_questions` cascade via their FK (`ON DELETE CASCADE`), no transaction needed. 404 if the id doesn't exist, 400 if it isn't a UUID |
 | GET  | `/allrounder/standings` | public | `allrounder.GetStandings` — a whole season's point standings in one payload (rules + competitions + people). `?year=` is optional; a **missing, unknown or malformed** year falls back to the default season, so there is no error branch — the response's `year` says which one you got |
 | POST | `/allrounder/refresh` | JWT + `admin` | `allrounder.Refresh` — re-fetches the season from the WCA API ignoring the cache TTLs. Admin-only because it generates upstream traffic |
 | GET  | `/allrounder/stream` | public | `allrounder.StreamUpdates` (**SSE**: data-less `update` event whenever the running leg changes on WCA Live; `?year=` optional). Opens successfully even when no leg is running. An open stream is what keeps the WCA Live subscription alive (§19) |
-| GET  | `/login/callback` | public | `auth.LoginCallback` (WCA OAuth redirect target) |
+| GET  | `/login` | public | `auth.Login` — starts the WCA OAuth flow: issues the CSRF nonce cookie and redirects to WCA. Takes `?redirect=<path>` (sanitized). **This is the only login entry point**; the browser never builds the authorize URL (§9) |
+| GET  | `/login/callback` | public | `auth.LoginCallback` (WCA OAuth redirect target; verifies `state` against the nonce cookie before exchanging the code) |
 | GET  | `/me` | JWT | `auth.Me` |
 | POST | `/logout` | JWT | `auth.Logout` |
 | GET  | `/special/competitions` | public | `special.GetCompetitions` — the competition picker. `?query=` searches WCA Live by **name** (any country); without it, the **Hungarian** competitions of the last 60 days plus the upcoming ones. Sorted ongoing → upcoming → past |
@@ -500,35 +604,73 @@ client timeout).
 
 ## 9. Authentication & authorization
 
+**The flow starts on the API, not in the browser.** `GET /login` is the single
+entry point; the frontend only navigates to it. Two reasons, both load-bearing:
+the OAuth `state` must be an unguessable server-issued nonce kept in an
+`HttpOnly` cookie (a browser-built URL cannot do that), and `client_id` /
+`redirect_uri` / `scope` then live in exactly one place instead of drifting
+between `NEXT_PUBLIC_WCA_*` and `WCA_*`.
+
 Flow:
-1. Frontend `LoginButton` redirects to WCA `oauth/authorize` with `client_id`,
-   `redirect_uri`, `scope=public email manage_competitions`, and `state=<pathname>`.
-2. WCA redirects back to the **API** `/login/callback?code=...&state=...`.
-3. `auth.LoginCallback` exchanges the code for a WCA access token, calls WCA `/me`,
-   **upserts** the user (including the WCA `avatar.url` → `users.avatar_url`), mints
-   an HS256 JWT (`UserClaims`: user_id, wca_id, name, avatarURL, roles; 1-hour
-   expiry), and sets it as cookie `auth`. ⚠️ The JWT is minted with
-   `auth.UserClaims` but **parsed back** with `middleware.UserClaims` — both structs
-   must carry the same `json` tags or a field silently drops on round-trip (that's
-   why `avatarURL` exists in both). `/me` echoes the claim's `avatarURL`.
-4. Cookie is `HttpOnly`, `SameSite=Strict`, `Path=/`, `MaxAge=3600`,
-   `Secure` unless `DEPLOYMENT=development`. Then redirects to
-   `FRONTEND_URL + state` (state is sanitized: must start with a single `/`).
+1. `LoginButton` navigates to `clientApiUrl() + "/login"` with
+   `?redirect=<pathname>`.
+2. `auth.Login` sanitizes that path, mints a 32-byte random nonce, stores
+   `<nonce>:<path>` in the short-lived `oauth_state` cookie, and redirects to WCA
+   `oauth/authorize` with `scope=public email` and `state=<nonce>`.
+3. WCA redirects back to the API `/login/callback?code=...&state=...`.
+4. `auth.LoginCallback` **verifies `state` against the cookie before touching the
+   code**, exchanges the code for a WCA access token, calls WCA `/me`, **upserts**
+   the user (including the WCA `avatar.url` → `users.avatar_url`), mints an HS256
+   JWT (`middleware.UserClaims`: user_id, wca_id, name, avatarURL, roles; iat/nbf
+   + 1-hour exp), and sets it as cookie `auth`. `/me` echoes the claim's `avatarURL`.
+5. Cookie is `HttpOnly`, `SameSite=Strict`, `Path=/`, `MaxAge=3600`,
+   `Secure` unless `DEPLOYMENT=development`. Then redirects to `FRONTEND_URL` +
+   the path **taken from the cookie**. Any failure (bad state, missing code,
+   upstream error) logs server-side and redirects to `FRONTEND_URL/?login=failed`
+   — no upstream error text reaches the browser.
+
+⚠️ Invariants that are easy to break (see `internal/auth/state.go`, and the tests
+that pin each one):
+
+- **The WCA response status codes MUST be checked** (`exchangeCode` / `fetchMe`).
+  A 4xx body decodes "successfully" into an empty struct, so skipping the check
+  let the whole flow run to completion and issue a **valid session cookie for a
+  request that never authenticated** — an empty `wca_id` "ghost user" shared by
+  every attacker. An empty `access_token` or `wca_id` is likewise fatal.
+  Migration `000015` adds a `CHECK (btrim(wca_id) <> '')` so the storage layer
+  can't hold that state either.
+- **`oauth_state` is `SameSite=Lax`, not `Strict`.** The return from WCA is a
+  cross-site top-level navigation; a Strict cookie would not be sent back and
+  every login would fail.
+- **`oauth_state` uses `Path=/`.** In test/prod Caddy strips the `/api` prefix,
+  so the browser-visible path is `/api/login/callback` while the API sees
+  `/login/callback`; a `/login`-scoped cookie would work in dev and never come
+  back in prod.
+- **The return path travels in the cookie, not in `state`.** `state` round-trips
+  through the user agent and is attacker-controlled; the cookie is ours. It is
+  sanitized on both ends anyway (`sanitizeRedirectPath` — allow-list, so
+  `//evil`, `/\evil`, CR/LF and cookie-breaking characters all fall back to `/`).
+- **Clear the state cookie BEFORE writing the response.** Every branch ends in
+  `http.Redirect`, which calls `WriteHeader`; a `defer`-red `SetCookie` would
+  silently never reach the browser.
+- **`scope` is `public email`.** The WCA token is used for exactly one `/me` call
+  and then dropped. `manage_competitions` was removed — don't restore it without
+  an actual endpoint that needs it.
 
 Authorization:
 - `middleware.AuthMiddlewareWithConfig(cfg)` reads the `auth` cookie, validates the
-  JWT (rejects non-HMAC algs), and puts `*UserClaims` in request context.
-  Retrieve with `middleware.GetUserFromContext(r)`.
+  JWT, and puts `*UserClaims` in request context. Retrieve with
+  `middleware.GetUserFromContext(r)`. It rejects non-HMAC algs **twice** (the
+  manual `SigningMethodHMAC` check plus `jwt.WithValidMethods`), and passes
+  `jwt.WithExpirationRequired()` — golang-jwt treats a token with **no** `exp` as
+  valid, which would be a never-expiring session.
 - `middleware.RBACMiddleware(types.ROLE_ADMIN, ...)` requires the user to have one
   of the given roles; returns 401 if unauthenticated, 403 if lacking the role.
-- `middleware.AuthMiddleware` (no config) is **deprecated** and always errors — use
-  `AuthMiddlewareWithConfig`.
-
-⚠️ Note (as-is): `auth/service.go` reads WCA/JWT secrets directly from
-`os.Getenv(...)` rather than from the loaded `cfg`, and `auth/handler.go` reads
-`FRONTEND_URL`/`DEPLOYMENT` from env too. The `config` package validates these at
-startup, so they are present — but if you refactor, prefer threading `cfg` through
-rather than adding more `os.Getenv` calls **(inferred preference)**.
+- ⚠️ **`middleware.UserClaims` is the single definition of the token payload** —
+  `auth` signs with it and the middleware parses with it. There used to be a
+  second, identical `auth.UserClaims`, where a mismatched `json` tag silently
+  dropped a field across the round trip (this happened once with `avatarURL`).
+  Don't reintroduce a second copy.
 
 ---
 
@@ -540,12 +682,23 @@ root. Never commit real `.env*` files (git-ignored). Backend config is loaded an
 
 **Required (API fails to start without these):** `DATABASE_URL`, `JWT_SECRET`
 (≥32 chars — generate with `openssl rand -hex 32`), `WCA_CLIENT_ID`,
-`WCA_CLIENT_SECRET`, `WCA_REDIRECT_URI`, `FRONTEND_URL`.
+`WCA_CLIENT_SECRET`, `WCA_REDIRECT_URI`, `FRONTEND_URL`, `DEPLOYMENT`
+(must be exactly `development`, `test` or `production`).
+
+⚠️ **`DEPLOYMENT` and `FRONTEND_URL` deliberately have no default.** They used to
+default to `development` / `http://localhost:3000`, which meant their entry in the
+"required" map could never trigger: a missing `DEPLOYMENT` in production did not
+stop the API, it silently produced **non-`Secure` auth cookies**, and a missing
+`FRONTEND_URL` opened CORS to localhost and redirected there after login. The
+value set is validated too, so a typo (`produciton`) fails fast instead of
+quietly behaving like development. Don't add defaults back.
 
 Other important vars:
-- DB connection (used by `db/postgres.go`): `DB_HOST`, `DB_PORT`, `DB_USER`,
-  `DB_PASSWORD`, `DB_NAME` (separate from `DATABASE_URL`, which migrate uses).
-  **These are the single source of truth for the DB credentials.** The env
+- DB: the API uses **only `DATABASE_URL`** — for the connection pool
+  (`db.NewPostgres`) and for golang-migrate alike. `DB_HOST`, `DB_PORT`,
+  `DB_USER`, `DB_PASSWORD`, `DB_NAME` feed the `postgres` image, the weekly-report
+  job and the `DATABASE_URL` interpolation; the api service doesn't receive them.
+  **They are the single source of truth for the DB credentials.** The env
   files no longer also define `POSTGRES_USER`/`POSTGRES_PASSWORD`/`POSTGRES_DB`
   — `docker-compose.yml`'s `db` service sources those (which the `postgres`
   image itself requires under that name) from the same `DB_USER`/`DB_PASSWORD`/
@@ -556,8 +709,9 @@ Other important vars:
   exactly one place** (`DB_USER`/`DB_PASSWORD`/`DB_NAME` in the env file) — don't
   reintroduce a parallel `POSTGRES_*` block or hand-type `DATABASE_URL`, both of
   which previously had to be kept in sync by hand and could silently drift.
-- `DEPLOYMENT` (`development`/`test`/`production`) — controls cookie `Secure` +
-  helpers. `LOG_LEVEL`. `NODE_ENV`.
+- `DEPLOYMENT` (`development`/`test`/`production`) — controls cookie `Secure`
+  and whether `X-Forwarded-For` is trusted. `NODE_ENV` (web only). There is no
+  `LOG_LEVEL`: nothing ever read it, so it was removed.
 - `UPLOAD_DIR` — where post images are written (default `/data/uploads`). Not
   required in any env file; the base compose mounts the `uploads_data` named
   volume there. Deliberately **not** under `/app`, because the dev override
@@ -568,9 +722,14 @@ Other important vars:
   with an empty default. (There is no `WCA_LIVE_WATCHER` kill switch any more —
   the subscription only exists while someone has the page open, §18.)
 - Web: `SERVER_API_URL` (server→api, Docker service name), `NEXT_PUBLIC_API_URL`
-  (browser→api), `NEXT_PUBLIC_WCA_CLIENT_ID`, `NEXT_PUBLIC_WCA_REDIRECT_URI`,
-  `NEXT_PUBLIC_BACKEND_LOGIN`. **`NEXT_PUBLIC_*` are baked into the browser bundle
-  at build time** (Docker build args), so changing them requires a web rebuild.
+  (browser→api; the login entry point is simply `NEXT_PUBLIC_API_URL + /login`).
+  **`NEXT_PUBLIC_*` are baked into the browser bundle at build time** (Docker build
+  args), so changing them requires a web rebuild. `NEXT_PUBLIC_WCA_CLIENT_ID`,
+  `NEXT_PUBLIC_WCA_REDIRECT_URI` and `NEXT_PUBLIC_BACKEND_LOGIN` were
+  **removed**: the browser no longer builds the WCA authorize URL (§9), so the
+  OAuth client config lives only in `WCA_*` on the API side, and the login URL
+  is derived from the API URL. Don't reintroduce them — two sources for the same
+  value drift.
 - Compose: `COMPOSE_PROJECT_NAME`, `COMPOSE_PROFILES=proxy` (test/prod),
   `WEB_DOMAIN`/`ACME_EMAIL` (Caddy — single domain, API path-routed under
   `WEB_DOMAIN/api`), `WEB_PORT`/`API_PORT`/
@@ -612,20 +771,22 @@ unless explicitly asked.
 2. Add business logic to `service.go` (validate in a `validator.go` if the feature
    has one).
 3. Add the handler in `handler.go` (decode → call service → encode/`http.Error`).
-4. Register the route in `router.New`; wrap in the auth/RBAC `r.Group` if protected.
+4. Register the route in `router.New` on the handler already passed in; wrap in
+   the auth/RBAC `r.Group` if protected.
 5. Add a table-driven / testify test next to the file (`*_test.go`). Mock the repo
    with testify `mock` (see `auth/service_test.go`) or `go-sqlmock` for SQL.
 
 ### Add a new backend feature package
 Mirror `internal/post/`: create `internal/<feature>/{model,repository,service,handler}.go`
 with the same constructor + interface shape, add any shared enum to
-`internal/types/`, and wire it in `router.New`.
+`internal/types/`, wire the repo → service → handler in `cmd/server/main.go`, and
+pass the handler into `router.New` (add it as a new parameter) to register routes.
 
 ### Add a frontend route
 Create `apps/web/app/<route>/page.tsx` (+ colocated `components/`, `lib/`,
-`types.ts`). Fetch server-side with `SERVER_API_URL` where possible; use
-`"use client"` + `NEXT_PUBLIC_API_URL` for interactive/browser fetches. Add nav
-links in `app/layout.tsx` if needed. **Read the Next 16 docs first** (§3 warning).
+`types.ts`). Fetch server-side with `serverJson` where possible; use
+`"use client"` + `clientFetch`/`clientJson` for interactive/browser fetches. Add
+nav links in `app/lib/site.ts` if needed. **Read the Next 16 docs first** (§3 warning).
 
 ---
 
@@ -641,19 +802,53 @@ links in `app/layout.tsx` if needed. **Read the Next 16 docs first** (§3 warnin
 - The contact form (`app/contact/components/ContactForm.tsx`) is still **not
   wired to any backend** — it renders and validates nothing, submitting does
   nothing. Needs a route handler or a mail service.
+- **Tippverseny (`internal/prediction` + `/tools/prediction`) only covers
+  contest CREATION, LISTING and DELETION so far — see §21.** Leaderboards/
+  participant counts/answer submission are not built yet; `participantCount`
+  is hardcoded to 0 and `status` only ever reports `open`/`closed` (never
+  `evaluated`, though the frontend type still has that state for later).
 - `/results`, `/rankings`, `/guide`, `/team`, `/registration` are linked from
   `QuickToolsSection` but **no such routes exist yet** (they 404).
 - ~~The Hungarian All-Rounder tool card links out to `allrounderpoints.vercel.app`~~
   — **resolved**: the app is integrated at `/tools/allrounder`, see §19.
-- `auth/service.go` / `auth/handler.go` bypass the `config` struct and read env
-  directly (§9).
-- `competition_count` / `delegated_count` / `records` are defined but not populated
-  by the Go API.
-- No structured logging/observability beyond stdlib `log` + `LOG_LEVEL` (the latter
-  is loaded into `cfg` but **not consumed** by any logger yet).
+- ~~`auth/service.go` / `auth/handler.go` bypass the `config` struct and read env
+  directly~~ — **resolved**: both take `*config.Config` (wired in `main.go`), so
+  there are no `os.Getenv` calls left in the `auth` package (§9).
+- No structured logging/observability beyond stdlib `log`.
+- ~~No rate limiting anywhere, and no CSP~~ — **resolved**, see §14.
 - `apps/api/tmp/` (air build output) and `__pycache__/` dirs are build artifacts.
 - No Redis / message queue / object storage in the stack — the only data store is
   Postgres. Don't assume a cache/queue layer exists.
+- ⚠️ **On the current staging host (`server`), the internet-facing Caddy is
+  NOT the compose-managed `caddy` service from `infra/docker-compose.yml`.**
+  It's a separate, manually-started `caddy` container (image `caddy:latest`,
+  container name literally `caddy`, config bind-mounted from
+  `~/caddy/Caddyfile` on the host — **not tracked in this repo**)
+  that also proxies an unrelated `other.example.org` domain (Jellyfin). It
+  exists because the compose `caddy` service can't bind :80/:443 — something
+  already holds those ports on this host — so `up -d` for the `proxy` profile
+  fails with "port is already allocated" and the compose `caddy` service stays
+  `Created`/`Exited`, harmlessly. Two consequences if the API/web containers
+  are ever recreated with a different Compose project name (i.e.
+  `COMPOSE_PROJECT_NAME`, which sets the container-name prefix and the
+  `<project>_appnet` network name) — this already happened once
+  (`schu_test` → `speedcubinghungary_test`) and caused a same-day 502 on both
+  login and `/competitions/upcoming`, because both proxy through this
+  container:
+  1. `~/caddy/Caddyfile`'s `reverse_proxy` targets hardcode the
+     **container names** (not service names — this Caddy isn't in the compose
+     network's service-DNS scope) and must be updated by hand to match.
+  2. The `caddy` container must be connected to the **new** `<project>_appnet`
+     network by hand (`docker network connect <project>_appnet caddy`) — it
+     does not join it automatically, and without it DNS lookups for the
+     container names fail (`no such host`) even with a correct Caddyfile.
+  A `caddy reload` can report `"config is unchanged"` and silently keep
+  serving the old config if the reload races the file edit — `docker restart
+  caddy` is the reliable way to pick up a Caddyfile change here. Prefer fixing
+  the underlying port conflict and switching back to the compose-managed
+  `caddy` service over perpetuating this manual one, but until that happens,
+  check both of the above after any staging redeploy that changes the project
+  name or recreates `api`/`web`.
 - `db/postgres.go` uses `sslmode=disable`; acceptable because the DB is only on the
   internal Docker network (never published in test/prod). Make it configurable if
   the DB is ever exposed.
@@ -673,9 +868,10 @@ links in `app/layout.tsx` if needed. **Read the Next 16 docs first** (§3 warnin
 
 ## 13. Performance considerations
 
-- Competition data is fetched live from WCA on every `/competitions/upcoming`
-  request with no caching, paginating up to 20 pages (10s HTTP timeout). If this
-  becomes hot, add caching rather than hammering WCA.
+- `/competitions/upcoming` paginates the WCA listing (up to 20 pages, 10s HTTP
+  timeout) and is **cached for 15 minutes** in `competition.Service`, like the
+  psych sheets and registrant lists — the home page, the calendar and the
+  prediction modal all read it.
 - All-Rounder results are the opposite case and a good precedent: a whole
   season's WCA results are cached in Postgres with per-competition TTLs, and the
   scoring runs server-side. Cold season ~2.5 s, warm ~50 ms. See §19.
@@ -693,6 +889,35 @@ links in `app/layout.tsx` if needed. **Read the Next 16 docs first** (§3 warnin
 
 - JWT is HS256 with a validated ≥32-char secret; the auth middleware **rejects
   non-HMAC signing algorithms** (alg-confusion guard) — keep that check.
+- **Rate limiting is per-IP ONLY on `/login` + `/login/callback`**
+  (`middleware.RateLimit(cfg, LoginRateLimit)`, 60/min — a login is two
+  requests). ⚠️ **Never put a global or per-route per-IP limit on anything the
+  pages use.** Two reasons, both learned the hard way: (1) Server Components
+  call the API from the web container over the Docker network with no
+  `X-Forwarded-For`, so *every visitor's* SSR request shares one key — the web
+  container's IP — and when that bucket fills `serverJson` silently returns
+  its fallback, i.e. empty news/posts/standings with no error; (2) the live
+  tools are used at the venue, where everyone is behind one Wi-Fi IP and the
+  Special page refetches the report per viewer on every live update.
+  **WCA protection lives on the outbound side instead:**
+  `competition.WCARepository` holds a shared semaphore (`maxConcurrentUpstream`,
+  6 in flight, 15 s queue timeout, 16 MiB body cap), which bounds what we send
+  the WCA regardless of who asks or from where — including deliberate cache
+  misses with made-up ids. The limiter is in-memory and per-process (no Redis,
+  §12). The client IP is the **last** `X-Forwarded-For` entry (Caddy appends
+  what it actually saw) and the header is only trusted outside development.
+- **CSP and the other response headers** live in `apps/web/next.config.ts`
+  (`headers()`), plus `X-Content-Type-Options: nosniff` from
+  `middleware.SecurityHeaders` on the API, which matters for the
+  attacker-influenced bytes served at `/uploads/*`. ⚠️ Two things to know:
+  `headers()` is evaluated at **build time**, so the API origin in
+  `connect-src` **and `img-src`** (post images come from the API's
+  `/uploads/*`) is baked in from `NEXT_PUBLIC_API_URL` like every other
+  `NEXT_PUBLIC_*` (§10) — any new directive that reaches the API needs it too;
+  and `script-src` deliberately keeps `'unsafe-inline'`, because the strict
+  nonce variant needs a `proxy.ts` and forces **every** page to render
+  dynamically — that is a separate architectural decision, not a side effect of
+  adding a header.
 - Auth cookie is `HttpOnly` + `SameSite=Strict` + `Secure` (outside dev). CORS
   allows only `FRONTEND_URL` with credentials.
 - OAuth `state` is sanitized before use in the redirect (must be a single-slash
@@ -708,9 +933,9 @@ links in `app/layout.tsx` if needed. **Read the Next 16 docs first** (§3 warnin
 ## 15. Recurring patterns cheat-sheet
 
 - Go feature = `model/repository/service/handler` + interface + `NewXxx`
-  constructor, wired manually in `router.New`.
+  constructor, wired manually in `cmd/server/main.go`; `router.New` only routes.
 - HTTP handler shape: decode into a local anonymous request struct → call service →
-  `json.NewEncoder(w).Encode(...)` or `http.Error(w, err.Error(), status)`.
+  `json.NewEncoder(w).Encode(...)` or `httperr.Write(w, r, status, err)` (§6).
 - Repository returns domain structs + `error`; SQL is raw and parameterized.
 - Enums live in `internal/types` as string types.
 - Frontend: server component fetches → passes props to client components; auth via
@@ -746,11 +971,11 @@ links in `app/layout.tsx` if needed. **Read the Next 16 docs first** (§3 warnin
 - JSON field casing: DB models/`post` use `snake_case`; the `competition` API DTO
   intentionally uses `camelCase` to match the web client. Match the neighboring
   file, don't unify blindly.
-- ⚠️ The global `middleware.JSON` sets `Content-Type: application/json` on **every**
-  response, and Go's `ServeContent` does **not** override an already-set
-  Content-Type. Any non-JSON route must therefore `w.Header().Del("Content-Type")`
-  before serving (see the `/uploads/*` file server in `router.New`), otherwise
-  images/files go out mislabeled as JSON.
+- ⚠️ `middleware.JSON` sets `Content-Type: application/json`, and Go's
+  `ServeContent` does **not** override an already-set Content-Type. That is why
+  it wraps only the JSON route group in `router.New`: register a non-JSON route
+  (files, SSE, redirects) **outside** that group, otherwise it goes out
+  mislabeled as JSON. `router_test.go` pins this for `/uploads/*`.
 - Uploaded images: the MIME type is detected from the file **contents**
   (`http.DetectContentType`), never from the client's Content-Type header, and the
   stored filename is a generated UUID — the client's filename is discarded to
@@ -873,6 +1098,7 @@ reconciliation, no `resolved_at`, and no backfill problem:
 | Auth | none — `UserSocket.connect/3` accepts every connection. Send **no** `Origin` header (Phoenix `check_origin` passes when it is absent). |
 | Heartbeat | required every <60s on topic `phoenix`, event `heartbeat` |
 | Subscription | there is exactly **one**: `roundUpdated(id: ID!): Round!` |
+| Unsubscribe | `unsubscribe` on `__absinthe__:control` with `{"subscriptionId": …}` — dropping the key locally is **not** unsubscribing; without this frame WCA Live keeps pushing that round for the life of the connection |
 | WCA ID → live ID | no GraphQL lookup exists; follow the `302` from `/link/competitions/{wcaId}` → `/competitions/{numericId}` |
 
 ⚠️ **You cannot fetch a whole competition's results in one query.** Adding
@@ -910,14 +1136,34 @@ at it:
 - `refreshInterval` (2 min) only re-checks whether new rounds opened, for the
   competitions that currently have viewers.
 
-Two concurrency rules that are easy to break:
+### ⚠️ The session lifecycle is SHARED with `allrounder` — don't copy it back
 
+The socket lifecycle (viewer refcount, start/stop, reconnect resync,
+subscription diffing) lives in **`wcalive.Session`** and is used by both
+trackers. It used to be ~250 near-identical lines in each package, and the two
+copies had already drifted.
+
+The feature implements `wcalive.Watcher` — `Reload(ctx)`,
+`WantedSubscriptions()`, `HandleEvent(event)` — and keeps only what genuinely
+differs: **which** competitions are tracked (a map here, one leg in
+`allrounder`), the GraphQL queries, and the snapshot shape. Rules the shared
+layer encodes, each pinned by a test in `wcalive/session_test.go`:
+
+- **The connection exists only while a viewer does.** `Session.AddViewer()`
+  refcounts; the first viewer starts the socket, the last stops it.
+- **`AddViewer` returns `started`, and the caller must use it.** The starter's
+  work is covered by the session's own opening `Reload`; anyone joining a
+  running session has to load what *they* watch. Deciding this from a separate
+  "is it running?" call is a race — two simultaneous viewers can both conclude
+  they don't need to load.
 - **Sessions must not overlap.** `SocketClient` resets its per-connection state
   (`sentKeys`, `topicKey`) per session, so a new session waits on the previous
-  one's `sessionDone`, and `runSession` waits for `socket.Run` to return.
-- **`SetOnConnect` is called once, in `NewTracker`** — not per session, which
-  would race with the socket's own goroutine. It reads the live session context
-  through `currentSessionContext()`.
+  one's `done`, and the session waits for `socket.Run` to return.
+- **`SetOnConnect` is registered once, in `Session.Watch`** — not per session,
+  which would race with the socket's own goroutine.
+- **The `Session` never calls the `Watcher` while holding its own mutex**, and
+  `Running()` is atomic — so a feature may ask "is the session live?" from
+  inside its own lock without a lock-ordering hazard.
 
 ### Why the design is state-based
 
@@ -980,10 +1226,7 @@ event carries **no data**, only "something changed"; the client refetches the
 report. That keeps one source of truth and makes dropped or duplicated
 notifications harmless. The broadcaster **is keyed by competition** — several
 competitions can be open at once, and one's update must not make the other's
-viewers refetch.
-⚠️ The SSE handler must `w.Header().Del("Content-Type")` before setting
-`text/event-stream` — the global `middleware.JSON` would otherwise mislabel the
-stream (§17).
+viewers refetch. The stream route sits outside the JSON middleware group (§17).
 
 The SSE handler is also what tells the tracker a viewer is present
 (`AddViewer`), so the WCA Live subscription is tied to the page being open. The
@@ -1163,8 +1406,14 @@ an ordinary `CompetitionRounds` with `Live: true`.
   know) on every page load.
 - `LiveTracker` (tracker.go) is a **single-competition** version of the special
   tracker — the series decides which leg runs, so the viewer-chosen multi-
-  competition machinery is not needed. The lifecycle is the same: the WCA Live
-  socket exists **only while an SSE stream is open**. No background watcher.
+  competition machinery is not needed. The lifecycle is literally the same code:
+  both share `wcalive.Session` (see §18), so the WCA Live socket exists **only
+  while an SSE stream is open**. No background watcher.
+- ⚠️ **A failed round query keeps its previous snapshot** instead of dropping the
+  round. Rebuilding the map from scratch made the live leg's points visibly fall
+  and come back on the next refresh, which reads as lost points; a load where
+  *every* round failed returns an error rather than committing an empty snapshot.
+  Same rule, same reason, in `special` (there it corrupts the A1a3 budget).
 - `GET /allrounder/stream?year=` opens even when no leg is running (it just
   stays quiet), so a competition starting mid-session lights up on its own.
 - ⚠️ **WCA Live gives `best: 0` / `ranking: null` for a competitor who has not
@@ -1228,9 +1477,11 @@ metaadat (alt szöveg, szerző).
   képére hivatkozhatna, és a takarítás azt törölné. Ugyanígy hibás, ha marad
   hivatkozás nélküli feltöltött fájl (árva fájl lenne a volume-on), vagy ha egy
   útvonal kétszer szerepel.
-- `image_order` **nélkül** a régi viselkedés él tovább (új képek a végére,
-  `remove_image=true` üríti a galériát), így egy korábbi kliens nem törik el. Az
-  `image` (egyes számú) fájlmezőt is fogadjuk még az `images` mellett.
+- Szerkesztéskor az `image_order` **kötelező** (hiányában 400). A régi
+  kompatibilitási ágak — JSON törzs, egyes számú `image` mező,
+  `remove_image=true` — megszűntek: az egyetlen kliens, a `CreatePostModal`,
+  mindig multipartot és `image_order`-t küld. A létrehozás és a szerkesztés
+  közös `parsePostForm`-on megy át, a hibák státuszát egyetlen `errorStatus` adja.
 - A legfeljebb 10 kép × 5 MiB miatt a kérés törzsének korlátja `maxUploadBytes`;
   a **fájlonkénti** méretet a `FileHeader.Size` alapján utasítjuk el, mert a
   `SaveImage`-beli `LimitReader` csak csonkítana (néma félkép helyett 400).
@@ -1252,17 +1503,152 @@ metaadat (alt szöveg, szerző).
   szerkeszthető; submitkor ebből áll elő az `image_order` és ebben a sorrendben
   fűzi hozzá az `images` fájlokat. A kettőnek **egyeznie kell** — a backend
   sorban tölti ki a `"new"` helyeket.
-- ⚠️ A poszt TÖRLÉSE továbbra sem törli a képfájlokat a volume-ról (`DeletePosts`
-  csak a DB sort). Ez a galéria előtt is így volt, de most posztonként 10 fájlt
-  jelenthet.
+- A poszt TÖRLÉSE a képfájlokat is elviszi. A `Repository.Delete` a
+  `DELETE … RETURNING image_paths`-szal EGY lekérdezésben adja vissza a
+  felszabadult útvonalakat (külön SELECT + DELETE közben változhatna a
+  galéria), a handler pedig ezekre hívja a `RemoveImages`-t — hibaágon is,
+  mert a visszakapott sorok addigra már tényleg törlődtek.
+
+## 21. Tippverseny (`internal/prediction` + `/tools/prediction`)
+
+Admin által versenyenként indítható tippverseny: dobogó-tippek (1-2-3. hely)
+a verseny kiválasztott versenyszámaira, plusz szabad extra kérdések
+(versenyző/idő/szám/szabad szöveg típussal, pl. "Hány rekord születik?").
+**Csak a
+LÉTREHOZÁS, a LISTÁZÁS és a TÖRLÉS van megépítve** — a tippek leadása
+(userenkénti válaszok tárolása) és a kiértékelés (pontozás, végeredmény) még
+nincs, ez egy külön, nagyobb következő lépés lesz. A frontend típusa
+(`PredictionStatus`) emiatt tartalmaz egy `"evaluated"` állapotot is, amit a
+backend ma sosem ad vissza.
+
+**A verseny metaadatai (név, város, dátum) NINCSENEK nálunk tárolva.** A
+`prediction_contests.competition_wca_id` csak egy szöveges azonosító, FK
+nélkül: a verseny a WCA-tól jön, mi csak az *ID*-t tartjuk meg. Listázáskor a
+`prediction.Service.GetContests` minden versenyt **ID szerint** kér le
+(`competition.Service.GetCompetition` → WCA `/competitions/{id}`, 15 percig
+gyorsítótárazva) — ha a WCA API hibázik, a tippverseny akkor is megjelenik, csak
+a verseny neve a nyers `competition_wca_id` lesz (lásd `buildContest`), és a
+hiba a naplóba kerül. ⚠️ **Ne a `GetUpcomingHungarian`-ből töltsd:** az a
+verseny végével kiejti a versenyt, és a tippverseny pont az
+eredményhirdetéskor veszítette el a nevét, dátumát és helyszínét. Emiatt `prediction.Service`
+egy szűk `CompetitionLookup` interfészen keresztül függ a competition csomagtól
+(nem a konkrét `*competition.Service`-en), hogy a tesztelhetőség és a réteghatár
+tiszta maradjon.
+
+**A `status` (nyitott/lezárt) számított érték, nem oszlop.** A
+`prediction_deadline`-ból számolódik minden listázáskor (`statusFor` a
+`model.go`-ban) — így a leadási határidő és a megjelenített állapot soha nem
+csúszhat szét.
+
+Adatmodell (lásd §7 a teljes séma-blokkhoz):
+- `prediction_contests` — egy sor egy tippversenyt jelent.
+- `prediction_podium_events` — melyik versenyszámokhoz kell dobogót tippelni
+  (gyerek tábla, `ON DELETE CASCADE`).
+- `prediction_extra_questions` — az admin szabad kérdései, `ordinal`-lal
+  megjelenítési sorrendben (mint az `allrounder_results.ordinal`, de itt csak
+  sorrendezéshez kell, nem számítási bemenet).
+
+A `POST /predictions` (`prediction.Handler.CreateContest`) mindhárom táblát
+**egy tranzakcióban** írja (`Repository.Create`) — vagy mindhárom sikerül,
+vagy egyik sem, hogy ne maradjon félig beírt tippverseny.
+
+A `DELETE /predictions/{id}` (`prediction.Handler.DeleteContest`) NEM
+tranzakció — elég egyetlen `DELETE FROM prediction_contests WHERE id = $1`,
+mert a gyerek táblák FK-ja `ON DELETE CASCADE`. 0 törölt sor `ErrContestNotFound`-ot
+ad vissza, amit a handler 404-re fordít (ugyanaz a minta, mint a `post.Update`
+a `posts` táblán, lásd §6).
+
+### Frontend
+
+`/tools/prediction` (`app/tools/prediction/`), Server Component: a lista
+oldal (`page.tsx`) szerveroldalon hívja a `GET /predictions`-t (mint a
+`/posts`, `serverApiUrl()`-lel), és publikus — bárki látja a listát, csak a
+létrehozás és a törlés admin (`useUser()` role-check a `PredictionList`-ben,
+mint a posztoknál — `isAdmin` lejut a `PredictionListItem`-be, ami a törlés
+gombot rendereli). `DeletePredictionButton.tsx` egyetlen tippversenyt töröl,
+megerősítésre a közös `app/components/ui/ConfirmModal.tsx`-t használva (lásd
+§6 — sem itt, sem a posztoknál nincs többes kijelölés/bulk törlés, mindkettő
+elemenkénti kuka-ikon). A gomb a kártya `Link`-jének `after:absolute
+after:inset-0` overlay-je fölött `relative z-10`-zel marad kattintható,
+ugyanúgy, mint a `PostsListItem` szerkesztő/törlő gombjai.
+
+Az admin `CreatePredictionModal` (`components/CreatePredictionModal.tsx`):
+- Verseny-választó a `GET /competitions/upcoming`-ból (böngészőből,
+  `clientApiUrl()`), amely most már `eventIds`-t is ad versenyenként (lásd §8)
+  — ebből épül fel a dobogó-jelölők listája versenyenként, `@cubing/icons`
+  ikonokkal, a KÖZÖS `app/lib/events.ts` névtérképpel (ugyanazt használja az
+  allrounder tool is, §19 — a WCA versenyszám-nevei nem toolonkénti
+  terméklogika, és két példánynál egy új versenyszám az egyik felületen némán
+  nyers azonosítóként jelenne meg).
+- Extra kérdés-szerkesztő (`ExtraQuestionsEditor.tsx`): tetszőleges számú sor,
+  típusonként (Versenyző/Idő/Szám/Szabad szöveg) választható select-tel.
+- A POST body RFC3339 `predictionDeadline`-t küld
+  (`new Date(...).toISOString()`); a backend `time.Parse(time.RFC3339, ...)`-vel
+  olvassa.
+
+**A részletező oldal (`[id]/page.tsx`) kitölthető, de a submit még nem hív
+végpontot.** `GET /predictions/{id}` nem létezik, ezért a szerveroldali
+`getPrediction` a teljes `GET /predictions` listát kéri le és szűr `id`
+szerint; ha a backend kap egyedi lekérő végpontot, ezt cseréld le. A form
+állapota a `PredictionForm` client komponensben él (a `page.tsx` Server
+Component marad). A "Tipp leadása" gomb **mindig `disabled`**, amíg nincs
+leadási végpont, és a felület ki is mondja, hogy a mezők nem mentődnek.
+⚠️ A `<form onSubmit={e => e.preventDefault()}>` nem hagyható el: nélküle a
+gomb vagy egy Enter natív GET submitot indít, ami újratölti az oldalt, és a
+kitöltött tipp elveszik. Ha a leadás megépül, ide kerül a valódi handler. A mezők a kérdés típusához igazodnak:
+
+- **Versenyző** (`CompetitorInput`): typeahead, a választás a NEVET adja
+  vissza. A dobogó-tippeknél a versenyszám **psych sheet-je** a lista
+  (`/competitions/{id}/psych-sheet/{eventId}`, a `#N` pozíció csak
+  tájékoztat), az extra "versenyző" kérdéseknél a **teljes nevezői lista**
+  (`/competitions/{id}/competitors`). A listát nem az input tölti be, hanem
+  a szülő a `useCompetitorOptions` hookkal: **egy versenyszám három mezője
+  EGY kérés**, a nevezői lista pedig egyszer, csak ha van person kérdés.
+  Hiba esetén a mező sima szöveges input marad (WCA-kiesés ne blokkoljon).
+- **Idő** (`TimeInput` + a KÖZÖS `app/lib/time.ts`): csak számjegy, gépelés
+  közben jobbról tagolva (`14289` → `1:42.89`), plafon 60:00.00, 6 számjegy.
+  ⚠️ A `formatTimeInput` levágja a vezető nullákat — a megjelenített `0.01`
+  nyers számjegyei `001`, és enélkül `001:23.45`-té halmozódna.
+  Elutasított bevitelnél (`null`) a mező az előző értéken marad. Ugyanezt
+  használja a Budapest Special DNF-cellája is (§18) — **ne másold vissza egy
+  toolba**, korábban két, viselkedésében eltérő példány volt.
+- **Szám**: `type="number"`.
+- **Szabad szöveg** (`types.QUESTION_TEXT` / `"text"`, migráció
+  `000014_add_prediction_text_question_type`): sima `type="text"` input,
+  olyan kérdésekhez, amik nem versenyzőt, időt vagy számot várnak (pl.
+  "Milyen új trükköt fogunk látni?"). A Postgres enumhoz hozzáadott érték —
+  a `down` migráció szándékosan no-op, ugyanaz a minta, mint a `post_tag`
+  `'report'` értékénél (000003): a Postgres nem tudja eltávolítani egy enum
+  értékét, az árva érték ártalmatlan.
+
+⚠️ **A WCA API kb. 15 párhuzamos kérés után 429-et ad.** A psych sheet
+mezőnkénti lekérése (11 versenyszám × 3 hely = 33) ezt minden oldalbetöltésnél
+túllépte, és 502-ként jött vissza. Ezért (1) a frontend versenyszámonként egy
+kérést küld, (2) a `competition.Service` 15 percig memóriában cache-eli a
+psych sheeteket és a nevezői listát, és `singleflight`-tal összevonja az
+egyidejű azonos kéréseket (a React StrictMode dev-ben minden fetch-et
+duplán futtat). Hibás válasz nem kerül a cache-be, a lejárt bejegyzéseket
+pedig TTL-enként egyszer kisöpri (`sweepLocked`) — a kulcs a kliens által
+adott azonosító, takarítás nélkül korlátlanul nőne. (3) A
+`competition.WCARepository` egyszerre legfeljebb 6 kérést enged a WCA felé
+(§14) — a singleflight csak AZONOS kulcsokat von össze, egy tucat különböző
+versenyszám hideg cache mellett egyszerre ment volna ki. Ne tedd vissza a
+lekérést az inputba, és ne vedd ki a cache-t.
+
+⚠️ Amikor a tippleadás/kiértékelés megépül, ne bővítsd tovább ezt a modult
+gondolkodás nélkül — a userenkénti válaszok tárolása és a pontozás logika
+valószínűleg saját táblát/service-réteget igényel, hasonlóan ahhoz, ahogy az
+allrounder is külön választja a "series config kódban" (§19) és a "letöltött
+eredmény DB-ben" felelősséget.
 
 ## Instructions for Claude
 
 When working in this repo:
 
 1. **Follow existing patterns instead of introducing new ones.** New Go features
-   use the `model/repository/service/handler` + `router.New` wiring shape. New
-   frontend routes colocate `components/lib/types` under `app/<route>/`.
+   use the `model/repository/service/handler` shape, wired in `cmd/server/main.go`
+   and passed into `router.New` (which only registers routes). New frontend
+   routes colocate `components/lib/types` under `app/<route>/`.
 2. **Read the Next.js 16 docs before writing frontend code** — this Next version
    differs from training data. See `apps/web/AGENTS.md`.
 3. **Minimize unnecessary refactoring.** Don't rename constructors, unify JSON

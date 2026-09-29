@@ -30,7 +30,7 @@ const Navbar = ({ action }: NavbarProps) => {
 
   return (
     <nav
-      className={`sticky top-0 z-50 w-full border-b bg-white/85 backdrop-blur-md transition-[border-color,box-shadow] duration-300 ease-smooth dark:bg-canvas/85 ${
+      className={`sticky top-0 z-50 w-full border-b bg-white transition-[border-color,box-shadow] duration-300 ease-smooth dark:bg-canvas ${
         isScrolled ? "border-line shadow-card" : "border-transparent"
       }`}
     >

@@ -7,7 +7,7 @@ import (
 
 var (
 	ErrInvalidID    = errors.New("invalid post ID")
-	ErrInvalidTag	= errors.New("invalid tag")
+	ErrInvalidTag   = errors.New("invalid tag")
 	ErrEmptyTitle   = errors.New("title cannot be empty")
 	ErrShortContent = errors.New("content must be at least 20 characters")
 	ErrPostNotFound = errors.New("post not found")
@@ -27,8 +27,7 @@ func ValidatePost(p Post) error {
 	if p.ID == "" {
 		return ErrInvalidID
 	}
-	// A tag-et a post_tag DB enum ellen is ellenőrizzük: enélkül egy hibás érték
-	// csak az INSERT-nél bukna el, 500-as hibaként a 400 helyett.
+	// Enélkül egy hibás tag csak az INSERT-nél bukna el, 500-ként.
 	if !isValidTag(p.Tag) {
 		return ErrInvalidTag
 	}
@@ -38,8 +37,6 @@ func ValidatePost(p Post) error {
 	if len(p.Content) < 20 {
 		return ErrShortContent
 	}
-	// Biztonsági háló: a handler már a feltöltés ELŐTT elutasítja a túl sok képet
-	// (hogy ne írjunk ki fájlt feleslegesen), de a korlát itt is érvényes.
 	if len(p.ImagePaths) > MaxImages {
 		return ErrTooManyImages
 	}

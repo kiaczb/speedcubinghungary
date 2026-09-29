@@ -8,15 +8,7 @@ import (
 	"speedcubinghungary/internal/wcalive"
 )
 
-type (
-	SocketClient      = wcalive.SocketClient
-	Broadcaster       = wcalive.Broadcaster
-	SubscriptionEvent = wcalive.SubscriptionEvent
-)
-
-func NewSocketClient(baseURL string) *SocketClient { return wcalive.NewSocketClient(baseURL) }
-func NewBroadcaster() *Broadcaster                 { return wcalive.NewBroadcaster() }
-
+// LiveClient a közös WCA Live kliens az All-Rounder saját lekérdezéseivel.
 type LiveClient struct {
 	*wcalive.Client
 }
@@ -196,9 +188,8 @@ func roundResultsFromLive(identity roundIdentity, round liveRound) RoundResults 
 	})
 
 	return RoundResults{
-		EventID:     identity.EventID,
-		RoundTypeID: strconv.Itoa(identity.RoundNumber),
-		Rank:        identity.RoundNumber,
-		Placements:  placements,
+		EventID:    identity.EventID,
+		Rank:       identity.RoundNumber,
+		Placements: placements,
 	}
 }

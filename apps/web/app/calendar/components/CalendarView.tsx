@@ -10,7 +10,7 @@ import { UpcomingCompetition } from "../types";
 import CompetitionList from "./CompetitionList";
 import MonthCalendar from "./MonthCalendar";
 import StateMessage from "@/app/components/ui/StateMessage";
-import { clientApiUrl } from "@/app/lib/api";
+import { clientJson } from "@/app/lib/api";
 
 type Status = "loading" | "error" | "success";
 type ViewMode = "list" | "calendar";
@@ -78,15 +78,10 @@ const CalendarView = () => {
     const fetchCompetitions = async () => {
       setStatus("loading");
       try {
-        const res = await fetch(`${clientApiUrl()}/competitions/upcoming`, {
-          signal: controller.signal,
-        });
-        if (!res.ok) throw new Error(`Request failed: ${res.status}`);
-
-        const data: UpcomingCompetition[] = await res.json();
-        // Defensive: ensure nearest upcoming date is first.
-        data.sort((a, b) => a.startDate.localeCompare(b.startDate));
-
+        const data = await clientJson<UpcomingCompetition[]>(
+          "/competitions/upcoming",
+          { signal: controller.signal },
+        );
         setCompetitions(data);
         setStatus("success");
       } catch (error) {

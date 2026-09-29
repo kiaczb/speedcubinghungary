@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"speedcubinghungary/internal/wcalive"
 )
 
 var (
@@ -34,7 +36,7 @@ type Service struct {
 	repo        Repository
 	client      *LiveClient
 	tracker     *Tracker
-	broadcaster *Broadcaster
+	broadcaster *wcalive.Broadcaster
 
 	mu       sync.Mutex
 	resolved map[string]cachedCompetition
@@ -47,7 +49,7 @@ type cachedCompetition struct {
 	at          time.Time
 }
 
-func NewService(repo Repository, client *LiveClient, tracker *Tracker, broadcaster *Broadcaster) *Service {
+func NewService(repo Repository, client *LiveClient, tracker *Tracker, broadcaster *wcalive.Broadcaster) *Service {
 	return &Service{
 		repo:        repo,
 		client:      client,
@@ -57,7 +59,7 @@ func NewService(repo Repository, client *LiveClient, tracker *Tracker, broadcast
 	}
 }
 
-func (s *Service) Broadcaster() *Broadcaster { return s.broadcaster }
+func (s *Service) Broadcaster() *wcalive.Broadcaster { return s.broadcaster }
 
 func (s *Service) Tracker() *Tracker { return s.tracker }
 

@@ -4,7 +4,8 @@ import { notFound } from "next/navigation";
 import { FaArrowLeft } from "react-icons/fa";
 import { badgeMap, PostsItem } from "../types";
 import Badge from "@/app/components/Badge";
-import { serverApiUrl } from "@/app/lib/api";
+import { serverJson } from "@/app/lib/api";
+import { formatLongDate } from "@/app/lib/date";
 import { postImageUrls } from "../lib/postImage";
 import PostContent from "../components/PostContent";
 import PostGallery from "../components/PostGallery";
@@ -18,12 +19,7 @@ type PageProps = {
 };
 
 async function getPost(id: string): Promise<PostsItem | null> {
-  const res = await fetch(`${serverApiUrl()}/posts/${id}`, {
-    cache: "no-store",
-  });
-
-  if (!res.ok) return null;
-  return res.json();
+  return serverJson<PostsItem | null>(`/posts/${id}`, null);
 }
 
 export default async function PostPage({ params }: PageProps) {
@@ -60,11 +56,7 @@ export default async function PostPage({ params }: PageProps) {
                 dateTime={post.created_at}
                 className="tabular font-mono text-xs text-subtle-foreground"
               >
-                {new Date(post.created_at).toLocaleDateString("hu-HU", {
-                  year: "numeric",
-                  month: "long",
-                  day: "numeric",
-                })}
+                {formatLongDate(post.created_at)}
               </time>
             )}
           </div>

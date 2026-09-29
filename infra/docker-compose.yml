@@ -37,22 +37,13 @@ services:
         condition: service_healthy
     environment:
       DEPLOYMENT: ${DEPLOYMENT}
-      NODE_ENV: ${NODE_ENV}
       FRONTEND_URL: ${FRONTEND_URL}
       WCA_CLIENT_ID: ${WCA_CLIENT_ID}
       WCA_CLIENT_SECRET: ${WCA_CLIENT_SECRET}
       WCA_REDIRECT_URI: ${WCA_REDIRECT_URI}
       DATABASE_URL: ${DATABASE_URL}
-      DB_HOST: ${DB_HOST}
-      DB_PORT: ${DB_PORT}
-      DB_USER: ${DB_USER}
-      DB_PASSWORD: ${DB_PASSWORD}
-      DB_NAME: ${DB_NAME}
       JWT_SECRET: ${JWT_SECRET}
-      LOG_LEVEL: ${LOG_LEVEL}
-      # WCA Live DNF watcher. Optional — the API falls back to the public
-      # instance with the watcher on, so both default to empty here to keep
-      # the stack warning-free when the env file doesn't set them.
+      # Optional — empty falls back to the public WCA Live instance.
       WCA_LIVE_URL: ${WCA_LIVE_URL:-}
     volumes:
       # Uploaded post images. A named volume so they survive image rebuilds and
@@ -74,9 +65,6 @@ services:
       NODE_ENV: ${NODE_ENV}
       SERVER_API_URL: ${SERVER_API_URL}
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
-      NEXT_PUBLIC_WCA_CLIENT_ID: ${NEXT_PUBLIC_WCA_CLIENT_ID}
-      NEXT_PUBLIC_WCA_REDIRECT_URI: ${NEXT_PUBLIC_WCA_REDIRECT_URI}
-      NEXT_PUBLIC_BACKEND_LOGIN: ${NEXT_PUBLIC_BACKEND_LOGIN}
     # No host port published here either; Caddy fronts it in test/prod and the
     # dev override re-publishes it for localhost work.
     networks: [appnet]

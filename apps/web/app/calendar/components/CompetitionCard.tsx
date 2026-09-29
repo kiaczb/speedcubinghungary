@@ -6,31 +6,19 @@ import {
 import { UpcomingCompetition } from "../types";
 import Card from "@/app/components/Cards/Card";
 import SaveToGoogleCalendarButton from "./SaveToGoogleCalendarButton";
+import {
+  formatDateRange,
+  formatDayOfMonth,
+  formatMonthBadge,
+} from "@/app/lib/date";
 
 type Props = {
   competition: UpcomingCompetition;
 };
 
-function formatDate(date: string): string {
-  return new Date(date).toLocaleDateString("hu-HU", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
-}
-
-function formatDateRange(start: string, end: string): string {
-  if (start === end) return formatDate(start);
-  return `${formatDate(start)} – ${formatDate(end)}`;
-}
-
 const CompetitionCard = ({ competition }: Props) => {
-  const startDate = new Date(competition.startDate);
-  const month = startDate
-    .toLocaleDateString("hu-HU", { month: "short" })
-    .replace(".", "")
-    .toUpperCase();
-  const day = startDate.toLocaleDateString("hu-HU", { day: "numeric" });
+  const month = formatMonthBadge(competition.startDate);
+  const day = formatDayOfMonth(competition.startDate);
 
   return (
     <Card

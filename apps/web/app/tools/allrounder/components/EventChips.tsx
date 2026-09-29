@@ -1,7 +1,7 @@
 // A `@cubing/icons` a hivatalos WCA versenyszám-ikonokat adja ikonfontként
 // (~13 KB). A CSS itt kerül be, így csak erre az útvonalra töltődik le.
 import "@cubing/icons";
-import { eventName } from "../lib/events";
+import { eventName } from "@/app/lib/events";
 import type { EventResult } from "../types";
 
 type EventChipsProps = {

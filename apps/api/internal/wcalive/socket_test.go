@@ -22,6 +22,7 @@ type fakeLiveSocket struct {
 
 	mu           sync.Mutex
 	docQueries   []string
+	unsubscribed []string
 	connections  int
 	dropAfterDoc bool
 	broadcast    chan string
@@ -63,6 +64,18 @@ func newFakeLiveSocket(t *testing.T) *fakeLiveSocket {
 
 			case eventHeartbeat:
 				f.reply(ctx, conn, msg, map[string]any{})
+
+			case eventUnsubscribe:
+				var payload struct {
+					SubscriptionID string `json:"subscriptionId"`
+				}
+				_ = json.Unmarshal(msg.Payload, &payload)
+
+				f.mu.Lock()
+				f.unsubscribed = append(f.unsubscribed, payload.SubscriptionID)
+				f.mu.Unlock()
+
+				f.reply(ctx, conn, msg, map[string]any{"subscriptionId": payload.SubscriptionID})
 
 			case eventDoc:
 				var payload struct {
@@ -131,6 +144,12 @@ func (f *fakeLiveSocket) stats() (connections int, queries []string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.connections, append([]string(nil), f.docQueries...)
+}
+
+func (f *fakeLiveSocket) unsubscribes() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.unsubscribed...)
 }
 
 func TestSocketURL(t *testing.T) {
@@ -331,4 +350,129 @@ func TestSocketClient_Unsubscribe(t *testing.T) {
 
 	client.Unsubscribe("round:1")
 	assert.Equal(t, []string{"round:2"}, client.Subscriptions())
+}
+
+// ⚠️ A kulcs helyi törlése NEM lemondás. Az Unsubscribe korábban csak a saját
+// specs map-jéből vette ki a kulcsot, a WCA Live viszont mit sem tudott róla, és
+// a kapcsolat végéig tovább küldte az adott kör roundUpdated eseményeit. Ez a
+// `special`-ben azt jelentette, hogy egy rég elhagyott verseny köreinek forgalma
+// addig terhelte a socketet, amíg legalább EGY másik verseny nézője nyitva
+// tartotta a kapcsolatot.
+func TestSocketClient_UnsubscribeTellsWCALive(t *testing.T) {
+	fake := newFakeLiveSocket(t)
+	client := NewSocketClient(fake.baseURL())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	client.Subscribe("round:7", testSubscriptionDoc, map[string]any{"id": "7"})
+	client.Subscribe("round:8", testSubscriptionDoc, map[string]any{"id": "8"})
+	go client.Run(ctx)
+
+	require.Eventually(t, func() bool {
+		_, queries := fake.stats()
+		return len(queries) == 2
+	}, 5*time.Second, 20*time.Millisecond, "mindkét feliratkozás kimegy")
+
+	client.Unsubscribe("round:7")
+
+	require.Eventually(t, func() bool {
+		return len(fake.unsubscribes()) == 1
+	}, 5*time.Second, 20*time.Millisecond, "a lemondásnak el kell jutnia a WCA Live-ig")
+
+	assert.Equal(t, []string{"__absinthe__:doc:global:7"}, fake.unsubscribes(),
+		"pontosan az elengedett kör feliratkozását mondjuk le, a másikat nem")
+
+	_, queries := fake.stats()
+	assert.Len(t, queries, 2, "a lemondás nem indít újra feliratkozást")
+}
+
+// A lemondás után érkező eseményt el KELL dobni: a topic→kulcs leképezés
+// megszűnik, így az upstream késlekedő keretei nem jutnak el a feature-höz.
+func TestSocketClient_DropsEventsAfterUnsubscribe(t *testing.T) {
+	const topic = "__absinthe__:doc:global:7"
+
+	subscribed := make(chan struct{}, 1)
+	unsubscribed := make(chan struct{}, 1)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer conn.CloseNow()
+
+		ctx := r.Context()
+		fake := &fakeLiveSocket{}
+
+		for {
+			_, data, err := conn.Read(ctx)
+			if err != nil {
+				return
+			}
+			var msg phoenixMessage
+			if err := json.Unmarshal(data, &msg); err != nil {
+				return
+			}
+
+			switch msg.Event {
+			case eventJoin, eventHeartbeat:
+				fake.reply(ctx, conn, msg, map[string]any{})
+
+			case eventDoc:
+				fake.reply(ctx, conn, msg, map[string]any{"subscriptionId": topic})
+				signal(subscribed)
+
+			case eventUnsubscribe:
+				fake.reply(ctx, conn, msg, map[string]any{"subscriptionId": topic})
+
+				// Egy még úton lévő esemény a lemondás UTÁN — pont ez az, amit
+				// a kliensnek el kell dobnia.
+				_ = fake.push(ctx, conn, topic, map[string]any{
+					"roundUpdated": map[string]any{"id": "7"},
+				})
+
+				signal(unsubscribed)
+			}
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	client := NewSocketClient(server.URL)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	client.Subscribe("round:7", testSubscriptionDoc, map[string]any{"id": "7"})
+	go client.Run(ctx)
+
+	// Előbb meg kell várni a feliratkozás visszaigazolását: enélkül nincs
+	// subscriptionId, amit le lehetne mondani (és nem is lenne mit).
+	waitForSignal(t, subscribed, "a feliratkozás nem ért ki")
+
+	client.Unsubscribe("round:7")
+	waitForSignal(t, unsubscribed, "a lemondás nem ért ki")
+
+	select {
+	case event := <-client.Events():
+		t.Fatalf("a lemondott feliratkozás eseménye nem juthat ki: %+v", event)
+	case <-time.After(300 * time.Millisecond):
+	}
+}
+
+func signal(ch chan struct{}) {
+	select {
+	case ch <- struct{}{}:
+	default:
+	}
+}
+
+func waitForSignal(t *testing.T, ch <-chan struct{}, message string) {
+	t.Helper()
+
+	select {
+	case <-ch:
+	case <-time.After(5 * time.Second):
+		t.Fatal(message)
+	}
 }

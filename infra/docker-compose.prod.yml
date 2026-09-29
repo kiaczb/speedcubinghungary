@@ -17,9 +17,6 @@ services:
       # NEXT_PUBLIC_* must be baked into the browser bundle at build time.
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
-        NEXT_PUBLIC_WCA_CLIENT_ID: ${NEXT_PUBLIC_WCA_CLIENT_ID}
-        NEXT_PUBLIC_WCA_REDIRECT_URI: ${NEXT_PUBLIC_WCA_REDIRECT_URI}
-        NEXT_PUBLIC_BACKEND_LOGIN: ${NEXT_PUBLIC_BACKEND_LOGIN}
     restart: always
 
   caddy:

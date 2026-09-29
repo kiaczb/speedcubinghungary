@@ -1,6 +1,6 @@
 /**
- * WCA versenyszám-azonosító → magyar név. Csak a tooltipekhez kell: a rácsban
- * a `@cubing/icons` ikonja jelöli a versenyszámot.
+ * WCA versenyszám-azonosító → magyar név, a WCA saját sorrendjében. Közös az
+ * összes tool számára — ne másold le egy toolba.
  */
 const EVENT_NAMES: Record<string, string> = {
   "222": "2x2x2",
@@ -12,16 +12,17 @@ const EVENT_NAMES: Record<string, string> = {
   "333bf": "3x3x3 vakon",
   "333fm": "3x3x3 legkevesebb lépés",
   "333oh": "3x3x3 egykezes",
-  "clock": "Clock",
-  "minx": "Megaminx",
-  "pyram": "Pyraminx",
-  "skewb": "Skewb",
-  "sq1": "Square-1",
+  clock: "Clock",
+  minx: "Megaminx",
+  pyram: "Pyraminx",
+  skewb: "Skewb",
+  sq1: "Square-1",
   "444bf": "4x4x4 vakon",
   "555bf": "5x5x5 vakon",
   "333mbf": "3x3x3 többkockás vakon",
 };
 
+/** Ismeretlen azonosítóra önmagát adja vissza — a WCA bővítheti a listát. */
 export function eventName(eventId: string): string {
   return EVENT_NAMES[eventId] ?? eventId;
 }

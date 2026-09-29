@@ -14,10 +14,3 @@ type Post struct {
 	ImagePaths []string  `json:"image_paths"`
 	CreatedAt  time.Time `json:"created_at"`
 }
-
-func (p Post) CoverImage() string {
-	if len(p.ImagePaths) == 0 {
-		return ""
-	}
-	return p.ImagePaths[0]
-}

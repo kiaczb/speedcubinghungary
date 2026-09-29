@@ -2,13 +2,15 @@
 import React, { useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
+import { FaRegEdit } from "react-icons/fa";
 import Card from "@/app/components/Cards/Card";
 import Badge from "@/app/components/Badge";
-import Button from "@/app/components/ui/Button";
 import { badgeMap, PostsItem } from "../types";
 import { postCoverUrl } from "../lib/postImage";
 import { postPreview } from "../lib/postPreview";
+import { formatShortDate } from "@/app/lib/date";
 import { reportSummary } from "../lib/report";
+import DeletePostButton from "./DeletePostButton";
 
 // Lásd CreatePostButton: a szerkesztő külön chunkban tölt be, csak ha kell.
 const CreatePostModal = dynamic(() => import("./CreatePostModal"), {
@@ -17,12 +19,10 @@ const CreatePostModal = dynamic(() => import("./CreatePostModal"), {
 
 type Props = {
   postsItem: PostsItem;
-  checked: boolean;
-  onToggle: () => void;
   isAdmin?: boolean;
 };
 
-const PostsListItem = ({ postsItem, checked, onToggle, isAdmin }: Props) => {
+const PostsListItem = ({ postsItem, isAdmin }: Props) => {
   const badge = badgeMap[postsItem.tag];
   const imageUrl = postCoverUrl(postsItem.image_paths);
   // A borítókép mellett jelezzük, ha a poszthoz több kép is tartozik.
@@ -39,22 +39,8 @@ const PostsListItem = ({ postsItem, checked, onToggle, isAdmin }: Props) => {
 
   return (
     <>
-      <Card
-        interactive
-        padding="md"
-        className={`group relative ${checked ? "border-foreground" : ""}`}
-      >
+      <Card interactive padding="md" className="group relative">
         <div className="flex gap-4">
-          {isAdmin && (
-            <input
-              type="checkbox"
-              checked={checked}
-              onChange={onToggle}
-              aria-label={`${postsItem.title} kijelölése`}
-              className="relative z-10 mt-1 h-4 w-4 shrink-0 cursor-pointer accent-foreground"
-            />
-          )}
-
           <div className="flex min-w-0 flex-1 gap-4">
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
@@ -64,7 +50,7 @@ const PostsListItem = ({ postsItem, checked, onToggle, isAdmin }: Props) => {
                     dateTime={postsItem.created_at}
                     className="tabular font-mono text-xs text-subtle-foreground"
                   >
-                    {new Date(postsItem.created_at).toLocaleDateString("hu-HU")}
+                    {formatShortDate(postsItem.created_at)}
                   </time>
                 )}
               </div>
@@ -85,6 +71,8 @@ const PostsListItem = ({ postsItem, checked, onToggle, isAdmin }: Props) => {
 
             {imageUrl && (
               <div className="relative hidden h-24 w-32 shrink-0 sm:block">
+                {/* Sima img: a kép domainje környezetenként más — így nem kell remotePatterns. */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={imageUrl}
                   alt=""
@@ -99,15 +87,19 @@ const PostsListItem = ({ postsItem, checked, onToggle, isAdmin }: Props) => {
             )}
           </div>
 
-          {canEdit && (
-            <div className="relative z-10 shrink-0">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setEditing(true)}
-              >
-                Szerkesztés
-              </Button>
+          {isAdmin && (
+            <div className="relative z-10 flex shrink-0 items-center gap-1">
+              {canEdit && (
+                <button
+                  type="button"
+                  onClick={() => setEditing(true)}
+                  aria-label={`${postsItem.title} szerkesztése`}
+                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-control text-muted-foreground transition-colors duration-200 ease-smooth hover:bg-surface-muted hover:text-foreground"
+                >
+                  <FaRegEdit className="h-4 w-4" />
+                </button>
+              )}
+              <DeletePostButton postId={postsItem.id} title={postsItem.title} />
             </div>
           )}
         </div>

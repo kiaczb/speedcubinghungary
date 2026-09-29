@@ -79,10 +79,10 @@ func TestBroadcaster_Unsubscribe(t *testing.T) {
 	broadcaster := NewBroadcaster()
 
 	_, unsubscribe := broadcaster.Subscribe("SpeedcubingHungary2026")
-	require.Equal(t, 1, broadcaster.SubscriberCount("SpeedcubingHungary2026"))
+	require.Len(t, broadcaster.subscribers["SpeedcubingHungary2026"], 1)
 
 	unsubscribe()
-	assert.Zero(t, broadcaster.SubscriberCount("SpeedcubingHungary2026"))
+	assert.NotContains(t, broadcaster.subscribers, "SpeedcubingHungary2026")
 
 	broadcaster.Notify("SpeedcubingHungary2026")
 }

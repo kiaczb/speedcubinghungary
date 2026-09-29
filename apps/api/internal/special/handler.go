@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"speedcubinghungary/internal/httperr"
 	"speedcubinghungary/internal/middleware"
 	"strconv"
 	"strings"
@@ -24,7 +25,7 @@ func NewHandler(service *Service) *Handler {
 func (h *Handler) GetCompetitions(w http.ResponseWriter, r *http.Request) {
 	competitions, err := h.service.Competitions(r.Context(), r.URL.Query().Get("query"))
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
+		httperr.Write(w, r, http.StatusBadGateway, err)
 		return
 	}
 
@@ -40,28 +41,28 @@ func (h *Handler) GetReport(w http.ResponseWriter, r *http.Request) {
 
 	roundNumber, err := parseRoundParam(r.URL.Query().Get("round"))
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		httperr.Write(w, r, http.StatusBadRequest, err)
 		return
 	}
 
 	report, err := h.service.GetReport(r.Context(), competitionWCAID, roundNumber)
 	if err != nil {
-		writeSpecialError(w, err)
+		writeSpecialError(w, r, err)
 		return
 	}
 
 	json.NewEncoder(w).Encode(report)
 }
 
-func writeSpecialError(w http.ResponseWriter, err error) {
+func writeSpecialError(w http.ResponseWriter, r *http.Request, err error) {
+	status := http.StatusBadGateway
 	switch {
 	case errors.Is(err, ErrInvalidCompetitionID):
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		status = http.StatusBadRequest
 	case errors.Is(err, ErrTooManyCompetitions):
-		http.Error(w, err.Error(), http.StatusServiceUnavailable)
-	default:
-		http.Error(w, err.Error(), http.StatusBadGateway)
+		status = http.StatusServiceUnavailable
 	}
+	httperr.Write(w, r, status, err)
 }
 
 func parseRoundParam(raw string) (*int, error) {
@@ -92,18 +93,17 @@ func (h *Handler) StreamUpdates(w http.ResponseWriter, r *http.Request) {
 
 	competition, err := h.service.ResolveCompetition(r.Context(), competitionWCAID)
 	if err != nil {
-		writeSpecialError(w, err)
+		writeSpecialError(w, r, err)
 		return
 	}
 
 	closeViewer, err := h.service.Tracker().AddViewer(competition)
 	if err != nil {
-		writeSpecialError(w, err)
+		writeSpecialError(w, r, err)
 		return
 	}
 	defer closeViewer()
 
-	w.Header().Del("Content-Type")
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
@@ -172,9 +172,9 @@ func (h *Handler) RecordElapsed(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case errors.Is(err, ErrInvalidElapsed), errors.Is(err, ErrInvalidAttempt),
 			errors.Is(err, ErrInvalidCompetitionID):
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			httperr.Write(w, r, http.StatusBadRequest, err)
 		default:
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			httperr.Write(w, r, http.StatusInternalServerError, err)
 		}
 		return
 	}

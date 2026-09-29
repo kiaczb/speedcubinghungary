@@ -12,7 +12,6 @@ dist/
 # Ignores .env, .env.dev, .env.test, .env.prod, .env.local, etc...
 .env
 .env.*
-env.py
 
 # ...but keep the committed templates (.env.example, .env.dev.example, ...)
 !.env.example

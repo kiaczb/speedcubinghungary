@@ -7,9 +7,10 @@ import (
 	"fmt"
 	"log"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
+
+	"speedcubinghungary/internal/wcalive"
 )
 
 const (
@@ -28,17 +29,16 @@ var ErrTooManyCompetitions = errors.New("too many competitions are being watched
 
 type Tracker struct {
 	client      *LiveClient
-	socket      *SocketClient
-	broadcaster *Broadcaster
+	broadcaster *wcalive.Broadcaster
+
+	// session a WCA Live kapcsolat életciklusa (nézőszámlálás, socket
+	// indítás/leállítás, feliratkozás-szinkron) — lásd internal/wcalive/session.go.
+	// Ez a réteg közös az allrounder csomaggal; itt CSAK az marad, ami a
+	// Special sajátja: több verseny követése egyszerre, és a pillanatkép alakja.
+	session *wcalive.Session
 
 	mu           sync.Mutex
 	competitions map[string]*trackedCompetition
-
-	viewers        int
-	sessionRunning bool
-	stopSession    context.CancelFunc
-	sessionCtx     context.Context
-	sessionDone    chan struct{}
 }
 
 type trackedCompetition struct {
@@ -59,30 +59,17 @@ type trackedRound struct {
 	results   []ResultSnapshot
 }
 
-func NewTracker(client *LiveClient, socket *SocketClient, broadcaster *Broadcaster) *Tracker {
+func NewTracker(client *LiveClient, socket *wcalive.SocketClient, broadcaster *wcalive.Broadcaster) *Tracker {
 	tracker := &Tracker{
 		client:       client,
-		socket:       socket,
 		broadcaster:  broadcaster,
+		session:      wcalive.NewSession("special", socket, refreshInterval),
 		competitions: make(map[string]*trackedCompetition),
 	}
 
-	socket.SetOnConnect(func() {
-		log.Printf("[special] socket (re)connected, resyncing rounds")
-		tracker.refresh(tracker.currentSessionContext())
-	})
+	tracker.session.Watch(tracker)
 
 	return tracker
-}
-
-func (t *Tracker) currentSessionContext() context.Context {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	if t.sessionCtx == nil {
-		return context.Background()
-	}
-	return t.sessionCtx
 }
 
 func (t *Tracker) Results(ctx context.Context, competition Competition) ([]ResultSnapshot, error) {
@@ -104,22 +91,22 @@ func (t *Tracker) AddViewer(competition Competition) (func(), error) {
 		return nil, err
 	}
 
+	// A versenyenkénti nézőszám a MI könyvelésünk (ebből derül ki, melyik
+	// verseny köreire kell feliratkozni, és hogy a pillanatkép magától
+	// frissül-e); a socket életciklusát a session számolja.
 	t.mu.Lock()
 	entry.viewers++
 	if entry.viewers == 1 {
 		entry.trackedSince = time.Now()
 	}
-
-	t.viewers++
-	startSession := t.viewers == 1
-	if startSession {
-		t.startSessionLocked()
-	}
-	sessionCtx := t.sessionCtx
 	t.mu.Unlock()
 
-	if !startSession {
-		go t.ensureLive(sessionCtx, entry)
+	releaseSession, startedSession := t.session.AddViewer()
+
+	if !startedSession {
+		// A session már futott, tehát EZT a versenyt külön kell betölteni és
+		// feliratkoztatni; az induló session ezt magától megtenné.
+		go t.ensureLive(t.session.Context(), entry)
 	}
 
 	var once sync.Once
@@ -131,45 +118,17 @@ func (t *Tracker) AddViewer(competition Competition) (func(), error) {
 			if entry.viewers == 0 {
 				entry.trackedSince = time.Time{}
 			}
-
-			t.viewers--
-			last := t.viewers == 0
-			stop := t.stopSession
-			if last {
-				t.sessionRunning = false
-				t.stopSession = nil
-				t.sessionCtx = nil
-			}
 			t.mu.Unlock()
 
-			if last && stop != nil {
-				stop()
-				return
-			}
+			releaseSession()
 
-			t.syncSubscriptions()
+			// Ha a session él tovább (más versenyt még néznek), ennek a
+			// versenynek a feliratkozásait el kell engedni.
+			if t.session.Running() {
+				t.session.SyncSubscriptions()
+			}
 		})
 	}, nil
-}
-
-func (t *Tracker) startSessionLocked() {
-	previous := t.sessionDone
-
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
-
-	t.stopSession = cancel
-	t.sessionCtx = ctx
-	t.sessionDone = done
-	t.sessionRunning = true
-
-	go func() {
-		defer close(done)
-		if previous != nil {
-			<-previous
-		}
-		t.runSession(ctx)
-	}()
 }
 
 func (t *Tracker) entry(competition Competition) (*trackedCompetition, error) {
@@ -228,7 +187,7 @@ func (t *Tracker) cachedResults(entry *trackedCompetition) ([]ResultSnapshot, bo
 		return nil, false
 	}
 
-	live := t.sessionRunning && entry.viewers > 0 && entry.loadedAt.After(entry.trackedSince)
+	live := t.session.Running() && entry.viewers > 0 && entry.loadedAt.After(entry.trackedSince)
 	if !live && time.Since(entry.loadedAt) > cacheTTL {
 		return nil, false
 	}
@@ -260,6 +219,7 @@ func (t *Tracker) load(ctx context.Context, entry *trackedCompetition, force boo
 	}
 
 	rounds := make(map[int]trackedRound)
+	failed := make(map[int]bool)
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	slots := make(chan struct{}, roundFetchConcurrency)
@@ -275,6 +235,10 @@ func (t *Tracker) load(ctx context.Context, entry *trackedCompetition, force boo
 			round, err := t.client.GetRound(ctx, tracked.identity.LiveRoundID)
 			if err != nil {
 				log.Printf("[special] failed to query round %d: %v", tracked.identity.LiveRoundID, err)
+
+				mu.Lock()
+				failed[tracked.identity.LiveRoundID] = true
+				mu.Unlock()
 				return
 			}
 			tracked.results = snapshotResults(tracked.identity, *round)
@@ -287,16 +251,33 @@ func (t *Tracker) load(ctx context.Context, entry *trackedCompetition, force boo
 
 	wg.Wait()
 
+	// Ha EGYETLEN kör sem jött le, az nem részleges hiba, hanem elérhetetlen
+	// upstream. Ilyenkor ne írjuk felül a meglévő állapotot, és a loadedAt-ot se
+	// frissítsük — így a következő kérés azonnal újrapróbálja, ahelyett hogy egy
+	// üres pillanatképet szolgálnánk ki a cache TTL végéig.
+	if len(failed) > 0 && len(rounds) == 0 {
+		return nil, fmt.Errorf("every round query failed for %s", entry.competition.CompetitionWCAID)
+	}
+
 	t.mu.Lock()
+	// ⚠️ Egy kör lekérési hibája NEM törölheti a kör addigi eredményeit. A map
+	// teljes cseréjével egy pillanatnyi WCA Live hiba eltüntetné a kört a
+	// riportból, és a kumulatív keret (A1a3) hibás „maradék időt” mutatna —
+	// ezért a hibás körök az ELŐZŐ pillanatképükkel élnek tovább.
+	for roundID := range failed {
+		if previous, known := entry.rounds[roundID]; known {
+			rounds[roundID] = previous
+		}
+	}
+
 	entry.rounds = rounds
 	entry.loadedAt = time.Now()
 	entry.lastSeen = entry.loadedAt
 	results := collect(entry)
-	sessionRunning := t.sessionRunning
 	t.mu.Unlock()
 
-	if sessionRunning {
-		t.syncSubscriptions()
+	if t.session.Running() {
+		t.session.SyncSubscriptions()
 	}
 
 	return results, nil
@@ -308,7 +289,7 @@ func (t *Tracker) ensureLive(ctx context.Context, entry *trackedCompetition) {
 	}
 
 	if _, ok := t.cachedResults(entry); ok {
-		t.syncSubscriptions()
+		t.session.SyncSubscriptions()
 		return
 	}
 
@@ -345,41 +326,11 @@ func openRounds(competition *liveCompetition) []trackedRound {
 	return rounds
 }
 
-func (t *Tracker) runSession(ctx context.Context) {
-	log.Printf("[special] live session starting")
-
-	socketDone := make(chan struct{})
-	go func() {
-		defer close(socketDone)
-		t.socket.Run(ctx)
-	}()
-
-	defer func() {
-		<-socketDone
-		t.clearSubscriptions()
-		log.Printf("[special] live session stopped")
-	}()
-
-	t.refresh(ctx)
-
-	ticker := time.NewTicker(refreshInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-
-		case <-ticker.C:
-			t.refresh(ctx)
-
-		case event := <-t.socket.Events():
-			t.handleEvent(event)
-		}
-	}
-}
-
-func (t *Tracker) refresh(ctx context.Context) {
+// Reload a wcalive.Watcher tagja: a session indulásakor, a socket
+// (újra)kapcsolódásakor és a frissítési időzítőre hívódik. Minden ÉPPEN NÉZETT
+// verseny minden körét újratölti — ez az, ami pótolja a kapcsolat nélkül
+// eltelt időt, és ami észreveszi, hogy új kör nyílt.
+func (t *Tracker) Reload(ctx context.Context) {
 	t.mu.Lock()
 	t.evictLocked()
 	watched := make([]*trackedCompetition, 0, len(t.competitions))
@@ -398,8 +349,11 @@ func (t *Tracker) refresh(ctx context.Context) {
 	}
 }
 
-func (t *Tracker) handleEvent(event SubscriptionEvent) {
-	roundID, err := roundIDFromKey(event.Key)
+// HandleEvent a wcalive.Watcher tagja. Minden roundUpdated esemény TELJES kör-
+// pillanatképet hoz (nem különbséget), ezért a duplikált, késve vagy egyáltalán
+// meg nem érkező esemény magától gyógyul — ne építs rá eseménynaplót.
+func (t *Tracker) HandleEvent(event wcalive.SubscriptionEvent) {
+	roundID, err := wcalive.RoundIDFromKey(event.Key)
 	if err != nil {
 		log.Printf("[special] ignoring event with unexpected key %q", event.Key)
 		return
@@ -447,48 +401,26 @@ func (t *Tracker) roundOwner(roundID int) (*trackedCompetition, trackedRound, bo
 	return nil, trackedRound{}, false
 }
 
-func (t *Tracker) syncSubscriptions() {
+// WantedSubscriptions a wcalive.Watcher tagja: a MOST nézett versenyek köreire
+// akarunk feliratkozni. Nézők nélküli verseny köre nincs benne, így a session
+// magától elengedi.
+func (t *Tracker) WantedSubscriptions() map[string]wcalive.Subscription {
 	t.mu.Lock()
-	wanted := make(map[string]int)
+	defer t.mu.Unlock()
+
+	wanted := make(map[string]wcalive.Subscription)
+
 	for _, entry := range t.competitions {
 		if entry.viewers == 0 {
 			continue
 		}
 		for roundID := range entry.rounds {
-			wanted[subscriptionKey(roundID)] = roundID
-		}
-	}
-	t.mu.Unlock()
-
-	for _, key := range t.socket.Subscriptions() {
-		if _, keep := wanted[key]; !keep {
-			t.socket.Unsubscribe(key)
+			wanted[wcalive.RoundSubscriptionKey(roundID)] = wcalive.Subscription{
+				Query:     RoundSubscription,
+				Variables: map[string]any{"id": strconv.Itoa(roundID)},
+			}
 		}
 	}
 
-	for key, roundID := range wanted {
-		t.socket.Subscribe(key, RoundSubscription, map[string]any{
-			"id": strconv.Itoa(roundID),
-		})
-	}
-}
-
-func (t *Tracker) clearSubscriptions() {
-	for _, key := range t.socket.Subscriptions() {
-		t.socket.Unsubscribe(key)
-	}
-}
-
-const subscriptionKeyPrefix = "round:"
-
-func subscriptionKey(roundID int) string {
-	return subscriptionKeyPrefix + strconv.Itoa(roundID)
-}
-
-func roundIDFromKey(key string) (int, error) {
-	trimmed, found := strings.CutPrefix(key, subscriptionKeyPrefix)
-	if !found {
-		return 0, fmt.Errorf("subscription key %q has no %q prefix", key, subscriptionKeyPrefix)
-	}
-	return strconv.Atoi(trimmed)
+	return wanted
 }

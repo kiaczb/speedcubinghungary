@@ -7,4 +7,5 @@ export interface UpcomingCompetition {
   city: string;
   country: string;
   url: string;
+  eventIds: string[]; // WCA event ids held at this competition, e.g. "333", "222"
 }

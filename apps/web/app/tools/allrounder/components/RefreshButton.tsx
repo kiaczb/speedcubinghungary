@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { FaSyncAlt } from "react-icons/fa";
 import { useUser } from "@/app/components/UserProvider";
 import Button from "@/app/components/ui/Button";
-import { clientApiUrl } from "@/app/lib/api";
+import { clientFetch } from "@/app/lib/api";
 
 type RefreshButtonProps = {
   year: number;
@@ -20,14 +20,14 @@ type RefreshButtonProps = {
  * a backend külön is ellenőrzi (a kliensoldali rejtés csak kényelmi).
  */
 const RefreshButton = ({ year }: RefreshButtonProps) => {
-  const { user } = useUser();
+  const { isAdmin } = useUser();
   const router = useRouter();
 
   const [refreshing, setRefreshing] = useState(false);
   const [failed, setFailed] = useState(false);
   const [reloading, startReload] = useTransition();
 
-  if (!user?.roles.includes("admin")) return null;
+  if (!isAdmin) return null;
 
   const busy = refreshing || reloading;
 
@@ -36,11 +36,7 @@ const RefreshButton = ({ year }: RefreshButtonProps) => {
     setFailed(false);
 
     try {
-      const res = await fetch(
-        `${clientApiUrl()}/allrounder/refresh?year=${year}`,
-        { method: "POST", credentials: "include" },
-      );
-      if (!res.ok) throw new Error(`A kérés sikertelen (${res.status})`);
+      await clientFetch(`/allrounder/refresh?year=${year}`, { method: "POST" });
 
       startReload(() => router.refresh());
     } catch (error) {

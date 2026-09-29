@@ -16,12 +16,12 @@ const (
 	// MaxImageSize egy feltöltött kép maximális mérete.
 	MaxImageSize = 5 << 20 // 5 MiB
 
-	// MaxImages a poszthoz csatolható képek maximális száma (galéria/carousel).
-	// A frontend ugyanezt a korlátot mutatja — ha itt változik, ott is.
+	// MaxImages a poszthoz csatolható képek maximális száma. A frontend
+	// ugyanezt a korlátot mutatja (MAX_POST_IMAGES) — ha itt változik, ott is.
 	MaxImages = 10
 
-	// PublicUploadPath az az útvonal, amin az API kiszolgálja a képeket.
-	// A DB-be ezzel a prefixszel mentjük az image_paths elemeit.
+	// PublicUploadPath az az útvonal, amin az API kiszolgálja a képeket; az
+	// image_paths elemei ezzel a prefixszel kerülnek a DB-be.
 	PublicUploadPath = "/uploads"
 )
 
@@ -42,7 +42,6 @@ var allowedImageTypes = map[string]string{
 }
 
 func SaveImage(file multipart.File, uploadDir string) (string, error) {
-	// Az első 512 byte elég a típus detektálásához.
 	head := make([]byte, 512)
 	n, err := file.Read(head)
 	if err != nil && err != io.EOF {
@@ -54,7 +53,6 @@ func SaveImage(file multipart.File, uploadDir string) (string, error) {
 		return "", ErrUnsupportedImage
 	}
 
-	// Vissza a fájl elejére, hogy a teljes tartalmat ki tudjuk írni.
 	if _, err := file.Seek(0, io.SeekStart); err != nil {
 		return "", err
 	}
@@ -114,9 +112,8 @@ func SaveImages(headers []*multipart.FileHeader, uploadDir string) ([]string, er
 	return paths, nil
 }
 
-// RemoveImage törli a publikus útvonalhoz tartozó fájlt. Akkor használjuk, ha a
-// kép már kiírásra került, de a poszt mentése elbukott — így nem marad árva
-// fájl a volume-on. filepath.Base miatt csak az uploadDir-en belül töröl.
+// RemoveImage törli a publikus útvonalhoz tartozó fájlt. A filepath.Base miatt
+// csak az uploadDir-en belül törölhet.
 func RemoveImage(publicPath, uploadDir string) {
 	if publicPath == "" {
 		return
@@ -124,7 +121,6 @@ func RemoveImage(publicPath, uploadDir string) {
 	os.Remove(filepath.Join(uploadDir, filepath.Base(publicPath)))
 }
 
-// RemoveImages a megadott publikus útvonalak fájljait törli.
 func RemoveImages(publicPaths []string, uploadDir string) {
 	for _, path := range publicPaths {
 		RemoveImage(path, uploadDir)

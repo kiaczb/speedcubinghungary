@@ -1,0 +1,3 @@
+-- A Postgres nem támogatja az enum érték eltávolítását — ugyanaz a tudatos
+-- aszimmetria, mint a post_tag 'report' értékénél (000003). Az árva enum
+-- érték ártalmatlan, nincs mit visszavonni.

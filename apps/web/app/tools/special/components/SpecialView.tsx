@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   FaCircle,
@@ -14,7 +14,7 @@ import { useUser } from "@/app/components/UserProvider";
 import Button from "@/app/components/ui/Button";
 import { controlClass } from "@/app/components/ui/Field";
 import StateMessage from "@/app/components/ui/StateMessage";
-import { clientApiUrl } from "@/app/lib/api";
+import { clientApiUrl, clientFetch, clientJson } from "@/app/lib/api";
 import CompetitionPicker from "./CompetitionPicker";
 import CompetitorCard from "./CompetitorCard";
 import RoundTabs from "./RoundTabs";
@@ -22,18 +22,14 @@ import type { Competition, Competitor, SpecialReport } from "../types";
 
 const FALLBACK_POLL_MS = 30_000;
 
-async function apiFetch(path: string, init?: RequestInit) {
-  const res = await fetch(`${clientApiUrl()}${path}`, {
-    credentials: "include",
-    ...init,
-  });
-
-  if (!res.ok) {
-    const message = (await res.text()).trim();
-    throw new Error(message || `A kérés sikertelen (${res.status})`);
-  }
-
-  return res;
+function fetchReport(
+  competition: string,
+  round: number | null,
+): Promise<SpecialReport> {
+  const roundParam = round === null ? "" : `&round=${round}`;
+  return clientJson<SpecialReport>(
+    `/special/report?competition=${encodeURIComponent(competition)}${roundParam}`,
+  );
 }
 
 function matchesQuery(competitor: Competitor, query: string): boolean {
@@ -48,8 +44,7 @@ function matchesQuery(competitor: Competitor, query: string): boolean {
 }
 
 const SpecialView = () => {
-  const { user } = useUser();
-  const isAdmin = user?.roles.includes("admin") ?? false;
+  const { isAdmin } = useUser();
 
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -87,20 +82,6 @@ const SpecialView = () => {
     router.replace("/tools/special", { scroll: false });
   };
 
-  const fetchReport = useCallback(
-    async (
-      competition: string,
-      round: number | null,
-    ): Promise<SpecialReport> => {
-      const path = `/special/report?competition=${encodeURIComponent(competition)}${
-        round === null ? "" : `&round=${round}`
-      }`;
-      const res = await apiFetch(path);
-      return res.json();
-    },
-    [],
-  );
-
   useEffect(() => {
     selectedRoundRef.current = selectedRound;
 
@@ -122,7 +103,7 @@ const SpecialView = () => {
     return () => {
       cancelled = true;
     };
-  }, [competitionId, selectedRound, fetchReport]);
+  }, [competitionId, selectedRound]);
 
   useEffect(() => {
     if (!competitionId) return;
@@ -154,7 +135,7 @@ const SpecialView = () => {
       clearInterval(fallback);
       setLive(false);
     };
-  }, [competitionId, fetchReport]);
+  }, [competitionId]);
 
   const handleRecord = async (
     liveResultId: number,
@@ -163,15 +144,24 @@ const SpecialView = () => {
   ) => {
     if (!competitionId) return;
 
-    await apiFetch(
+    // A mentés hibája SZÁNDÉKOSAN felszáll a hívó cellához: az jelzi a
+    // rögzítőnek, hogy a beírt idő nincs elmentve (lásd CompetitorCard).
+    await clientFetch(
       `/special/results/${liveResultId}/attempts/${attemptNumber}/elapsed`,
       {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ competitionWcaId: competitionId, elapsedCs }),
+        json: { competitionWcaId: competitionId, elapsedCs },
       },
     );
-    setReport(await fetchReport(competitionId, selectedRound));
+
+    // A visszaolvasás hibája viszont NEM mentési hiba — a mentés ekkor már
+    // megtörtént. Ha ezt is felengednénk, a cella mentetlennek jelölné a már
+    // elmentett időt. Az SSE (vagy a tartalék poll) úgyis frissít.
+    try {
+      setReport(await fetchReport(competitionId, selectedRound));
+    } catch (error) {
+      console.error("A Special riport frissítése a mentés után sikertelen:", error);
+    }
   };
 
   if (!competitionId) {

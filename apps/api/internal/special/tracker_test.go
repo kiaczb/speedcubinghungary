@@ -3,8 +3,11 @@ package special
 import (
 	"context"
 	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	"speedcubinghungary/internal/wcalive"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -17,7 +20,7 @@ const (
 )
 
 func newTestTracker(liveURL string) *Tracker {
-	return NewTracker(NewLiveClient(liveURL), NewSocketClient(liveURL), NewBroadcaster())
+	return NewTracker(NewLiveClient(liveURL), wcalive.NewSocketClient(liveURL), wcalive.NewBroadcaster())
 }
 
 func TestTracker_LoadsAlreadyFinishedEvents(t *testing.T) {
@@ -91,18 +94,18 @@ func TestTracker_SubscribesOnlyWhileViewersArePresent(t *testing.T) {
 
 	tracker := newTestTracker(server.URL)
 
-	assert.Empty(t, tracker.socket.Subscriptions(), "néző nélkül nincs feliratkozás")
+	assert.Empty(t, tracker.session.Subscriptions(), "néző nélkül nincs feliratkozás")
 
 	closeViewer, err := tracker.AddViewer(testCompetition())
 	require.NoError(t, err)
 
 	assert.Eventually(t, func() bool {
-		return len(tracker.socket.Subscriptions()) == 1
+		return len(tracker.session.Subscriptions()) == 1
 	}, waitTimeout, waitTick, "a néző megjelenésekor fel kell iratkozni")
 
 	closeViewer()
 	assert.Eventually(t, func() bool {
-		return len(tracker.socket.Subscriptions()) == 0
+		return len(tracker.session.Subscriptions()) == 0
 	}, waitTimeout, waitTick, "az utolsó néző távozásakor le kell állni")
 }
 
@@ -120,17 +123,17 @@ func TestTracker_SessionOutlivesFirstViewer(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Eventually(t, func() bool {
-		return len(tracker.socket.Subscriptions()) == 1
+		return len(tracker.session.Subscriptions()) == 1
 	}, waitTimeout, waitTick)
 
 	first()
 	assert.Never(t, func() bool {
-		return len(tracker.socket.Subscriptions()) == 0
+		return len(tracker.session.Subscriptions()) == 0
 	}, neverWindow, waitTick, "amíg van néző, marad a feliratkozás")
 
 	second()
 	assert.Eventually(t, func() bool {
-		return len(tracker.socket.Subscriptions()) == 0
+		return len(tracker.session.Subscriptions()) == 0
 	}, waitTimeout, waitTick)
 }
 
@@ -148,19 +151,19 @@ func TestTracker_CloseViewerIsIdempotent(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
-		return len(tracker.socket.Subscriptions()) == 1
+		return len(tracker.session.Subscriptions()) == 1
 	}, waitTimeout, waitTick)
 
 	first()
 	first()
 
 	assert.Never(t, func() bool {
-		return len(tracker.socket.Subscriptions()) == 0
+		return len(tracker.session.Subscriptions()) == 0
 	}, neverWindow, waitTick, "a kétszer lezárt nézet nem vihet nullába")
 
 	second()
 	assert.Eventually(t, func() bool {
-		return len(tracker.socket.Subscriptions()) == 0
+		return len(tracker.session.Subscriptions()) == 0
 	}, waitTimeout, waitTick)
 }
 
@@ -176,9 +179,9 @@ func TestTracker_SubscribesOnlyToWatchedCompetitions(t *testing.T) {
 	require.NoError(t, err)
 	idle.rounds = map[int]trackedRound{999: {}}
 
-	tracker.syncSubscriptions()
+	tracker.session.SyncSubscriptions()
 
-	assert.Equal(t, []string{subscriptionKey(147464)}, tracker.socket.Subscriptions())
+	assert.Equal(t, []string{wcalive.RoundSubscriptionKey(147464)}, tracker.session.Subscriptions())
 }
 
 func TestTracker_CapsConcurrentlyTrackedCompetitions(t *testing.T) {
@@ -222,11 +225,94 @@ func TestOpenRounds_SkipsUnopenedRounds(t *testing.T) {
 }
 
 func TestSubscriptionKeyRoundTrip(t *testing.T) {
-	roundID, err := roundIDFromKey(subscriptionKey(147464))
+	roundID, err := wcalive.RoundIDFromKey(wcalive.RoundSubscriptionKey(147464))
 
 	require.NoError(t, err)
 	assert.Equal(t, 147464, roundID)
 
-	_, err = roundIDFromKey("nem-ilyen-kulcs")
+	_, err = wcalive.RoundIDFromKey("nem-ilyen-kulcs")
 	assert.Error(t, err)
+}
+
+// ⚠️ Egy kör lekérési hibája nem törölheti a kör addigi eredményeit.
+//
+// A load korábban a TELJES rounds map-et lecserélte, így egy pillanatnyi WCA
+// Live hiba eltüntette a kört a riportból — a versenyző kumulatív kerete
+// (A1a3) pedig hibás „maradék időt” mutatott, amíg a következő frissítés
+// vissza nem hozta.
+func TestTracker_KeepsRoundWhenItsQueryFails(t *testing.T) {
+	var failing atomic.Bool
+
+	server := fakeWCALive(t,
+		fakeRound{id: "1", eventID: "222", number: 1, results: []liveResult{
+			result("11", 7, "Teszt Elek", attempts(300, 350, 320)),
+		}},
+		fakeRound{id: "2", eventID: "333", number: 1, fail: &failing, results: []liveResult{
+			result("12", 7, "Teszt Elek", attempts(900, 850, 880)),
+		}},
+	)
+
+	tracker := newTestTracker(server.URL)
+
+	first, err := tracker.Results(context.Background(), testCompetition())
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"222-r1", "333-r1"}, roundWCIFIDs(first))
+
+	failing.Store(true)
+
+	entry, err := tracker.entry(testCompetition())
+	require.NoError(t, err)
+
+	results, err := tracker.load(context.Background(), entry, true)
+	require.NoError(t, err, "a részleges hiba nem teszi tönkre a betöltést")
+
+	assert.ElementsMatch(t, []string{"222-r1", "333-r1"}, roundWCIFIDs(results),
+		"a hibás kör az előző pillanatképével él tovább")
+}
+
+// Ha EGYETLEN kör sem jött le, az nem részleges hiba: ilyenkor hibát adunk, és
+// a korábbi állapotot érintetlenül hagyjuk, hogy a következő kérés azonnal
+// újrapróbálja ahelyett, hogy üres riportot szolgálnánk ki a cache TTL végéig.
+func TestTracker_TotalRoundFailureKeepsPreviousState(t *testing.T) {
+	var failing atomic.Bool
+
+	server := fakeWCALive(t, fakeRound{
+		id: "1", eventID: "333", number: 1, fail: &failing,
+		results: []liveResult{result("11", 7, "Teszt Elek", attempts(900))},
+	})
+
+	tracker := newTestTracker(server.URL)
+
+	first, err := tracker.Results(context.Background(), testCompetition())
+	require.NoError(t, err)
+	require.Len(t, first, 1)
+
+	failing.Store(true)
+
+	entry, err := tracker.entry(testCompetition())
+	require.NoError(t, err)
+
+	loadedAt := entry.loadedAt
+
+	_, err = tracker.load(context.Background(), entry, true)
+	require.Error(t, err, "teljes kiesésnél hibát kell jelezni")
+
+	assert.Len(t, entry.rounds, 1, "a korábbi pillanatkép megmarad")
+	assert.Equal(t, loadedAt, entry.loadedAt,
+		"a loadedAt sem frissülhet, különben a cache TTL elnyelné az újrapróbálkozást")
+}
+
+func roundWCIFIDs(results []ResultSnapshot) []string {
+	seen := make(map[string]bool, len(results))
+	ids := make([]string, 0, len(results))
+
+	for _, result := range results {
+		if seen[result.RoundWCIFID] {
+			continue
+		}
+		seen[result.RoundWCIFID] = true
+		ids = append(ids, result.RoundWCIFID)
+	}
+
+	return ids
 }

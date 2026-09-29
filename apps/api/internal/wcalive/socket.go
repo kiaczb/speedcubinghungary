@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net/http"
 	"strconv"
 	"strings"
 	"sync"
@@ -20,6 +19,7 @@ const (
 	phoenixTopic          = "phoenix"
 	eventJoin             = "phx_join"
 	eventDoc              = "doc"
+	eventUnsubscribe      = "unsubscribe"
 	eventReply            = "phx_reply"
 	eventHeartbeat        = "heartbeat"
 	eventSubscriptionData = "subscription:data"
@@ -54,10 +54,16 @@ type SocketClient struct {
 	specs   map[string]subscriptionSpec
 	pending chan struct{}
 
-	conn     *websocket.Conn
-	writeMu  sync.Mutex
-	ref      int
+	// Az alábbi mezőket KIZÁRÓLAG a session goroutine írja és olvassa
+	// (syncSubscriptions, handleReply, handleData) — ezért nincs rajtuk zár.
+	conn    *websocket.Conn
+	writeMu sync.Mutex
+	ref     int
+	// topicKey: Absinthe subscriptionId (és átmenetileg "ref:<ref>") → kulcs.
+	// keyTopic ennek a megfordítása — a LEMONDÁSHOZ kell, mert az upstream a
+	// subscriptionId-t várja, mi viszont kulcs szerint mondunk le.
 	topicKey map[string]string
+	keyTopic map[string]string
 	sentKeys map[string]bool
 }
 
@@ -96,10 +102,28 @@ func (s *SocketClient) Subscribe(key, query string, variables map[string]any) {
 	s.notify()
 }
 
+// Unsubscribe elengedi a feliratkozást. A kulcs helyi törlése önmagában NEM
+// elég: a WCA Live-nak is meg kell mondani, különben a kapcsolat végéig tovább
+// küldi az adott kör roundUpdated eseményeit, amit aztán feleslegesen dolgozunk
+// fel (a `special`-ben akár egy olyan versenyét, amit már senki nem néz). A
+// tényleges lemondó keretet a session goroutine küldi ki — ezért csak jelzünk.
 func (s *SocketClient) Unsubscribe(key string) {
 	s.mu.Lock()
+	_, existed := s.specs[key]
 	delete(s.specs, key)
 	s.mu.Unlock()
+
+	if existed {
+		s.notify()
+	}
+}
+
+func (s *SocketClient) wants(key string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	_, ok := s.specs[key]
+	return ok
 }
 
 func (s *SocketClient) Subscriptions() []string {
@@ -169,9 +193,8 @@ func (s *SocketClient) session(ctx context.Context) error {
 	defer cancel()
 
 	dialCtx, dialCancel := context.WithTimeout(ctx, 15*time.Second)
-	conn, _, err := websocket.Dial(dialCtx, s.url, &websocket.DialOptions{
-		HTTPHeader: http.Header{},
-	})
+	// Origin fejléc nélkül: a Phoenix check_origin csak így enged be.
+	conn, _, err := websocket.Dial(dialCtx, s.url, nil)
 	dialCancel()
 	if err != nil {
 		return fmt.Errorf("dial: %w", err)
@@ -182,6 +205,7 @@ func (s *SocketClient) session(ctx context.Context) error {
 	s.conn = conn
 	s.ref = 0
 	s.topicKey = make(map[string]string)
+	s.keyTopic = make(map[string]string)
 	s.sentKeys = make(map[string]bool)
 
 	log.Printf("[wcalive] socket connected to %s", s.url)
@@ -271,6 +295,14 @@ func (s *SocketClient) syncSubscriptions(ctx context.Context) {
 	}
 	s.mu.Unlock()
 
+	// Előbb a kiesettek: amit már nem akarunk, azt az upstream felé is le kell
+	// mondani, különben a kapcsolat végéig tovább érkeznek az eseményei.
+	for key := range s.sentKeys {
+		if _, keep := specs[key]; !keep {
+			s.dropSubscription(ctx, key)
+		}
+	}
+
 	for key, spec := range specs {
 		if s.sentKeys[key] {
 			continue
@@ -288,6 +320,32 @@ func (s *SocketClient) syncSubscriptions(ctx context.Context) {
 		s.sentKeys[key] = true
 		s.topicKey["ref:"+ref] = key
 	}
+}
+
+// dropSubscription lemondja a feliratkozást az Absinthe control csatornáján, és
+// elengedi a hozzá tartozó helyi állapotot.
+func (s *SocketClient) dropSubscription(ctx context.Context, key string) {
+	subscriptionID, known := s.keyTopic[key]
+	if !known {
+		// A feliratkozás visszaigazolása — és vele a subscriptionId — még nem
+		// érkezett meg, lemondani tehát nincs mit. A kulcsot szándékosan
+		// BENNHAGYJUK a sentKeys-ben: a handleReply látja majd, hogy közben
+		// elengedtük, és onnan indul újra ez az ág.
+		return
+	}
+
+	delete(s.sentKeys, key)
+	delete(s.keyTopic, key)
+	delete(s.topicKey, subscriptionID)
+
+	if err := s.send(ctx, absintheControlTopic, eventUnsubscribe, map[string]any{
+		"subscriptionId": subscriptionID,
+	}); err != nil {
+		log.Printf("[wcalive] failed to unsubscribe %s: %v", key, err)
+		return
+	}
+
+	log.Printf("[wcalive] unsubscribed %s", key)
 }
 
 func (s *SocketClient) handleReply(msg phoenixMessage) (string, bool) {
@@ -315,7 +373,15 @@ func (s *SocketClient) handleReply(msg phoenixMessage) (string, bool) {
 		if key, ok := s.topicKey["ref:"+*msg.Ref]; ok {
 			delete(s.topicKey, "ref:"+*msg.Ref)
 			s.topicKey[subscriptionID] = key
+			s.keyTopic[key] = subscriptionID
 			log.Printf("[wcalive] subscribed %s", key)
+
+			// A kulcsot még a visszaigazolás előtt is elengedhették. Csak most
+			// lett subscriptionId-nk, amivel le lehet mondani — kérjünk hát egy
+			// újabb szinkront.
+			if !s.wants(key) {
+				s.notify()
+			}
 		}
 	}
 

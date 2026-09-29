@@ -32,7 +32,7 @@ const OtherSection = () => {
           title="Tippverseny"
           links={[
             {
-              href: "#events",
+              href: "/tools/prediction",
               label: "Megnyitás",
               icon: <FaGlobe className="h-4 w-4" />,
             },

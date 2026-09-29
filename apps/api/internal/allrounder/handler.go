@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"speedcubinghungary/internal/httperr"
 	"strconv"
 	"strings"
 	"time"
@@ -20,7 +21,7 @@ func NewHandler(service *Service) *Handler {
 func (h *Handler) GetStandings(w http.ResponseWriter, r *http.Request) {
 	standings, err := h.service.GetStandings(r.Context(), parseYear(r.URL.Query().Get("year")))
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		httperr.Write(w, r, http.StatusInternalServerError, err)
 		return
 	}
 
@@ -30,7 +31,7 @@ func (h *Handler) GetStandings(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 	standings, err := h.service.Refresh(r.Context(), parseYear(r.URL.Query().Get("year")))
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		httperr.Write(w, r, http.StatusInternalServerError, err)
 		return
 	}
 
@@ -51,7 +52,6 @@ func (h *Handler) StreamUpdates(w http.ResponseWriter, r *http.Request) {
 		defer closeViewer()
 	}
 
-	w.Header().Del("Content-Type")
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")

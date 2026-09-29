@@ -2,23 +2,12 @@ package db
 
 import (
 	"database/sql"
-	"fmt"
-	"os"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
-func NewPostgres() (*sql.DB, error) {
-	dsn := fmt.Sprintf(
-		"postgres://%s:%s@%s:%s/%s?sslmode=disable",
-		os.Getenv("DB_USER"),
-		os.Getenv("DB_PASSWORD"),
-		os.Getenv("DB_HOST"),
-		os.Getenv("DB_PORT"),
-		os.Getenv("DB_NAME"),
-	)
-
-	db, err := sql.Open("pgx", dsn)
+func NewPostgres(databaseURL string) (*sql.DB, error) {
+	db, err := sql.Open("pgx", databaseURL)
 	if err != nil {
 		return nil, err
 	}

@@ -6,6 +6,8 @@ import (
 	"log"
 	"sync"
 	"time"
+
+	"speedcubinghungary/internal/wcalive"
 )
 
 const (
@@ -25,7 +27,7 @@ type Service struct {
 	client      *WCAClient
 	live        *LiveClient
 	tracker     *LiveTracker
-	broadcaster *Broadcaster
+	broadcaster *wcalive.Broadcaster
 
 	mu     sync.Mutex
 	states map[int]*yearState
@@ -37,7 +39,7 @@ type yearState struct {
 	builtAt   time.Time
 }
 
-func NewService(repo Repository, client *WCAClient, live *LiveClient, tracker *LiveTracker, broadcaster *Broadcaster) *Service {
+func NewService(repo Repository, client *WCAClient, live *LiveClient, tracker *LiveTracker, broadcaster *wcalive.Broadcaster) *Service {
 	return &Service{
 		repo:        repo,
 		client:      client,
@@ -120,7 +122,6 @@ func (s *Service) liveLeg(ctx context.Context, series Series, states map[string]
 	return &CompetitionRounds{
 		CompetitionWCAID: competition.CompetitionWCAID,
 		Rounds:           rounds,
-		Live:             true,
 	}
 }
 
@@ -193,7 +194,7 @@ func (s *Service) LiveCompetition(ctx context.Context, year int) (string, int, i
 
 func (s *Service) Tracker() *LiveTracker { return s.tracker }
 
-func (s *Service) Broadcaster() *Broadcaster { return s.broadcaster }
+func (s *Service) Broadcaster() *wcalive.Broadcaster { return s.broadcaster }
 
 func (s *Service) yearState(year int) *yearState {
 	s.mu.Lock()
