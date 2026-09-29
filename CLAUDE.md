@@ -353,8 +353,8 @@ Other Go conventions observed:
   **Respect this split** — server code cannot reach `localhost:8080` inside the
   container. In practice you pick the side by picking the helper (`serverJson`
   vs `clientFetch`/`clientJson`, see above) rather than by building the URL.
-  ⚠️ `UpcomingEvent.tsx` still calls the WCA API directly instead of going
-  through our own `competition` proxy — known, not yet fixed.
+  **No frontend code calls the WCA API directly** — the home page's "next
+  competition" card reads our `/competitions/upcoming` like the calendar does.
 - Auth on the client is via `UserProvider` (`app/components/UserProvider.tsx`), a
   context calling `/me` and `/logout` with `credentials: "include"`. Use
   `useUser()` to read `{ user, isLoading, logout }`.
@@ -864,9 +864,10 @@ links in `app/layout.tsx` if needed. **Read the Next 16 docs first** (§3 warnin
 
 ## 13. Performance considerations
 
-- Competition data is fetched live from WCA on every `/competitions/upcoming`
-  request with no caching, paginating up to 20 pages (10s HTTP timeout). If this
-  becomes hot, add caching rather than hammering WCA.
+- `/competitions/upcoming` paginates the WCA listing (up to 20 pages, 10s HTTP
+  timeout) and is **cached for 15 minutes** in `competition.Service`, like the
+  psych sheets and registrant lists — the home page, the calendar and the
+  prediction modal all read it.
 - All-Rounder results are the opposite case and a good precedent: a whole
   season's WCA results are cached in Postgres with per-competition TTLs, and the
   scoring runs server-side. Cold season ~2.5 s, warm ~50 ms. See §19.

@@ -40,6 +40,7 @@ type Service struct {
 	repo Repository
 
 	mu           sync.Mutex
+	upcoming     map[string]cacheEntry[[]Competition]
 	competitions map[string]cacheEntry[Competition]
 	psychSheets  map[string]cacheEntry[[]PsychSheetEntry]
 	competitors  map[string]cacheEntry[[]Competitor]
@@ -53,6 +54,7 @@ type Service struct {
 func NewService(repo Repository) *Service {
 	return &Service{
 		repo:         repo,
+		upcoming:     make(map[string]cacheEntry[[]Competition]),
 		competitions: make(map[string]cacheEntry[Competition]),
 		psychSheets:  make(map[string]cacheEntry[[]PsychSheetEntry]),
 		competitors:  make(map[string]cacheEntry[[]Competitor]),
@@ -60,19 +62,22 @@ func NewService(repo Repository) *Service {
 }
 
 // GetUpcomingHungarian returns the simplified list of upcoming Hungarian
-// competitions, already sorted by start date by the upstream API.
+// competitions, already sorted by start date by the upstream API. Cached like
+// the rest: it walks every page of the WCA listing (two requests at least),
+// and the home page, the calendar and the prediction modal all read it.
 func (s *Service) GetUpcomingHungarian() ([]Competition, error) {
-	raw, err := s.repo.GetUpcomingByCountry("HU")
-	if err != nil {
-		return nil, err
-	}
+	return cached(s, s.upcoming, "upcoming:HU", func() ([]Competition, error) {
+		raw, err := s.repo.GetUpcomingByCountry("HU")
+		if err != nil {
+			return nil, err
+		}
 
-	competitions := make([]Competition, 0, len(raw))
-	for _, c := range raw {
-		competitions = append(competitions, toCompetition(c))
-	}
-
-	return competitions, nil
+		competitions := make([]Competition, 0, len(raw))
+		for _, c := range raw {
+			competitions = append(competitions, toCompetition(c))
+		}
+		return competitions, nil
+	})
 }
 
 // GetCompetition returns one competition by id, whatever its date. Use this —
@@ -208,6 +213,7 @@ func (s *Service) sweepLocked() {
 	}
 	s.nextSweep = now.Add(upstreamCacheTTL)
 
+	sweep(s.upcoming, now)
 	sweep(s.competitions, now)
 	sweep(s.psychSheets, now)
 	sweep(s.competitors, now)
