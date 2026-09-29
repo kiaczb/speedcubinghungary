@@ -35,7 +35,7 @@ const RulesModal = ({
       </Button>
 
       {open && (
-        <Modal title="Szabályok" onClose={() => setOpen(false)} size="lg">
+        <Modal title="Szabályok" onClose={() => setOpen(false)}>
           <div className="px-6 py-5">
             <ul className="ml-5 list-disc space-y-2 text-sm leading-relaxed text-muted-foreground">
               <li>

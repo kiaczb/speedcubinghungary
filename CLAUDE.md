@@ -263,14 +263,18 @@ Other Go conventions observed:
   `Modal` (**the shell every modal is built on**: backdrop, panel, header bar,
   Escape, backdrop click, scroll lock — and the **focus trap**. Tab cycles
   inside the panel, focus lands there on open and returns to whatever opened it
-  on close. Props: `title`, `onClose`, `size` (`sm`/`md`/`lg`), `role`,
+  on close. The backdrop closes it only when the pointer went down **and** up
+  on the backdrop — a text selection that starts in a field and ends outside
+  would otherwise wipe a half-filled form. Props: `title`, `onClose`, `size`
+  (`sm` confirmation / `md` reading, the default / `lg` form), `role`,
   `closeDisabled` (blocks every way out while a request is in flight),
   `hideHeader` for a dialog that renders its own title, `initialFocusRef`.
   ⚠️ Don't hand-roll a backdrop + panel again — the four that existed had each
   dropped the focus trap, so Tab walked out of the dialog into the page behind
   it),
   `ConfirmModal` (destructive-action confirmation, built on `Modal`;
-  takes `title`, `description`,
+  takes `title`, `description` (any ReactNode — it renders in a `div`),
+  `confirmLabel` / `pendingLabel` (defaults to `${confirmLabel}…`),
   `onConfirm: () => Promise<void>`, `onClose`; manages its own submitting/error
   state and closes itself on a successful `onConfirm`). Plus
   `app/components/Cards/Card.tsx` (variants `elevated`/`outlined`/`inverse`,
