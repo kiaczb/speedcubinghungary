@@ -16,25 +16,32 @@ const (
 	// ennyi kérés fér bele, aztán nulláról indul.
 	RateLimitWindow = time.Minute
 
-	// GlobalRateLimit bőven a normál böngészés fölött van. Egyetlen
-	// oldalbetöltés is indíthat tucatnyi kérést (a tippverseny űrlapja
-	// versenyszámonként egy psych sheetet kér), és ide számítanak az SSE
-	// stream újracsatlakozásai is.
-	GlobalRateLimit = 300
-
-	// LoginRateLimit szigorúbb: a /login minden hívása egy új CSRF nonce sütit
-	// és egy WCA authorize átirányítást jelent. Ember percenként egyszer
-	// jelentkezik be, nem húszszor.
-	LoginRateLimit = 20
+	// LoginRateLimit a /login és a /login/callback közös kerete. Egy
+	// bejelentkezés két kérés, így ez percenként 30 bejelentkezés egy IP-ről —
+	// egy versenyhelyszín közös Wi-Fi-jén is elég, egy szkriptnek viszont kevés.
+	LoginRateLimit = 60
 )
 
 // RateLimit IP-nkénti kérésszámlálót tesz a lánc elé.
 //
-// ⚠️ A számláló MEMÓRIÁBAN és PÉLDÁNYONKÉNT él. A stackben nincs Redis és egy
-// API konténer fut (lásd CLAUDE.md §12) — ez a réteg az, amit közös tárra kell
-// cserélni, ha valaha több példány lesz. Addig ez pontosan azt a bajt oldja meg,
-// ami valós: egyetlen gép ne tudja végtelen kéréssel terhelni a WCA felé menő
-// proxy-végpontokat és a bejelentkezést.
+// ⚠️ CSAK olyan útvonalra tedd, ahol egy IP-ről jövő legitim forgalom
+// természeténél fogva kicsi. Két ok miatt nem lehet globális:
+//
+//   - A Server Componentek (serverJson) a web konténerből, a Docker-hálózaton
+//     át hívnak minket, X-Forwarded-For nélkül — tehát az ÖSSZES látogató
+//     szerveroldali kérése egyetlen kulcson, a web konténer IP-jén osztozna.
+//     Betelve a serverJson csendben üres listát adna: üres hírek, posztok,
+//     tabellák, hibaüzenet nélkül.
+//   - A live eszközöket versenyhelyszínen használják, ahol mindenki egy közös
+//     Wi-Fi IP-ről jön. A Special oldal minden élő frissítésre újrakéri a
+//     riportot, nézőnként — egy per-IP korlát pont ott törne el, ahol a
+//     legnagyobb szükség van rá.
+//
+// A WCA felé menő forgalmat ezért nem itt, hanem a kimenő oldalon korlátozzuk
+// (lásd competition.WCARepository): az független attól, ki és honnan kérdez.
+//
+// A számláló memóriában és példányonként él — nincs Redis, egy API konténer
+// fut (CLAUDE.md §12).
 func RateLimit(cfg *config.Config, limit int) func(http.Handler) http.Handler {
 	limiter := &rateLimiter{
 		limit:  limit,
@@ -42,7 +49,7 @@ func RateLimit(cfg *config.Config, limit int) func(http.Handler) http.Handler {
 		// Az X-Forwarded-For-t csak akkor hisszük el, ha tényleg proxy mögött
 		// vagyunk. Fejlesztésben nincs Caddy, ott a fejléc szabadon hamisítható
 		// lenne — és egyetlen fejléccel meg lehetne kerülni a korlátot.
-		trustForwardedFor: cfg.Deployment != "development",
+		trustForwardedFor: !cfg.IsDevelopment(),
 		buckets:           make(map[string]*rateBucket),
 	}
 
