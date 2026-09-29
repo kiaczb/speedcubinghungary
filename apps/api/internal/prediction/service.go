@@ -1,6 +1,9 @@
 package prediction
 
 import (
+	"errors"
+	"log"
+	"sync"
 	"time"
 
 	"speedcubinghungary/internal/competition"
@@ -13,7 +16,7 @@ import (
 // tippverseny-lista kiegészítéséhez (név, város, dátum) szükség van — nem az
 // egész competition.Service-t vezetjük be függőségként.
 type CompetitionLookup interface {
-	GetUpcomingHungarian() ([]competition.Competition, error)
+	GetCompetition(competitionID string) (competition.Competition, error)
 }
 
 type Service struct {
@@ -33,9 +36,9 @@ type NewExtraQuestion struct {
 }
 
 // GetContests az összes tippversenyt adja vissza, a WCA verseny-metaadatokkal
-// (név, város, dátum) feldúsítva. Az a verseny, amit a WCA API már nem ad
-// vissza (pl. régi/nem közelgő), a saját id-jével jelenik meg névként —
-// enélkül a lista egy hibás WCA-válasz miatt teljesen üres lenne.
+// (név, város, dátum) feldúsítva. Ha egy verseny nem kérdezhető le, a saját
+// id-jével jelenik meg névként — enélkül a lista egy WCA-kiesés miatt
+// teljesen üres lenne.
 func (s *Service) GetContests() ([]Contest, error) {
 	rows, err := s.repo.GetAll()
 	if err != nil {
@@ -59,10 +62,7 @@ func (s *Service) GetContests() ([]Contest, error) {
 		return nil, err
 	}
 
-	competitionsByID, err := s.competitionsByID()
-	if err != nil {
-		return nil, err
-	}
+	competitionsByID := s.competitionsByID(rows)
 
 	contests := make([]Contest, 0, len(rows))
 	for _, row := range rows {
@@ -72,20 +72,51 @@ func (s *Service) GetContests() ([]Contest, error) {
 	return contests, nil
 }
 
-// competitionsByID a közelgő magyar versenyeket WCA id szerint indexeli. A
-// hiba nem fatális a tippverseny-listára nézve (lásd GetContests) — a
-// competition csomag maga is external API-tól függ.
-func (s *Service) competitionsByID() (map[string]competition.Competition, error) {
-	upcoming, err := s.competitions.GetUpcomingHungarian()
-	if err != nil {
-		return map[string]competition.Competition{}, nil
+// competitionsByID a tippversenyek versenyeit egyenként, ID SZERINT kéri le.
+//
+// ⚠️ Nem a közelgő versenyek listájából: az a verseny végével kiejti a
+// versenyt, és a tippverseny pont az eredményhirdetés idején veszítené el a
+// nevét, dátumát és helyszínét. A lekérés a competition csomagban
+// gyorsítótárazott, a WCA felé menő párhuzamosságot pedig a repository
+// korlátozza — ezért indulhat itt versenyenként egy goroutine.
+//
+// A hiba nem fatális: az a tippverseny a verseny azonosítójával jelenik meg
+// (buildContest), de a hibát naplózzuk, hogy ne tűnjön el nyomtalanul.
+func (s *Service) competitionsByID(rows []contestRow) map[string]competition.Competition {
+	ids := make(map[string]bool, len(rows))
+	for _, row := range rows {
+		ids[row.CompetitionWCAID] = true
 	}
 
-	byID := make(map[string]competition.Competition, len(upcoming))
-	for _, c := range upcoming {
-		byID[c.ID] = c
+	var (
+		mu   sync.Mutex
+		wg   sync.WaitGroup
+		byID = make(map[string]competition.Competition, len(ids))
+	)
+
+	for id := range ids {
+		wg.Add(1)
+		go func(id string) {
+			defer wg.Done()
+
+			comp, err := s.competitions.GetCompetition(id)
+			if err != nil {
+				if errors.Is(err, competition.ErrNotFound) {
+					log.Printf("[prediction] the WCA does not know competition %s", id)
+				} else {
+					log.Printf("[prediction] looking up competition %s failed: %v", id, err)
+				}
+				return
+			}
+
+			mu.Lock()
+			byID[id] = comp
+			mu.Unlock()
+		}(id)
 	}
-	return byID, nil
+	wg.Wait()
+
+	return byID
 }
 
 func buildContest(row contestRow, comp competition.Competition, podiumEventIDs []string, questions []extraQuestionRow) Contest {

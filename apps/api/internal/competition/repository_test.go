@@ -71,3 +71,27 @@ func TestWCARepository_CapsTheResponseBody(t *testing.T) {
 	_, err := newWCARepository(server.URL).GetWCIF("Verseny2026")
 	assert.Error(t, err, "a korlát fölötti választ nem szabad dekódolni")
 }
+
+// A GetCompetition bármely dátumú versenyt visszaad ID szerint; a WCA 404-e
+// saját sentinel hibává válik, hogy a hívó meg tudja különböztetni a nem
+// létező versenyt a WCA kiesésétől.
+func TestWCARepository_GetCompetition(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/BudapestOpen2025" {
+			http.NotFound(w, r)
+			return
+		}
+		fmt.Fprint(w, `{"id":"BudapestOpen2025","name":"Budapest Open 2025","start_date":"2025-03-01","end_date":"2025-03-02","city":"Budapest","country_iso2":"HU"}`)
+	}))
+	t.Cleanup(server.Close)
+
+	repo := newWCARepository(server.URL)
+
+	competition, err := repo.GetCompetition("BudapestOpen2025")
+	require.NoError(t, err)
+	assert.Equal(t, "Budapest Open 2025", competition.Name)
+	assert.Equal(t, "HU", competition.CountryISO2)
+
+	_, err = repo.GetCompetition("NemLetezo2099")
+	assert.ErrorIs(t, err, ErrNotFound)
+}
