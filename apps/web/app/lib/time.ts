@@ -1,16 +1,14 @@
 /**
- * WCA-stílusú időbevitel: a felhasználó csak számjegyeket ír, és azokat
- * jobbról tagoljuk század/másodperc/perc szerint (`14289` → `1:42.89`,
- * `842` → `8.42`, `389` → `3.89`). Semmilyen más karakter nem kerül be — ez
- * zárja ki, hogy a felhasználó félkész `:`/`.` jeleket írjon, amiket aztán
- * újra kellene értelmezni.
+ * WCA-stílusú időbevitel — a tippverseny és a Budapest Special közös
+ * implementációja.
  *
- * ⚠️ Ez KÖZÖS, mert a tippverseny és a Budapest Special ugyanezt csinálta,
- * két külön, viselkedésében ELTÉRŐ megvalósítással: a Special változata nem
- * ismert korlátot, így hat számjegy fölött `123:45.67`-féle értéket is
- * elfogadott — olyan időt, ami egy kockaversenyen nem létezik, és amit a
- * mentés csak a szerveren bukott volna el. A megtartott (szigorúbb) változat a
- * tippversenyé.
+ * Két lépés, két felelősség:
+ *   - `formatTimeInput` gépelés KÖZBEN formáz: a felhasználó csak számjegyeket
+ *     ír, és azokat jobbról tagoljuk (`14289` → `1:42.89`, `842` → `8.42`).
+ *     Más karakter nem kerül be, így nincs félkész `:`/`.`, amit újra kellene
+ *     értelmezni.
+ *   - `parseTimeInput` dönti el, hogy a kész érték ÉRVÉNYES idő-e. Minden
+ *     hívó ezt kérdezi meg, mielőtt az értéket felhasználná vagy elküldené.
  */
 
 const MAX_DIGITS = 6;
@@ -19,14 +17,20 @@ const MAX_DIGITS = 6;
 const MAX_CENTISECONDS = 60 * 60 * 100;
 
 /**
- * `null` = a bevitel nem fogadható el (túl hosszú vagy 60 perc fölött). A
- * hívó ilyenkor HAGYJA a mezőt az előző értéken — ne ugorjon el, és ne
- * csonkoljon némán.
+ * `null` = a leütés nem fogadható el (hat számjegy fölött vagy 60 perc
+ * fölött). A hívó ilyenkor HAGYJA a mezőt az előző értéken — ne ugorjon el,
+ * és ne csonkoljon némán.
+ *
+ * ⚠️ Azt szándékosan NEM utasítja el, ha perc mellett a másodperc 60 vagy
+ * több (`1:75.00`). A számjegyek jobbról töltődnek, így például a `16:05.00`
+ * beírása közben az ötjegyű köztes állapot `1:60.50` — ha a formázó ezt
+ * elutasítaná, a 16–19., 26–29. … perc sosem lenne begépelhető. Az ilyen
+ * érték megjelenhet a mezőben, de a `parseTimeInput` érvénytelennek mondja.
  */
 export function formatTimeInput(value: string): string | null {
-  // A vezető nullákat le KELL vágni: a megjelenített `0.01`-ből a nyers
-  // számjegyek `001`-et adnak, és enélkül a következő leütéssel
-  // `0014` → `00.14` → … → `001:23.45` halmozódna.
+  // A vezető nullákat le KELL vágni: a megjelenített `0.01` nyers számjegyei
+  // `001`, és a következő leütéssel `0014` → `00.14` → … → `001:23.45`
+  // halmozódna.
   const digits = value.replace(/\D/g, "").replace(/^0+/, "");
   if (digits === "") return "";
   if (digits.length > MAX_DIGITS) return null;
@@ -45,4 +49,29 @@ export function formatTimeInput(value: string): string | null {
   if (rest === "") return `0.${centiseconds}`;
   if (minutes === "") return `${seconds}.${centiseconds}`;
   return `${minutes}:${seconds.padStart(2, "0")}.${centiseconds}`;
+}
+
+/**
+ * A beírt időt századmásodpercre alakítja; `null`, ha nem érvényes idő.
+ *
+ * Perc mellett a másodperc legfeljebb 59 lehet — az `1:75.00` elgépelés, nem
+ * 2:15.00. Perc nélkül a 99 másodpercig terjedő alak (`74.50`) egyértelmű,
+ * ezért elfogadjuk.
+ */
+export function parseTimeInput(value: string): number | null {
+  const trimmed = value.trim().replace(",", ".");
+  if (!trimmed) return null;
+
+  const match = trimmed.match(/^(?:(\d+):)?(\d{1,2})\.(\d{1,2})$/);
+  if (!match) return null;
+
+  const [, minutes, seconds, fraction] = match;
+  if (minutes !== undefined && Number(seconds) >= 60) return null;
+
+  const total =
+    (minutes ? Number(minutes) * 6000 : 0) +
+    Number(seconds) * 100 +
+    Number(fraction.padEnd(2, "0"));
+
+  return total > 0 && total <= MAX_CENTISECONDS ? total : null;
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { controlClass } from "@/app/components/ui/Field";
-import { formatTimeInput } from "@/app/lib/time";
+import { formatTimeInput, parseTimeInput } from "@/app/lib/time";
 
 type Props = {
   value: string;
@@ -21,12 +21,18 @@ const TimeInput = ({
   id,
   className = controlClass,
 }: Props) => {
+  // A formázó engedi a köztes `1:75.00`-féle állapotot (lásd lib/time.ts), ezért
+  // az érvényességet külön jelezzük — a szöveges magyarázat a mező alatti
+  // hintben van (ExtraQuestionField), itt a keret és az aria-invalid.
+  const invalid = value !== "" && parseTimeInput(value) === null;
+
   return (
     <input
       id={id}
       type="text"
       inputMode="numeric"
       value={value}
+      aria-invalid={invalid}
       onChange={(event) => {
         // Elutasított bevitelnél (null) a mező az ELŐZŐ értéken marad.
         const formatted = formatTimeInput(event.target.value);
@@ -35,7 +41,7 @@ const TimeInput = ({
       placeholder={placeholder}
       aria-label={ariaLabel}
       autoComplete="off"
-      className={className}
+      className={invalid ? `${className} border-brand-red focus:border-brand-red` : className}
     />
   );
 };

@@ -4,12 +4,8 @@ import { useRef, useState } from "react";
 import { FaExclamationTriangle } from "react-icons/fa";
 import Card from "@/app/components/Cards/Card";
 import { controlClass } from "@/app/components/ui/Field";
-import { formatTimeInput } from "@/app/lib/time";
-import {
-  formatAttemptResult,
-  formatCentiseconds,
-  parseTimeToCentiseconds,
-} from "../lib/time";
+import { formatTimeInput, parseTimeInput } from "@/app/lib/time";
+import { formatAttemptResult, formatCentiseconds } from "../lib/time";
 import type { Competitor, CompetitorAttempt, CompetitorRound } from "../types";
 
 const DNF = -1;
@@ -98,7 +94,7 @@ const EditableAttemptCell = ({
 
   const save = async () => {
     const trimmed = value.trim();
-    const parsed = parseTimeToCentiseconds(trimmed);
+    const parsed = parseTimeInput(trimmed);
 
     if (trimmed && parsed === null) {
       setInvalid(true);

@@ -301,10 +301,14 @@ Other Go conventions observed:
   the runtime's zone and a Server Component runs in the container's UTC while a
   client component runs on the visitor's machine; near midnight the same date
   rendered as two different days. Add a new shape here rather than writing
-  another `toLocaleDateString` in a component), `time.ts` (`formatTimeInput()` — WCA-style digit-only
-  time entry, shared by the prediction form and the Special DNF cell; it
-  returns `null` for input it refuses and the caller must then keep the
-  previous value), and `useBodyScrollLock.ts` (locks background scroll while
+  another `toLocaleDateString` in a component), `time.ts` (WCA-style digit-only time entry, shared by
+  the prediction form and the Special DNF cell: `formatTimeInput()` formats
+  while typing and returns `null` for a keystroke it refuses — the caller
+  keeps the previous value; `parseTimeInput()` is the **only** validity check
+  and every caller must run it before using the value. ⚠️ The formatter
+  deliberately lets `1:75.00` through as an intermediate state: digits fill
+  from the right, so typing `16:05.00` passes through `1:60.50`, and rejecting
+  that would make whole minute ranges untypeable), and `useBodyScrollLock.ts` (locks background scroll while
   a modal is open — called by `Modal`, so a modal built on it gets this for
   free). Add nav/contact entries there, not per-component.
   - ⚠️ `useBodyScrollLock` also compensates `body`'s `padding-right` by the
