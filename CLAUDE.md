@@ -558,7 +558,7 @@ chi router in `internal/router/router.go`. Global middleware: `middleware.JSON`
 | GET  | `/uploads/*` | public | static file server over `cfg.UploadDir` (post images) |
 | DELETE | `/posts` | JWT + `admin` | `post.DeletePosts` (body `{ids:[]}`; also deletes the posts' image files from the volume, see §20) |
 | GET  | `/competitions/upcoming` | public | `competition.GetUpcoming` (HU only; DTO includes `eventIds` — the WCA API's `event_ids` passed straight through, no extra request) |
-| GET  | `/competitions/{id}/psych-sheet/{eventId}` | public | `competition.GetPsychSheet` — proxy of the WCA psych sheet (PR-ranked start list) for one event: `[{name, wcaId, position}]`, `position` 0 = no PR yet, `wcaId` empty for newcomers. Ids validated against `^[A-Za-z0-9]{1,64}$` (400), upstream failure 502. **Cached 15 min + singleflight**, see §21 |
+| GET  | `/competitions/{id}/psych-sheet/{eventId}` | public | `competition.GetPsychSheet` — proxy of the WCA psych sheet (PR-ranked start list) for one event: `[{name, wcaId, position}]`, `position` 0 = no PR yet, `wcaId` empty for newcomers. Ids validated against `^[A-Za-z0-9]{1,64}$` (400), an id the WCA doesn't know 404, upstream failure 502. **Cached 15 min + singleflight**, expired entries swept, see §21 |
 | GET  | `/competitions/{id}/competitors` | public | `competition.GetCompetitors` — every accepted, competing registrant from the public WCIF, sorted by name: `[{name, wcaId}]`. (The WCA `/registrations` endpoint only carries user ids, no names — that's why WCIF.) Same validation/caching as above |
 | GET  | `/predictions` | public | `prediction.GetContests` — every tippverseny, `competitionName`/`City`/`Country`/`StartDate` enriched live from `competition.Service.GetUpcomingHungarian` (not stored, see §21). `status` is computed from `predictionDeadline`, never `"evaluated"` yet |
 | POST | `/predictions` | JWT + `admin` | `prediction.CreateContest` (JSON body `{competitionId, predictionDeadline (RFC3339), podiumEventIds[], extraQuestions: [{prompt, type: "person"\|"time"\|"number"\|"text"}]}`; 400 on a past deadline, an empty/duplicated/malformed `podiumEventIds` (max 20), or an invalid/blank question (max 20, prompt ≤ 300 chars, stored trimmed). Records the admin in `created_by`. Every validation error wraps `prediction.ErrValidation`, which is the one thing the handler checks for 400 — add new rules as `validationError`, not to a status chain) |
@@ -1617,7 +1617,12 @@ túllépte, és 502-ként jött vissza. Ezért (1) a frontend versenyszámonkén
 kérést küld, (2) a `competition.Service` 15 percig memóriában cache-eli a
 psych sheeteket és a nevezői listát, és `singleflight`-tal összevonja az
 egyidejű azonos kéréseket (a React StrictMode dev-ben minden fetch-et
-duplán futtat). Hibás válasz nem kerül a cache-be. Ne tedd vissza a
+duplán futtat). Hibás válasz nem kerül a cache-be, a lejárt bejegyzéseket
+pedig TTL-enként egyszer kisöpri (`sweepLocked`) — a kulcs a kliens által
+adott azonosító, takarítás nélkül korlátlanul nőne. (3) A
+`competition.WCARepository` egyszerre legfeljebb 6 kérést enged a WCA felé
+(§14) — a singleflight csak AZONOS kulcsokat von össze, egy tucat különböző
+versenyszám hideg cache mellett egyszerre ment volna ki. Ne tedd vissza a
 lekérést az inputba, és ne vedd ki a cache-t.
 
 ⚠️ Amikor a tippleadás/kiértékelés megépül, ne bővítsd tovább ezt a modult
