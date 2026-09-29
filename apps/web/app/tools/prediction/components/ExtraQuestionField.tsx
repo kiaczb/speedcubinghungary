@@ -6,6 +6,7 @@ import type { CompetitorOptions } from "../lib/useCompetitorOptions";
 import { ExtraQuestion } from "../types";
 import CompetitorInput from "./CompetitorInput";
 import TimeInput from "./TimeInput";
+import { parseTimeInput } from "@/app/lib/time";
 
 type Props = {
   question: ExtraQuestion;
@@ -37,9 +38,13 @@ const ExtraQuestionField = ({
       label={question.prompt}
       htmlFor={inputId}
       hint={
-        question.type === "person" && competitors.status === "error"
-          ? "Nem sikerült betölteni a nevezőket — a nevet kézzel is beírhatod."
-          : undefined
+        question.type === "person" && competitors.status === "error" ? (
+          "Nem sikerült betölteni a nevezőket — a nevet kézzel is beírhatod."
+        ) : question.type === "time" && value !== "" && parseTimeInput(value) === null ? (
+          <span role="alert" className="text-brand-red">
+            Érvénytelen idő — perc mellett a másodperc legfeljebb 59 lehet.
+          </span>
+        ) : undefined
       }
     >
       <div className="relative">
