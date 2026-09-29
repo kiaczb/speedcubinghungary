@@ -72,31 +72,18 @@ func TestListRecordedTimes(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 
-	columns := []string{
-		"live_result_id", "attempt_number", "elapsed_cs",
-		"elapsed_note", "recorded_by", "recorded_at",
-	}
-
 	mock.ExpectQuery("FROM special_dnf_attempts").
 		WithArgs("SpeedcubingHungary2026").
-		WillReturnRows(sqlmock.NewRows(columns).
-			AddRow(4973030, 2, 3742, "bíró jegyezte", 3, testNow).
-			AddRow(4973031, 1, 5000, "", nil, nil))
+		WillReturnRows(sqlmock.NewRows([]string{"live_result_id", "attempt_number", "elapsed_cs"}).
+			AddRow(4973030, 2, 3742).
+			AddRow(4973031, 1, 5000))
 
 	recorded, err := NewPostgresRepository(db).ListRecordedTimes("SpeedcubingHungary2026")
 
 	require.NoError(t, err)
-	require.Len(t, recorded, 2)
-
-	assert.Equal(t, 4973030, recorded[0].LiveResultID)
-	assert.Equal(t, 2, recorded[0].AttemptNumber)
-	assert.Equal(t, 3742, recorded[0].ElapsedCs)
-	assert.Equal(t, "bíró jegyezte", recorded[0].Note)
-	require.NotNil(t, recorded[0].RecordedBy)
-	assert.Equal(t, 3, *recorded[0].RecordedBy)
-
-	assert.Nil(t, recorded[1].RecordedBy)
-	assert.True(t, recorded[1].RecordedAt.IsZero())
-
+	assert.Equal(t, []RecordedTime{
+		{LiveResultID: 4973030, AttemptNumber: 2, ElapsedCs: 3742},
+		{LiveResultID: 4973031, AttemptNumber: 1, ElapsedCs: 5000},
+	}, recorded)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }

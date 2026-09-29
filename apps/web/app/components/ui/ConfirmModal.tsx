@@ -6,21 +6,14 @@ import Modal from "./Modal";
 type Props = {
   title: string;
   description: React.ReactNode;
-  confirmLabel?: string;
-  /** A megerősítő gomb felirata a művelet alatt; alapból `${confirmLabel}…`. */
-  pendingLabel?: string;
-  cancelLabel?: string;
   onConfirm: () => Promise<void>;
   onClose: () => void;
 };
 
-
+/** Törlés-megerősítés. Sikeres `onConfirm` után magától bezárul. */
 export default function ConfirmModal({
   title,
   description,
-  confirmLabel = "Törlés",
-  pendingLabel = `${confirmLabel}…`,
-  cancelLabel = "Mégse",
   onConfirm,
   onClose,
 }: Props) {
@@ -40,15 +33,12 @@ export default function ConfirmModal({
   };
 
   return (
-    // A hátterre kattintás CSAK bezár, sose törli — a törlés kizárólag a lenti
-    // "Törlés" gomb handleConfirm-jén keresztül fut.
     <Modal
       title={title}
       onClose={onClose}
       size="sm"
       role="alertdialog"
       closeDisabled={submitting}
-      // Ennek a párbeszédnek nincs fejlécsávja: a cím a törzs első eleme.
       hideHeader
     >
       <div className="px-6 py-5">
@@ -77,7 +67,7 @@ export default function ConfirmModal({
             onClick={onClose}
             disabled={submitting}
           >
-            {cancelLabel}
+            Mégse
           </Button>
           <Button
             type="button"
@@ -85,7 +75,7 @@ export default function ConfirmModal({
             onClick={handleConfirm}
             disabled={submitting}
           >
-            {submitting ? pendingLabel : confirmLabel}
+            {submitting ? "Törlés…" : "Törlés"}
           </Button>
         </div>
       </div>

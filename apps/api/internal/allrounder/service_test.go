@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"speedcubinghungary/internal/wcalive"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -187,7 +189,7 @@ func newTestService(t *testing.T, repo Repository, handler http.HandlerFunc) *Se
 
 	live := NewLiveClient(server.URL)
 
-	return NewService(repo, client, live, nil, NewBroadcaster())
+	return NewService(repo, client, live, nil, wcalive.NewBroadcaster())
 }
 
 func TestGetStandings_FetchesOnceThenServesFromCache(t *testing.T) {

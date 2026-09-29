@@ -16,7 +16,6 @@ type contestRow struct {
 	ID                 string
 	CompetitionWCAID   string
 	PredictionDeadline time.Time
-	CreatedAt          time.Time
 	// CreatedBy a létrehozó admin users.id-ja — csak íráskor töltjük.
 	CreatedBy int
 }
@@ -48,7 +47,7 @@ func NewPostgresRepository(db *sql.DB) *PostgresRepository {
 
 func (r *PostgresRepository) GetAll() ([]contestRow, error) {
 	rows, err := r.db.Query(`
-		SELECT id, competition_wca_id, prediction_deadline, created_at
+		SELECT id, competition_wca_id, prediction_deadline
 		FROM prediction_contests
 		ORDER BY prediction_deadline DESC
 	`)
@@ -60,7 +59,7 @@ func (r *PostgresRepository) GetAll() ([]contestRow, error) {
 	contests := make([]contestRow, 0)
 	for rows.Next() {
 		var c contestRow
-		if err := rows.Scan(&c.ID, &c.CompetitionWCAID, &c.PredictionDeadline, &c.CreatedAt); err != nil {
+		if err := rows.Scan(&c.ID, &c.CompetitionWCAID, &c.PredictionDeadline); err != nil {
 			return nil, err
 		}
 		contests = append(contests, c)
@@ -179,8 +178,6 @@ func (r *PostgresRepository) Delete(id string) error {
 		return err
 	}
 
-	// Ha nincs ilyen id, 0 sor törlődik — ezt 404-ként akarjuk jelezni, nem
-	// néma sikerként (mint a post.Update, lásd post/repository.go).
 	rows, err := res.RowsAffected()
 	if err != nil {
 		return err

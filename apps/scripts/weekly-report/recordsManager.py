@@ -1,10 +1,7 @@
 import requests
 from database.db import upsert_record, get_all_records
 
-def ReadRecords():
-    return get_all_records()
-
-localNationalRecords = ReadRecords()
+localNationalRecords = get_all_records()
 
 def SaveRecords():
     recordsUrl = "https://www.worldcubeassociation.org/api/v0/records"
@@ -17,7 +14,7 @@ def SaveRecords():
             "europe": recordsData["continental_records"].get("_Europe", {}),
             "hungary": recordsData["national_records"].get("Hungary", {})
         }
-        
+
         for region_db_name, region_data in regions.items():
             for event_id, times in region_data.items():
                 single = times.get('single')

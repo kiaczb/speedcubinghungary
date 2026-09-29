@@ -31,20 +31,12 @@ func (h *Handler) secureCookies() bool {
 
 // Login indítja a WCA OAuth folyamatot: GET /login?redirect=/valahova
 //
-// A folyamat szándékosan a BACKENDEN indul, nem a böngészőben. Így (1) a CSRF
-// nonce-ot HttpOnly sütibe tudjuk tenni, amit a kliens nem hamisíthat, és (2) a
-// client_id / redirect_uri / scope hármas egyetlen helyen él — korábban a
-// frontend külön NEXT_PUBLIC_* változókból építette ugyanezt az URL-t, ami
-// csendben elcsúszhatott a backend értékeitől.
+// A folyamat szándékosan a BACKENDEN indul, nem a böngészőben: így a CSRF
+// nonce HttpOnly sütibe kerülhet, és a client_id / redirect_uri / scope hármas
+// egyetlen helyen él.
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	redirectPath := sanitizeRedirectPath(r.URL.Query().Get("redirect"))
-
-	nonce, err := newStateNonce()
-	if err != nil {
-		log.Printf("auth: nem sikerült CSRF nonce-ot generálni: %v", err)
-		http.Error(w, "login unavailable", http.StatusInternalServerError)
-		return
-	}
+	nonce := newStateNonce()
 
 	setStateCookie(w, nonce, redirectPath, h.secureCookies())
 
@@ -104,10 +96,9 @@ func (h *Handler) LoginCallback(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, h.frontendURL(redirectPath), http.StatusFound)
 }
 
-// failLogin visszaviszi a felhasználót az oldalra a hiba jelzésével, ahelyett
-// hogy nyers hibaoldalt mutatna az API doménjén. A `login=failed` paramétert a
-// frontend ma még nem dolgozza fel — a lényeg, hogy a felhasználó ne ragadjon
-// egy üres hibaoldalon, és hogy ne szivárogjon ki upstream hibaszöveg.
+// failLogin visszaviszi a felhasználót az oldalra, ahelyett hogy nyers
+// hibaoldalt mutatna az API doménjén (és kiszivárogtatná az upstream hibát).
+// A `login=failed` paramétert a frontend még nem dolgozza fel.
 func (h *Handler) failLogin(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, h.frontendURL("/?login=failed"), http.StatusFound)
 }

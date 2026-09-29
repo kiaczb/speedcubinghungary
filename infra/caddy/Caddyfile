@@ -1,5 +1,4 @@
-
-#
+# Single domain: WEB_DOMAIN/api/* -> api (prefix stripped), everything else -> web.
 # Caddy provisions and renews a trusted cert automatically, as long as the
 # domain's public DNS points at this server and 80/443 are open.
 {
@@ -7,7 +6,6 @@
 }
 
 {$WEB_DOMAIN} {
-	
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
 		X-Content-Type-Options "nosniff"
@@ -15,12 +13,10 @@
 		Referrer-Policy "strict-origin-when-cross-origin"
 	}
 
-
 	handle_path /api/* {
 		reverse_proxy api:8080
 	}
 
-	# Everything else -> the Next.js frontend.
 	handle {
 		reverse_proxy web:3000
 	}

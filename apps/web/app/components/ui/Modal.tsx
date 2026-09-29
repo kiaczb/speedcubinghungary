@@ -3,19 +3,14 @@
 import { useEffect, useId, useRef } from "react";
 import type { PointerEvent } from "react";
 import { createPortal } from "react-dom";
-import { useBodyScrollLock } from "@/app/lib/useBodyScrollLock";
 
 /**
  * A modális párbeszédek közös váza: háttér, panel, fejléc, Escape,
- * háttérkattintás, görgetészár — és a FÓKUSZCSAPDA.
+ * háttérkattintás, görgetészár és fókuszcsapda.
  *
- * ⚠️ A fókuszcsapda az, ami eddig egyik másolatban sem volt benne. Enélkül a
- * Tab kiviszi a fókuszt a párbeszédből a mögötte lévő — vizuálisan letakart,
- * de továbbra is elérhető — oldalra: a billentyűzettel vagy képernyőolvasóval
- * dolgozó ember "elveszti" a párbeszédet, és olyan gombokat üt le, amiket nem
- * is lát. Ugyanitt tartjuk a nyitáskori fókuszálást és a bezáráskori
- * visszaadást is, mert a három egy dolog: hol van a fókusz, amíg a párbeszéd
- * nyitva van.
+ * ⚠️ A fókuszcsapda nélkül a Tab kiviszi a fókuszt a letakart, de továbbra is
+ * elérhető oldalra: a billentyűzettel vagy képernyőolvasóval dolgozó ember
+ * olyan gombokat üt le, amiket nem is lát.
  */
 
 type ModalSize = "sm" | "md" | "lg";
@@ -68,18 +63,28 @@ export default function Modal({
   const panelRef = useRef<HTMLDivElement>(null);
   const pressedOnBackdrop = useRef(false);
 
-  useBodyScrollLock(true);
-
-  // Csak a beilleszkedéskor/leszedéskor fut: a fókuszt egyszer állítjuk be, és
-  // a bezárás után oda adjuk vissza, ahonnan a párbeszéd indult (tipikusan a
-  // megnyitó gomb). A closeDisabled váltakozása nem indíthatja újra, különben
-  // a mentés elindítása elugrasztaná a fókuszt.
+  // Csak mountkor/unmountkor fut: a fókuszt egyszer állítjuk be, és bezáráskor
+  // oda adjuk vissza, ahonnan a párbeszéd indult. A closeDisabled váltakozása
+  // nem indíthatja újra, különben a mentés elindítása elugrasztaná a fókuszt.
+  // Ugyanitt zárjuk a háttér görgetését.
   useEffect(() => {
-    const openedFrom = document.activeElement as HTMLElement | null;
+    // A padding-right a görgetősáv helyét tartja meg: nélküle az oldal a sáv
+    // eltűnésekor jobbra ugrana.
+    const { overflow, paddingRight } = document.body.style;
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+    document.body.style.overflow = "hidden";
+    if (scrollbarWidth > 0) {
+      document.body.style.paddingRight = `${scrollbarWidth}px`;
+    }
 
+    const openedFrom = document.activeElement as HTMLElement | null;
     (initialFocusRef?.current ?? panelRef.current)?.focus();
 
-    return () => openedFrom?.focus?.();
+    return () => {
+      document.body.style.overflow = overflow;
+      document.body.style.paddingRight = paddingRight;
+      openedFrom?.focus?.();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

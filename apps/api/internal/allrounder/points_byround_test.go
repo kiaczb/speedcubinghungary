@@ -73,9 +73,8 @@ func TestComputeStandingsByRound_DNFDoesNotShiftPointsUp(t *testing.T) {
 func TestComputeStandingsByRound_IgnoresResultsWithoutTime(t *testing.T) {
 	standings := ComputeStandingsByRound([]CompetitionRounds{{
 		CompetitionWCAID: "C1",
-		Live:             true,
 		Rounds: []RoundResults{{
-			EventID: "333", RoundTypeID: "1", Rank: 1,
+			EventID: "333", Rank: 1,
 			Placements: []Placement{
 				{WCAID: "2020AAAA01", Name: "Anna", Pos: 1, Best: 700},
 				{WCAID: "2020BBBB01", Name: "Bence", Pos: 2, Best: 0},

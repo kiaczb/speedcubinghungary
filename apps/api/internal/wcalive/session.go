@@ -11,14 +11,12 @@ import (
 	"time"
 )
 
-// A WCA Live kapcsolat ÉLETCIKLUSA — az a rész, ami a `special` és az
-// `allrounder` csomagban korábban külön-külön, majdnem szó szerint egyformán
-// élt (~250 sor). Ami a két feature-ben tényleg különbözik, az NEM itt van: a
-// GraphQL lekérdezés (a complexity limit miatt kötelezően külön), a
-// pillanatkép alakja, és hogy egy vagy több versenyt követünk-e.
+// A WCA Live kapcsolat ÉLETCIKLUSA, közösen a `special` és az `allrounder`
+// számára. Ami a két feature-ben tényleg különbözik, az NEM itt van: a GraphQL
+// lekérdezés (a complexity limit miatt kötelezően külön), a pillanatkép alakja,
+// és hogy egy vagy több versenyt követünk-e.
 //
-// Amit ez a réteg garantál, és amit könnyű elrontani, ha valaki újra
-// lemásolja:
+// Amit ez a réteg garantál, és amit könnyű elrontani:
 //
 //   - A websocket kapcsolat CSAK addig él, amíg van nézője. Nincs háttérben
 //     futó figyelő: az első néző indítja a session-t, az utolsó leállítja.

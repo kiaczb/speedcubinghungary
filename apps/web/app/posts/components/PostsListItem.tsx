@@ -71,6 +71,8 @@ const PostsListItem = ({ postsItem, isAdmin }: Props) => {
 
             {imageUrl && (
               <div className="relative hidden h-24 w-32 shrink-0 sm:block">
+                {/* Sima img: a kép domainje környezetenként más — így nem kell remotePatterns. */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={imageUrl}
                   alt=""

@@ -3,10 +3,10 @@
 #
 # A job egyetlen futásban:
 #   1. legenerálja a riportot a WCA API + a közös DB alapján,
-#   2. elküldi e-mailben (EMAIL_TO),
-#   3. létrehozza a hozzá tartozó Post bejegyzést a weboldalon.
+#   2. létrehozza a hozzá tartozó Post bejegyzést a weboldalon,
+#   3. elküldi e-mailben (EMAIL_TO).
 #
-# A 3. lépés IDEMPOTENS: a posts.report_week UNIQUE, így ugyanarra a hétre
+# A 2. lépés IDEMPOTENS: a posts.report_week UNIQUE, így ugyanarra a hétre
 # másodszor futtatva nem jön létre újabb poszt (lásd reportPost.py). A cron
 # ezért nyugodtan újrapróbálkozhat, és kézzel is indítható.
 #

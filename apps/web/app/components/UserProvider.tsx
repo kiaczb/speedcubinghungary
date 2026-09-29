@@ -12,7 +12,9 @@ export interface MeResponse {
 
 interface UserContextType {
   user: MeResponse | null;
-  isLoading: boolean; // ÚJ: Töltési állapot
+  /** Csak a felület döntése — a jogosultságot a backend külön ellenőrzi. */
+  isAdmin: boolean;
+  isLoading: boolean;
   logout: () => Promise<void>;
 }
 
@@ -28,7 +30,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
   const [user, setUser] = useState<MeResponse | null>(null);
-  const [isLoading, setIsLoading] = useState(true); // Kezdetben töltünk
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const fetchMe = async () => {
@@ -58,7 +60,14 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({
   };
 
   return (
-    <UserContext.Provider value={{ user, isLoading, logout }}>
+    <UserContext.Provider
+      value={{
+        user,
+        isAdmin: user?.roles.includes("admin") ?? false,
+        isLoading,
+        logout,
+      }}
+    >
       {children}
     </UserContext.Provider>
   );

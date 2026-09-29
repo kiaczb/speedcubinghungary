@@ -43,8 +43,6 @@ export default function CreatePredictionModal({ onClose }: Props) {
           "/competitions/upcoming",
           { signal: controller.signal },
         );
-        data.sort((a, b) => a.startDate.localeCompare(b.startDate));
-
         setCompetitions(data);
         setCompetitionsStatus("success");
         selectRef.current?.focus();

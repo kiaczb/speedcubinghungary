@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net/http"
 	"strconv"
 	"strings"
 	"sync"
@@ -194,9 +193,8 @@ func (s *SocketClient) session(ctx context.Context) error {
 	defer cancel()
 
 	dialCtx, dialCancel := context.WithTimeout(ctx, 15*time.Second)
-	conn, _, err := websocket.Dial(dialCtx, s.url, &websocket.DialOptions{
-		HTTPHeader: http.Header{},
-	})
+	// Origin fejléc nélkül: a Phoenix check_origin csak így enged be.
+	conn, _, err := websocket.Dial(dialCtx, s.url, nil)
 	dialCancel()
 	if err != nil {
 		return fmt.Errorf("dial: %w", err)

@@ -76,7 +76,7 @@ func validContestID(id string) error {
 
 // ValidateNewContest a létrehozási kérést ellenőrzi, mielőtt bármit írnánk.
 // A kérdések promptját a hívó már levágott (TrimSpace) formában adja át.
-func ValidateNewContest(competitionID string, deadline time.Time, podiumEventIDs []string, questions []ExtraQuestion) error {
+func ValidateNewContest(competitionID string, deadline time.Time, podiumEventIDs []string, questions []NewExtraQuestion) error {
 	if !competitionIDPattern.MatchString(competitionID) {
 		return ErrInvalidCompetitionID
 	}

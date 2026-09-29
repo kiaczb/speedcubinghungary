@@ -24,23 +24,15 @@ const (
 	wcaTokenURL     = "https://www.worldcubeassociation.org/oauth/token"
 	wcaMeURL        = "https://www.worldcubeassociation.org/api/v0/me"
 
-	// wcaScopes: CSAK a bejelentkezéshez szükséges jogok. A WCA access tokent
-	// egyetlen /me hívásra használjuk, majd eldobjuk — semmilyen verseny- vagy
-	// írási jogra nincs szükségünk. (Korábban `manage_competitions` is szerepelt
-	// itt: az minden belépőtől a versenyei kezelésének jogát kérte el. Ne tedd
-	// vissza, amíg tényleg nem hívunk ilyen végpontot.)
+	// wcaScopes: CSAK a bejelentkezéshez szükséges jogok — a WCA access tokent
+	// egyetlen /me hívásra használjuk, majd eldobjuk. Bővebb scope-ot (pl.
+	// `manage_competitions`) csak akkor kérj, ha van is ilyen hívás.
 	wcaScopes = "public email"
 
-	// tokenLifetime a saját JWT-nk élettartama. A cookie MaxAge-e ehhez igazodik
-	// (lásd handler.go authCookie).
+	// tokenLifetime a saját JWT-nk élettartama; a cookie MaxAge-e ehhez igazodik.
 	tokenLifetime = time.Hour
 
-	// upstreamTimeout: a WCA felé indított hívások határideje. Enélkül egy lassú
-	// WCA korlátlan ideig tartana életben kéréseket és kapcsolatokat.
 	upstreamTimeout = 10 * time.Second
-
-	// maxUpstreamBody a WCA válaszaiból beolvasott maximális méret. Egy elromlott
-	// (vagy ellenséges) upstream ne tudjon memóriát kimeríteni.
 	maxUpstreamBody = 1 << 20 // 1 MiB
 )
 
@@ -61,9 +53,6 @@ type service struct {
 	meURL        string
 }
 
-// NewService a WCA OAuth szolgáltatás. A cfg-t végig magával viszi: korábban a
-// client id/secret/redirect uri és a JWT titok közvetlen os.Getenv hívásokból
-// jött, megkerülve a config csomag indulási validációját.
 func NewService(repo Repository, cfg *config.Config) Service {
 	return &service{
 		repo:         repo,
@@ -78,10 +67,7 @@ func NewService(repo Repository, cfg *config.Config) Service {
 func (s *service) AuthorizeURL(state string) string {
 	query := url.Values{}
 	query.Set("client_id", s.cfg.WCAClientID)
-	// A redirect_uri UGYANAZ a config érték, amit a token-beváltásnál is küldünk.
-	// Korábban a böngésző oldala (NEXT_PUBLIC_WCA_REDIRECT_URI) és a backend
-	// (WCA_REDIRECT_URI) két külön változóból dolgozott — ha elcsúsznak, a WCA a
-	// beváltásnál utasítja el a kérést, nehezen érthető hibával.
+	// Egyeznie kell a token-beváltáskor küldöttel, különben a WCA elutasítja.
 	query.Set("redirect_uri", s.cfg.WCARedirectURI)
 	query.Set("response_type", "code")
 	query.Set("scope", wcaScopes)

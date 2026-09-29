@@ -27,8 +27,7 @@ DB_CONFIG = {
 # Tables owned by the Go backend that this job reads/writes. The script must
 # NEVER create or alter them; they are provisioned by the backend migrations.
 #  - `users`   : competitor roster (wca_id, name, competition_count,
-#                delegated_count). The backend's equivalent of the old
-#                stand-alone `persons` table.
+#                delegated_count).
 #  - `records` : world/continental/national records (region, event_id,
 #                single, average).
 #  - `posts`   : the site's news posts. The weekly report is published here as
@@ -49,11 +48,6 @@ def _connect(row_factory=None):
     if DATABASE_URL:
         return psycopg.connect(DATABASE_URL, **kwargs)
     return psycopg.connect(**DB_CONFIG, **kwargs)
-
-
-def get_connection():
-    """Returns a connection to the shared backend database."""
-    return _connect()
 
 
 def check_connection():
@@ -109,7 +103,7 @@ def upsert_person(wca_id, name, comp_count=None, del_count=None):
     on insert they take their schema defaults (email NULL, roles '[]').
     """
     try:
-        with get_connection() as conn:
+        with _connect() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     """
@@ -132,7 +126,7 @@ def upsert_person(wca_id, name, comp_count=None, del_count=None):
 def upsert_record(region, event_id, single, average):
     """Inserts or updates a record in the shared `records` table (upsert)."""
     try:
-        with get_connection() as conn:
+        with _connect() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     """
@@ -181,7 +175,7 @@ def insert_weekly_report_post(post_id, title, content, report_week, replace=Fals
         ON CONFLICT (report_week) DO NOTHING
     """
 
-    with get_connection() as conn:
+    with _connect() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 replace_query if replace else keep_query,

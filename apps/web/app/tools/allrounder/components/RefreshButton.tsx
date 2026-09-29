@@ -20,14 +20,14 @@ type RefreshButtonProps = {
  * a backend külön is ellenőrzi (a kliensoldali rejtés csak kényelmi).
  */
 const RefreshButton = ({ year }: RefreshButtonProps) => {
-  const { user } = useUser();
+  const { isAdmin } = useUser();
   const router = useRouter();
 
   const [refreshing, setRefreshing] = useState(false);
   const [failed, setFailed] = useState(false);
   const [reloading, startReload] = useTransition();
 
-  if (!user?.roles.includes("admin")) return null;
+  if (!isAdmin) return null;
 
   const busy = refreshing || reloading;
 

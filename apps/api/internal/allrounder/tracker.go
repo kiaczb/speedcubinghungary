@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	"speedcubinghungary/internal/wcalive"
 )
 
 const (
@@ -18,13 +20,13 @@ const (
 
 type LiveTracker struct {
 	client      *LiveClient
-	broadcaster *Broadcaster
+	broadcaster *wcalive.Broadcaster
 
 	// session a WCA Live kapcsolat életciklusa — közös a special csomaggal,
 	// lásd internal/wcalive/session.go. Itt CSAK az marad, ami az All-Rounder
 	// sajátja: egyszerre EGY állomást követünk (a sorozat dönti el, melyiket),
 	// ezért nincs szükség a special többversenyes gépezetére.
-	session *Session
+	session *wcalive.Session
 
 	mu      sync.Mutex
 	tracked *trackedCompetition
@@ -44,11 +46,11 @@ type trackedCompetition struct {
 	trackedSince time.Time
 }
 
-func NewLiveTracker(client *LiveClient, socket *SocketClient, broadcaster *Broadcaster) *LiveTracker {
+func NewLiveTracker(client *LiveClient, socket *wcalive.SocketClient, broadcaster *wcalive.Broadcaster) *LiveTracker {
 	tracker := &LiveTracker{
 		client:      client,
 		broadcaster: broadcaster,
-		session:     NewSession("allrounder", socket, liveRefreshInterval),
+		session:     wcalive.NewSession("allrounder", socket, liveRefreshInterval),
 	}
 
 	tracker.session.Watch(tracker)
@@ -261,8 +263,8 @@ func (t *LiveTracker) Reload(ctx context.Context) {
 
 // HandleEvent a wcalive.Watcher tagja. Minden roundUpdated esemény TELJES
 // kör-pillanatképet hoz, ezért a kimaradt vagy duplikált esemény magától gyógyul.
-func (t *LiveTracker) HandleEvent(event SubscriptionEvent) {
-	roundID, err := roundIDFromKey(event.Key)
+func (t *LiveTracker) HandleEvent(event wcalive.SubscriptionEvent) {
+	roundID, err := wcalive.RoundIDFromKey(event.Key)
 	if err != nil {
 		log.Printf("[allrounder] ignoring event with unexpected key %q", event.Key)
 		return
@@ -306,17 +308,17 @@ func (t *LiveTracker) HandleEvent(event SubscriptionEvent) {
 
 // WantedSubscriptions a wcalive.Watcher tagja: az éppen figyelt állomás nyitott
 // köreire akarunk feliratkozni. Néző nélkül üres, így a session elengedi őket.
-func (t *LiveTracker) WantedSubscriptions() map[string]Subscription {
+func (t *LiveTracker) WantedSubscriptions() map[string]wcalive.Subscription {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	wanted := make(map[string]Subscription)
+	wanted := make(map[string]wcalive.Subscription)
 	if t.tracked == nil || t.viewers == 0 {
 		return wanted
 	}
 
 	for roundID := range t.tracked.identities {
-		wanted[subscriptionKey(roundID)] = Subscription{
+		wanted[wcalive.RoundSubscriptionKey(roundID)] = wcalive.Subscription{
 			Query:     RoundRankingSubscription,
 			Variables: map[string]any{"id": strconv.Itoa(roundID)},
 		}

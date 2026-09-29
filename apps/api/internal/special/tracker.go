@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	"speedcubinghungary/internal/wcalive"
 )
 
 const (
@@ -27,13 +29,13 @@ var ErrTooManyCompetitions = errors.New("too many competitions are being watched
 
 type Tracker struct {
 	client      *LiveClient
-	broadcaster *Broadcaster
+	broadcaster *wcalive.Broadcaster
 
 	// session a WCA Live kapcsolat életciklusa (nézőszámlálás, socket
 	// indítás/leállítás, feliratkozás-szinkron) — lásd internal/wcalive/session.go.
 	// Ez a réteg közös az allrounder csomaggal; itt CSAK az marad, ami a
 	// Special sajátja: több verseny követése egyszerre, és a pillanatkép alakja.
-	session *Session
+	session *wcalive.Session
 
 	mu           sync.Mutex
 	competitions map[string]*trackedCompetition
@@ -57,11 +59,11 @@ type trackedRound struct {
 	results   []ResultSnapshot
 }
 
-func NewTracker(client *LiveClient, socket *SocketClient, broadcaster *Broadcaster) *Tracker {
+func NewTracker(client *LiveClient, socket *wcalive.SocketClient, broadcaster *wcalive.Broadcaster) *Tracker {
 	tracker := &Tracker{
 		client:       client,
 		broadcaster:  broadcaster,
-		session:      NewSession("special", socket, refreshInterval),
+		session:      wcalive.NewSession("special", socket, refreshInterval),
 		competitions: make(map[string]*trackedCompetition),
 	}
 
@@ -350,8 +352,8 @@ func (t *Tracker) Reload(ctx context.Context) {
 // HandleEvent a wcalive.Watcher tagja. Minden roundUpdated esemény TELJES kör-
 // pillanatképet hoz (nem különbséget), ezért a duplikált, késve vagy egyáltalán
 // meg nem érkező esemény magától gyógyul — ne építs rá eseménynaplót.
-func (t *Tracker) HandleEvent(event SubscriptionEvent) {
-	roundID, err := roundIDFromKey(event.Key)
+func (t *Tracker) HandleEvent(event wcalive.SubscriptionEvent) {
+	roundID, err := wcalive.RoundIDFromKey(event.Key)
 	if err != nil {
 		log.Printf("[special] ignoring event with unexpected key %q", event.Key)
 		return
@@ -402,18 +404,18 @@ func (t *Tracker) roundOwner(roundID int) (*trackedCompetition, trackedRound, bo
 // WantedSubscriptions a wcalive.Watcher tagja: a MOST nézett versenyek köreire
 // akarunk feliratkozni. Nézők nélküli verseny köre nincs benne, így a session
 // magától elengedi.
-func (t *Tracker) WantedSubscriptions() map[string]Subscription {
+func (t *Tracker) WantedSubscriptions() map[string]wcalive.Subscription {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	wanted := make(map[string]Subscription)
+	wanted := make(map[string]wcalive.Subscription)
 
 	for _, entry := range t.competitions {
 		if entry.viewers == 0 {
 			continue
 		}
 		for roundID := range entry.rounds {
-			wanted[subscriptionKey(roundID)] = Subscription{
+			wanted[wcalive.RoundSubscriptionKey(roundID)] = wcalive.Subscription{
 				Query:     RoundSubscription,
 				Variables: map[string]any{"id": strconv.Itoa(roundID)},
 			}

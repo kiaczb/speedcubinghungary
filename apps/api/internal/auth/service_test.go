@@ -17,23 +17,8 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-// 1️⃣ Mock Repository
 type MockRepo struct {
 	mock.Mock
-}
-
-func (m *MockRepo) GetByWCAID(wcaID string) (*User, error) {
-	args := m.Called(wcaID)
-	user := args.Get(0)
-	if user == nil {
-		return nil, args.Error(1)
-	}
-	return user.(*User), args.Error(1)
-}
-
-func (m *MockRepo) Create(user *User) (*User, error) {
-	args := m.Called(user)
-	return args.Get(0).(*User), args.Error(1)
 }
 
 func (m *MockRepo) Upsert(user *User) (*User, error) {

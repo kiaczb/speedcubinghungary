@@ -52,7 +52,6 @@ func (h *Handler) StreamUpdates(w http.ResponseWriter, r *http.Request) {
 		defer closeViewer()
 	}
 
-	w.Header().Del("Content-Type")
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")

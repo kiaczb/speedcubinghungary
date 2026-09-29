@@ -2,12 +2,9 @@
  * Dátumformázás — egy helyen, magyar nyelven, MAGYAR IDŐZÓNÁBAN.
  *
  * ⚠️ Az időzóna rögzítése nem kozmetika. A `toLocaleDateString` a FUTTATÓ
- * környezet zónáját használja: a Server Componentek a konténerben (UTC),
- * a client komponensek a látogató gépén futnak. Ugyanaz a dátum így két
- * különböző napnak látszhatott, éjfél közelében pedig hidratálási eltérést
- * okozott. A verseny- és posztdátumok magyar közönségnek szólnak, tehát
- * `Europe/Budapest` a helyes válasz — az allrounder tool időbélyege már eddig
- * is így csinálta, csak egyedül.
+ * környezet zónáját használja: a Server Componentek a konténerben (UTC), a
+ * client komponensek a látogató gépén futnak, így ugyanaz a dátum két különböző
+ * napnak látszhat, és éjfél közelében hidratálási eltérést okoz.
  *
  * Ha új megjelenítési alak kell, ide vegyél fel egy függvényt; ne írj a
  * komponensbe újabb `toLocaleDateString`-et.

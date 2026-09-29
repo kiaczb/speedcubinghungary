@@ -54,15 +54,6 @@ export type CompetitorOption = {
   position?: number;
 };
 
-// --- Dobogó-tipp form állapota (admin létrehozó modal) --------------------
-
-export type NewPredictionContest = {
-  competitionId: string;
-  predictionDeadline: string;
-  podiumEventIds: string[];
-  extraQuestions: ExtraQuestion[];
-};
-
 export const statusBadgeMap: Record<
   PredictionStatus,
   { label: string; color: string }

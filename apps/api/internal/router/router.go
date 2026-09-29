@@ -1,4 +1,3 @@
-// internal/router/router.go
 package router
 
 import (
@@ -29,88 +28,66 @@ func New(
 	allrounderHandler *allrounder.Handler,
 ) *chi.Mux {
 	r := chi.NewRouter()
-	r.Use(middleware.JSON)
 	r.Use(middleware.SecurityHeaders)
-
-
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{cfg.FrontendURL}, // Use config
+		AllowedOrigins:   []string{cfg.FrontendURL},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
 		AllowCredentials: true, // kell a cookie-hoz
 	}))
 
-	// Post routes
-	r.Get("/posts", postHandler.GetPosts)
-	r.Get("/posts/{id}", postHandler.GetPostByID)
-	r.Get("/posts/latest", postHandler.GetLatestPosts)
-
-	// Feltöltött posztképek kiszolgálása a volume-ról (publikus, csak olvasás).
-	// A globális middleware.JSON minden válaszra application/json-t állít, és a Go
-	// ServeContent NEM írja felül a már beállított Content-Type-ot — ezért itt
-	// töröljük, hogy a fájlszerver a valódi képtípust tudja beállítani.
-	fileServer := http.FileServer(http.Dir(cfg.UploadDir))
-	r.Handle("/uploads/*", http.StripPrefix("/uploads/", http.HandlerFunc(
-		func(w http.ResponseWriter, req *http.Request) {
-			w.Header().Del("Content-Type")
-			fileServer.ServeHTTP(w, req)
-		},
-	)))
-
-	r.Group(func(r chi.Router) {
-		r.Use(middleware.AuthMiddlewareWithConfig(cfg))
-		r.Use(middleware.RBACMiddleware(types.ROLE_ADMIN))
-		r.Post("/posts", postHandler.CreatePost)
-		r.Put("/posts/{id}", postHandler.UpdatePost)
-		r.Delete("/posts", postHandler.DeletePosts)
-	})
-
-	// Competition routes (WCA API proxy)
-	r.Get("/competitions/upcoming", competitionHandler.GetUpcoming)
-	r.Get("/competitions/{id}/psych-sheet/{eventId}", competitionHandler.GetPsychSheet)
-	r.Get("/competitions/{id}/competitors", competitionHandler.GetCompetitors)
-
-	r.Get("/predictions", predictionHandler.GetContests)
-
-	r.Group(func(r chi.Router) {
-		r.Use(middleware.AuthMiddlewareWithConfig(cfg))
-		r.Use(middleware.RBACMiddleware(types.ROLE_ADMIN))
-		r.Post("/predictions", predictionHandler.CreateContest)
-		r.Delete("/predictions/{id}", predictionHandler.DeleteContest)
-	})
-
-	r.Get("/allrounder/standings", allrounderHandler.GetStandings)
+	// Nem JSON válaszok: feltöltött képek, SSE streamek, OAuth átirányítások.
+	r.Handle("/uploads/*", http.StripPrefix("/uploads/", http.FileServer(http.Dir(cfg.UploadDir))))
 	r.Get("/allrounder/stream", allrounderHandler.StreamUpdates)
-
-	r.Get("/special/competitions", specialHandler.GetCompetitions)
-	r.Get("/special/report", specialHandler.GetReport)
 	r.Get("/special/stream", specialHandler.StreamUpdates)
 
 	r.Group(func(r chi.Router) {
-		r.Use(middleware.AuthMiddlewareWithConfig(cfg))
-		r.Use(middleware.RBACMiddleware(types.ROLE_ADMIN))
-
-		r.Put("/special/results/{liveResultId}/attempts/{attemptNumber}/elapsed", specialHandler.RecordElapsed)
-		r.Post("/allrounder/refresh", allrounderHandler.Refresh)
-	})
-
-	// Auth feature. A bejelentkezés a BACKENDEN indul (/login): ott születik a
-	// CSRF nonce, és ott áll össze a WCA authorize URL — lásd auth/state.go.
-	r.Group(func(r chi.Router) {
-		// Az egyetlen per-IP korlát: minden /login egy új CSRF nonce sütit, a
-		// callback egy WCA token-beváltást jelent. Globális korlátot NE tegyél
-		// ide — lásd a middleware.RateLimit kommentjét (SSR, versenyhelyszín).
+		// Az egyetlen per-IP korlát. Globális korlátot NE tegyél ide — lásd a
+		// middleware.RateLimit kommentjét (SSR, versenyhelyszín).
 		r.Use(middleware.RateLimit(cfg, middleware.LoginRateLimit))
-
 		r.Get("/login", authHandler.Login)
 		r.Get("/login/callback", authHandler.LoginCallback)
 	})
 
-	// /me route - csak bejelentkezett user-eknek
 	r.Group(func(r chi.Router) {
-		r.Use(middleware.AuthMiddlewareWithConfig(cfg)) // Use config
-		r.Get("/me", authHandler.Me)
-		r.Post("/logout", authHandler.Logout)
+		r.Use(middleware.JSON)
+
+		r.Get("/posts", postHandler.GetPosts)
+		r.Get("/posts/{id}", postHandler.GetPostByID)
+		r.Get("/posts/latest", postHandler.GetLatestPosts)
+
+		r.Get("/competitions/upcoming", competitionHandler.GetUpcoming)
+		r.Get("/competitions/{id}/psych-sheet/{eventId}", competitionHandler.GetPsychSheet)
+		r.Get("/competitions/{id}/competitors", competitionHandler.GetCompetitors)
+
+		r.Get("/predictions", predictionHandler.GetContests)
+
+		r.Get("/allrounder/standings", allrounderHandler.GetStandings)
+
+		r.Get("/special/competitions", specialHandler.GetCompetitions)
+		r.Get("/special/report", specialHandler.GetReport)
+
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.AuthMiddlewareWithConfig(cfg))
+			r.Get("/me", authHandler.Me)
+			r.Post("/logout", authHandler.Logout)
+		})
+
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.AuthMiddlewareWithConfig(cfg))
+			r.Use(middleware.RBACMiddleware(types.ROLE_ADMIN))
+
+			r.Post("/posts", postHandler.CreatePost)
+			r.Put("/posts/{id}", postHandler.UpdatePost)
+			r.Delete("/posts", postHandler.DeletePosts)
+
+			r.Post("/predictions", predictionHandler.CreateContest)
+			r.Delete("/predictions/{id}", predictionHandler.DeleteContest)
+
+			r.Post("/allrounder/refresh", allrounderHandler.Refresh)
+
+			r.Put("/special/results/{liveResultId}/attempts/{attemptNumber}/elapsed", specialHandler.RecordElapsed)
+		})
 	})
 
 	return r

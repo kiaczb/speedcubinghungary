@@ -9,38 +9,13 @@ import (
 	"speedcubinghungary/internal/wcalive"
 )
 
-const DefaultWCALiveURL = wcalive.DefaultURL
-
-type (
-	SocketClient      = wcalive.SocketClient
-	Broadcaster       = wcalive.Broadcaster
-	SubscriptionEvent = wcalive.SubscriptionEvent
-	Session           = wcalive.Session
-	Subscription      = wcalive.Subscription
-)
-
-func NewSocketClient(baseURL string) *SocketClient { return wcalive.NewSocketClient(baseURL) }
-func NewBroadcaster() *Broadcaster                 { return wcalive.NewBroadcaster() }
-
-func NewSession(name string, socket *SocketClient, refreshInterval time.Duration) *Session {
-	return wcalive.NewSession(name, socket, refreshInterval)
-}
-
-// A kör-feliratkozások kulcsa. A WCA Live kör-azonosítók globálisan egyediek,
-// ezért egyetlen socket több versenyt is kiszolgálhat ütközés nélkül.
-func subscriptionKey(liveRoundID int) string { return wcalive.RoundSubscriptionKey(liveRoundID) }
-func roundIDFromKey(key string) (int, error) { return wcalive.RoundIDFromKey(key) }
-
+// LiveClient a közös WCA Live kliens a Special saját lekérdezéseivel.
 type LiveClient struct {
 	*wcalive.Client
 }
 
 func NewLiveClient(baseURL string) *LiveClient {
 	return &LiveClient{Client: wcalive.NewClient(baseURL)}
-}
-
-func (c *LiveClient) query(ctx context.Context, doc string, variables map[string]any, out any) error {
-	return c.Client.Query(ctx, doc, variables, out)
 }
 
 const competitionQuery = `query Competition($id: ID!) {
@@ -72,7 +47,7 @@ func (c *LiveClient) GetCompetition(ctx context.Context, liveCompetitionID int) 
 		Competition *liveCompetition `json:"competition"`
 	}
 
-	err := c.query(ctx, competitionQuery, map[string]any{
+	err := c.Query(ctx, competitionQuery, map[string]any{
 		"id": strconv.Itoa(liveCompetitionID),
 	}, &data)
 	if err != nil {
@@ -127,7 +102,7 @@ func (c *LiveClient) GetRound(ctx context.Context, liveRoundID int) (*liveRound,
 		Round *liveRound `json:"round"`
 	}
 
-	err := c.query(ctx, RoundQuery, map[string]any{
+	err := c.Query(ctx, RoundQuery, map[string]any{
 		"id": strconv.Itoa(liveRoundID),
 	}, &data)
 	if err != nil {
@@ -163,7 +138,7 @@ func (c *LiveClient) ListCompetitions(ctx context.Context, filter string, from t
 	var data struct {
 		Competitions []liveCompetition `json:"competitions"`
 	}
-	if err := c.query(ctx, competitionsQuery, variables, &data); err != nil {
+	if err := c.Query(ctx, competitionsQuery, variables, &data); err != nil {
 		return nil, err
 	}
 
@@ -195,7 +170,7 @@ func (c *LiveClient) GetCompetitionInfo(ctx context.Context, liveCompetitionID i
 		Competition *liveCompetition `json:"competition"`
 	}
 
-	err := c.query(ctx, competitionInfoQuery, map[string]any{
+	err := c.Query(ctx, competitionInfoQuery, map[string]any{
 		"id": strconv.Itoa(liveCompetitionID),
 	}, &data)
 	if err != nil {

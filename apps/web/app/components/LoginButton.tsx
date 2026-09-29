@@ -6,23 +6,13 @@ import { useUser } from "./UserProvider";
 import Button from "./ui/Button";
 
 const LoginButton = () => {
-  const { user, isLoading, logout } = useUser();
+  const { user, isAdmin, isLoading, logout } = useUser();
   const pathname = usePathname();
 
-  // A bejelentkezést a BACKEND indítja (GET /login), nem itt építjük a WCA
-  // authorize URL-t.
-  //
-  // Miért: az OAuth `state` a folyamat CSRF-tokenje, ezért kitalálhatatlan,
-  // szerveroldalon generált nonce-nak kell lennie, amit HttpOnly sütiben tárolunk
-  // — böngészőből ezt nem lehet biztonságosan megtenni. Ráadásul így a
-  // client_id / redirect_uri / scope hármas egyetlen helyen (a backend
-  // configjában) él, nem csúszhat el a build időben beégetett NEXT_PUBLIC_*
-  // értékek és a backend WCA_* értékei között.
+  // A bejelentkezést a backend indítja (GET /login): ott születik az OAuth
+  // CSRF nonce, és ott áll össze a WCA authorize URL.
   const handleLogin = () => {
-    const loginUrl =
-      process.env.NEXT_PUBLIC_BACKEND_LOGIN || `${clientApiUrl()}/login`;
-
-    window.location.href = `${loginUrl}?redirect=${encodeURIComponent(pathname || "/")}`;
+    window.location.href = `${clientApiUrl()}/login?redirect=${encodeURIComponent(pathname || "/")}`;
   };
 
   if (isLoading) {
@@ -35,8 +25,6 @@ const LoginButton = () => {
   }
 
   if (user) {
-    const isAdmin = user.roles.includes("admin");
-
     return (
       <div className="flex items-center gap-2">
         {isAdmin && (

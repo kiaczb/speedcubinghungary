@@ -5,7 +5,6 @@ import (
 	"os"
 )
 
-// Config holds all environment configuration
 type Config struct {
 	Deployment      string
 	FrontendURL     string
@@ -14,39 +13,30 @@ type Config struct {
 	WCAClientID     string
 	WCAClientSecret string
 	WCARedirectURI  string
-	LogLevel        string
-	// UploadDir a feltöltött képek könyvtára a konténerben. Ide egy named volume
-	// van csatolva (lásd infra/docker-compose.yml), hogy a fájlok túléljék a
-	// konténer újraépítését. Nem kötelező env — az alapértelmezés a szokásos út.
-	UploadDir string
-	// WCALiveURL a WCA Live példány alap-URL-je (GraphQL + Phoenix socket).
-	// Nem kötelező env; teszteléshez lehet saját példányra állítani.
+	// UploadDir a feltöltött képek könyvtára; ide egy named volume van csatolva
+	// (lásd infra/docker-compose.yml), hogy a fájlok túléljék az újraépítést.
+	UploadDir  string
 	WCALiveURL string
 }
 
-// Load loads and validates environment variables
 func Load() (*Config, error) {
 	cfg := &Config{
-		// ⚠️ DEPLOYMENT és FRONTEND_URL szándékosan DEFAULT NÉLKÜL töltődik:
-		// mindkettő biztonsági következménnyel jár (a DEPLOYMENT szabja meg az
-		// auth cookie `Secure` flagjét, a FRONTEND_URL a CORS origint és a login
-		// utáni átirányítás célját). Ha lenne rájuk default, a lenti "kötelező"
-		// ellenőrzés sosem csapna le, és egy hiányzó DEPLOYMENT prodban NEM
-		// leállást, hanem némán fejlesztői módot — azaz Secure NÉLKÜLI auth
-		// cookie-t — eredményezne.
-		Deployment:      getEnv("DEPLOYMENT", ""),
-		FrontendURL:     getEnv("FRONTEND_URL", ""),
-		DatabaseURL:     getEnv("DATABASE_URL", ""),
-		JWTSecret:       getEnv("JWT_SECRET", ""),
-		WCAClientID:     getEnv("WCA_CLIENT_ID", ""),
-		WCAClientSecret: getEnv("WCA_CLIENT_SECRET", ""),
-		WCARedirectURI:  getEnv("WCA_REDIRECT_URI", ""),
-		LogLevel:        getEnv("LOG_LEVEL", "info"),
+		// ⚠️ DEPLOYMENT és FRONTEND_URL szándékosan DEFAULT NÉLKÜL töltődik: a
+		// DEPLOYMENT szabja meg az auth cookie `Secure` flagjét, a FRONTEND_URL a
+		// CORS origint és a login utáni átirányítás célját. Default mellett egy
+		// prodban hiányzó DEPLOYMENT nem leállást, hanem némán Secure nélküli
+		// sütit eredményezne.
+		Deployment:      os.Getenv("DEPLOYMENT"),
+		FrontendURL:     os.Getenv("FRONTEND_URL"),
+		DatabaseURL:     os.Getenv("DATABASE_URL"),
+		JWTSecret:       os.Getenv("JWT_SECRET"),
+		WCAClientID:     os.Getenv("WCA_CLIENT_ID"),
+		WCAClientSecret: os.Getenv("WCA_CLIENT_SECRET"),
+		WCARedirectURI:  os.Getenv("WCA_REDIRECT_URI"),
 		UploadDir:       getEnv("UPLOAD_DIR", "/data/uploads"),
 		WCALiveURL:      getEnv("WCA_LIVE_URL", "https://live.worldcubeassociation.org"),
 	}
 
-	// Validate required variables
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
@@ -54,7 +44,6 @@ func Load() (*Config, error) {
 	return cfg, nil
 }
 
-// Validate checks that all required variables are set
 func (c *Config) Validate() error {
 	required := map[string]string{
 		"DATABASE_URL":      c.DatabaseURL,
@@ -77,16 +66,14 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("missing required environment variables: %v\n\nPlease check your .env file or environment setup", missing)
 	}
 
-	// A DEPLOYMENT értékkészletét is ellenőrizzük: egy elgépelt "produciton"
-	// nem üres, tehát a fenti ellenőrzésen átcsúszna, viszont az IsProduction()
-	// hamisat adna rá — az elgépelés így némán viselkedésváltozás lenne.
+	// Egy elgépelt "produciton" nem üres, tehát a fenti ellenőrzésen átcsúszna,
+	// és némán fejlesztői módként viselkedne.
 	switch c.Deployment {
 	case "development", "test", "production":
 	default:
 		return fmt.Errorf("DEPLOYMENT must be one of development|test|production, got %q", c.Deployment)
 	}
 
-	// Validate JWT_SECRET length (should be at least 32 bytes / 64 hex chars)
 	if len(c.JWTSecret) < 32 {
 		return fmt.Errorf("JWT_SECRET must be at least 32 characters long (use 'openssl rand -hex 32' to generate)")
 	}
@@ -94,26 +81,13 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// getEnv gets an environment variable with a default value
 func getEnv(key, defaultValue string) string {
-	value := os.Getenv(key)
-	if value == "" {
-		return defaultValue
+	if value := os.Getenv(key); value != "" {
+		return value
 	}
-	return value
+	return defaultValue
 }
 
-// IsDevelopment returns true if running in development mode
 func (c *Config) IsDevelopment() bool {
 	return c.Deployment == "development"
-}
-
-// IsProduction returns true if running in production mode
-func (c *Config) IsProduction() bool {
-	return c.Deployment == "production"
-}
-
-// IsTest returns true if running in test mode
-func (c *Config) IsTest() bool {
-	return c.Deployment == "test"
 }

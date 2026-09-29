@@ -10,16 +10,14 @@ type Placement struct {
 }
 
 type RoundResults struct {
-	EventID     string
-	RoundTypeID string
-	Rank        int
-	Placements  []Placement
+	EventID    string
+	Rank       int
+	Placements []Placement
 }
 
 type CompetitionRounds struct {
 	CompetitionWCAID string
 	Rounds           []RoundResults
-	Live             bool
 }
 
 var roundRanks = map[string]int{
@@ -61,10 +59,9 @@ func RoundsFromResults(results []Result) []RoundResults {
 	rounds := make([]RoundResults, 0, len(grouped))
 	for k, placements := range grouped {
 		rounds = append(rounds, RoundResults{
-			EventID:     k.eventID,
-			RoundTypeID: k.roundTypeID,
-			Rank:        roundRank(k.roundTypeID),
-			Placements:  placements,
+			EventID:    k.eventID,
+			Rank:       roundRank(k.roundTypeID),
+			Placements: placements,
 		})
 	}
 

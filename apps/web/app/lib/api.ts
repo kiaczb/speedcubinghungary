@@ -13,6 +13,8 @@
  * szerver hibaüzenetét.
  */
 
+import { unstable_rethrow } from "next/navigation";
+
 const LOCAL_API_URL = "http://localhost:8080";
 
 export function serverApiUrl(): string {
@@ -63,10 +65,8 @@ async function errorFrom(response: Response): Promise<ApiError> {
 type ClientInit = Omit<RequestInit, "headers"> & {
   headers?: Record<string, string>;
   /**
-   * JSON törzs. Ezzel a Content-Type is beáll — kézzel megadva könnyű
-   * elfelejteni, és a backend akkor némán a multipart ágra esne.
-   * FormData-hoz NE ezt használd, hanem a `body`-t: a boundary miatt a
-   * Content-Type fejlécet a böngészőnek kell beállítania.
+   * JSON törzs, a Content-Type-pal együtt. FormData-hoz NE ezt használd, hanem
+   * a `body`-t: a boundary miatt a Content-Type fejlécet a böngésző állítja be.
    */
   json?: unknown;
 };
@@ -121,6 +121,9 @@ export async function serverJson<T>(path: string, fallback: T): Promise<T> {
 
     return (await response.json()) as T;
   } catch (error) {
+    // A no-store fetch a Next belső „dinamikus renderelés” jelzését is
+    // hibaként dobja — azt tovább kell engedni, nem backend-hiba.
+    unstable_rethrow(error);
     console.error(`Nem sikerült elérni a backendet (${path}):`, error);
     return fallback;
   }

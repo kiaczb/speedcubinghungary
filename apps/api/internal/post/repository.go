@@ -35,78 +35,69 @@ func imagePathsParam(paths []string) any {
 	return pq.Array(paths)
 }
 
-func (r *PostgresRepository) GetAll() ([]Post, error) {
-	rows, err := r.db.Query(`
-		SELECT id, tag, title, content, image_paths, created_at
-		FROM posts
-		ORDER BY created_at DESC
-	`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var posts = make([]Post, 0)
-	for rows.Next() {
-		var p Post
-		if err := rows.Scan(&p.ID, &p.Tag, &p.Title, &p.Content, pq.Array(&p.ImagePaths), &p.CreatedAt); err != nil {
-			return nil, err
-		}
-		if p.ImagePaths == nil {
-			p.ImagePaths = []string{}
-		}
-		posts = append(posts, p)
-	}
-
-	return posts, rows.Err()
+type rowScanner interface {
+	Scan(dest ...any) error
 }
-func (r *PostgresRepository) GetLatestPosts() ([]Post, error) {
-	rows, err := r.db.Query(`
-		SELECT id, tag, title, content, image_paths, created_at
-		FROM posts
-		ORDER BY created_at DESC
-		LIMIT 3
-	`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
 
-	var posts = make([]Post, 0)
-
-	for rows.Next() {
-		var p Post
-		err := rows.Scan(&p.ID, &p.Tag, &p.Title, &p.Content, pq.Array(&p.ImagePaths), &p.CreatedAt)
-		if err != nil {
-			return nil, err
-		}
-		if p.ImagePaths == nil {
-			p.ImagePaths = []string{}
-		}
-		posts = append(posts, p)
-	}
-	return posts, rows.Err()
-}
-func (r *PostgresRepository) GetByID(id string) (Post, error) {
+// scanPost egy `id, tag, title, content, image_paths, created_at` sort olvas be.
+// A kép nélküli poszt üres tömböt kap, nem null-t.
+func scanPost(row rowScanner) (Post, error) {
 	var p Post
-	err := r.db.QueryRow(`
-		SELECT id, tag, title, content, image_paths, created_at
-		FROM posts
-		WHERE id = $1
-	`, id).Scan(&p.ID, &p.Tag, &p.Title, &p.Content, pq.Array(&p.ImagePaths), &p.CreatedAt)
-	// A nem létező poszt NEM szerverhiba: saját sentinel hibává fordítjuk, hogy
-	// a handler 404-et adhasson 500 helyett (és ne a nyers sql hiba menjen ki).
-	if errors.Is(err, sql.ErrNoRows) {
-		return Post{}, ErrPostNotFound
-	}
-	if err != nil {
+	if err := row.Scan(&p.ID, &p.Tag, &p.Title, &p.Content, pq.Array(&p.ImagePaths), &p.CreatedAt); err != nil {
 		return Post{}, err
 	}
 	if p.ImagePaths == nil {
 		p.ImagePaths = []string{}
 	}
-
 	return p, nil
+}
+
+func (r *PostgresRepository) listPosts(query string) ([]Post, error) {
+	rows, err := r.db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	posts := make([]Post, 0)
+	for rows.Next() {
+		p, err := scanPost(rows)
+		if err != nil {
+			return nil, err
+		}
+		posts = append(posts, p)
+	}
+
+	return posts, rows.Err()
+}
+
+func (r *PostgresRepository) GetAll() ([]Post, error) {
+	return r.listPosts(`
+		SELECT id, tag, title, content, image_paths, created_at
+		FROM posts
+		ORDER BY created_at DESC
+	`)
+}
+
+func (r *PostgresRepository) GetLatestPosts() ([]Post, error) {
+	return r.listPosts(`
+		SELECT id, tag, title, content, image_paths, created_at
+		FROM posts
+		ORDER BY created_at DESC
+		LIMIT 3
+	`)
+}
+
+func (r *PostgresRepository) GetByID(id string) (Post, error) {
+	p, err := scanPost(r.db.QueryRow(`
+		SELECT id, tag, title, content, image_paths, created_at
+		FROM posts
+		WHERE id = $1
+	`, id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return Post{}, ErrPostNotFound
+	}
+	return p, err
 }
 
 func (r *PostgresRepository) Create(p Post) error {
@@ -162,8 +153,6 @@ func (r *PostgresRepository) Update(p Post) error {
 		return err
 	}
 
-	// Ha nincs ilyen id, 0 sor módosul — ezt 404-ként akarjuk jelezni, nem néma
-	// sikerként (a handler az ErrPostNotFound-ot fordítja HTTP státuszra).
 	rows, err := res.RowsAffected()
 	if err != nil {
 		return err

@@ -32,11 +32,10 @@ def ProcessPerson(person, events ,isHungarianComp):
 
     registered_event_ids = set(person["registration"]["eventIds"])
     display_name = person["name"]
-    
 
     competitor = CompetitorWithRecords(display_name, person["wcaId"])
 
-    has_any_result = False  # <-- új flag
+    has_any_result = False
 
     def IsPersonResult(result):
         return result.get("personId") == person["registrantId"]
@@ -52,18 +51,18 @@ def ProcessPerson(person, events ,isHungarianComp):
             if IsPersonResult(result)
         ]
 
-        # Ha ebben az eventben nincs eredménye, egyszerűen továbblépünk
         if not round_result_pairs:
             continue
 
-        has_any_result = True  # <-- igen, van legalább egy eredménye
+        has_any_result = True
 
         for _round, result in round_result_pairs:
             UpdateRecords("average", result["average"], competitor, event["id"], localNationalRecords, badges)
             UpdateRecords("single", result["best"], competitor, event["id"], localNationalRecords, badges)
 
+    # Csak az esik ki, akinek egyetlen versenyszámban sincs eredménye.
     if not has_any_result:
-        return None  # <-- csak akkor dobjuk el az egész embert, ha SEHOL nincs eredménye
+        return None
 
     AddCompetitionToCompetitor(competitor)
 
@@ -78,7 +77,7 @@ def ProcessPerson(person, events ,isHungarianComp):
 
 
 def IsHungarianCompetition(comp):
-     return True if comp["country_iso2"] == "HU" else False
+    return comp["country_iso2"] == "HU"
 
 def GetCompetitorsForCompetition(comp):
     url = f"https://www.worldcubeassociation.org/api/v0/competitions/{comp['id']}/wcif/public"
@@ -101,20 +100,14 @@ def GetCompetitorsForCompetition(comp):
             wait = 4 ** attempt
             time.sleep(wait)
 
-    # itt már biztosan response.status_code == 200
     competitionWCIF = response.json()
     persons = competitionWCIF["persons"]
     events = competitionWCIF["events"]
-    competitors = []
-
 
     with ThreadPoolExecutor() as executor:
         results = list(executor.map(lambda p: ProcessPerson(p, events, IsHungarianCompetition(comp)), persons))
 
-    # Csak a nem None versenyzőket adjuk hozzá
-    competitors = [c for c in results if c]
-
-    return competitors
+    return [c for c in results if c]
 
 def GetCompetitionsParallel(competitions):
     results = []
@@ -122,7 +115,7 @@ def GetCompetitionsParallel(competitions):
     def process(comp):
         competitors = GetCompetitorsForCompetition(comp)
         if competitors:
-            return Competition(comp["name"], comp["country_iso2"], comp["start_date"], comp["end_date"], IsHungarianCompetition(comp), competitors)
+            return Competition(comp["name"], comp["country_iso2"], comp["start_date"], comp["end_date"], competitors)
 
     with ThreadPoolExecutor(max_workers=3) as executor:
         futures = [executor.submit(process, comp) for comp in competitions]
@@ -130,7 +123,7 @@ def GetCompetitionsParallel(competitions):
             try:
                 result = future.result()
                 if result:
-                    results.append(result)  # (comp, competitors)
+                    results.append(result)
             except Exception as e:
                 print(f"Hiba a verseny feldolgozásakor: {e}")
 

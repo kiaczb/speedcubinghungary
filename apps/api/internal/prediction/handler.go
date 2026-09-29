@@ -8,8 +8,6 @@ import (
 	"speedcubinghungary/internal/middleware"
 	"time"
 
-	"speedcubinghungary/internal/types"
-
 	"github.com/go-chi/chi/v5"
 )
 
@@ -31,13 +29,10 @@ func (h *Handler) GetContests(w http.ResponseWriter, r *http.Request) {
 }
 
 type createContestRequest struct {
-	CompetitionID      string   `json:"competitionId"`
-	PredictionDeadline string   `json:"predictionDeadline"`
-	PodiumEventIDs     []string `json:"podiumEventIds"`
-	ExtraQuestions     []struct {
-		Prompt string                       `json:"prompt"`
-		Type   types.PredictionQuestionType `json:"type"`
-	} `json:"extraQuestions"`
+	CompetitionID      string             `json:"competitionId"`
+	PredictionDeadline string             `json:"predictionDeadline"`
+	PodiumEventIDs     []string           `json:"podiumEventIds"`
+	ExtraQuestions     []NewExtraQuestion `json:"extraQuestions"`
 }
 
 // CreateContest handles POST /predictions.
@@ -60,12 +55,7 @@ func (h *Handler) CreateContest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	questions := make([]NewExtraQuestion, len(req.ExtraQuestions))
-	for i, q := range req.ExtraQuestions {
-		questions[i] = NewExtraQuestion{Prompt: q.Prompt, Type: q.Type}
-	}
-
-	if err := h.service.CreateContest(req.CompetitionID, deadline, req.PodiumEventIDs, questions, user.UserID); err != nil {
+	if err := h.service.CreateContest(req.CompetitionID, deadline, req.PodiumEventIDs, req.ExtraQuestions, user.UserID); err != nil {
 		httperr.Write(w, r, errorStatus(err), err)
 		return
 	}
@@ -75,13 +65,7 @@ func (h *Handler) CreateContest(w http.ResponseWriter, r *http.Request) {
 
 // DeleteContest handles DELETE /predictions/{id}.
 func (h *Handler) DeleteContest(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	if id == "" {
-		http.Error(w, "missing prediction id", http.StatusBadRequest)
-		return
-	}
-
-	if err := h.service.DeleteContest(id); err != nil {
+	if err := h.service.DeleteContest(chi.URLParam(r, "id")); err != nil {
 		httperr.Write(w, r, errorStatus(err), err)
 		return
 	}

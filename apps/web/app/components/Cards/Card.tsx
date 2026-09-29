@@ -1,12 +1,6 @@
 import React from "react";
 
-type CardVariant = "elevated" | "inverse";
 type CardPadding = "none" | "md" | "lg";
-
-const VARIANTS: Record<CardVariant, string> = {
-  elevated: "bg-surface border border-line shadow-card",
-  inverse: "bg-surface-inverse text-white border border-white/10 shadow-panel",
-};
 
 const PADDINGS: Record<CardPadding, string> = {
   none: "",
@@ -15,7 +9,6 @@ const PADDINGS: Record<CardPadding, string> = {
 };
 
 type CardProps = {
-  variant?: CardVariant;
   padding?: CardPadding;
   /** Hoverre megemeli a kártyát — csak kattintható kártyákon használd. */
   interactive?: boolean;
@@ -24,15 +17,13 @@ type CardProps = {
 };
 
 const Card = ({
-  variant = "elevated",
   padding = "none",
   interactive = false,
   className = "",
   children,
 }: CardProps) => {
   const classes = [
-    "rounded-card w-full",
-    VARIANTS[variant],
+    "rounded-card w-full bg-surface border border-line shadow-card",
     PADDINGS[padding],
     interactive
       ? "transition-[box-shadow,transform,border-color] duration-200 ease-smooth hover:-translate-y-0.5 hover:shadow-card-hover hover:border-line-strong"

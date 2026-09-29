@@ -5,11 +5,8 @@ import { FaExclamationTriangle } from "react-icons/fa";
 import Card from "@/app/components/Cards/Card";
 import { controlClass } from "@/app/components/ui/Field";
 import { formatTimeInput, parseTimeInput } from "@/app/lib/time";
-import { formatAttemptResult, formatCentiseconds } from "../lib/time";
+import { DNF, DNS, formatAttemptResult, formatCentiseconds } from "../lib/time";
 import type { Competitor, CompetitorAttempt, CompetitorRound } from "../types";
-
-const DNF = -1;
-const DNS = -2;
 
 type CompetitorCardProps = {
   competitor: Competitor;

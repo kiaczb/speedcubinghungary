@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"speedcubinghungary/internal/wcalive"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -18,7 +20,7 @@ const (
 )
 
 func newTestTracker(liveURL string) *Tracker {
-	return NewTracker(NewLiveClient(liveURL), NewSocketClient(liveURL), NewBroadcaster())
+	return NewTracker(NewLiveClient(liveURL), wcalive.NewSocketClient(liveURL), wcalive.NewBroadcaster())
 }
 
 func TestTracker_LoadsAlreadyFinishedEvents(t *testing.T) {
@@ -179,7 +181,7 @@ func TestTracker_SubscribesOnlyToWatchedCompetitions(t *testing.T) {
 
 	tracker.session.SyncSubscriptions()
 
-	assert.Equal(t, []string{subscriptionKey(147464)}, tracker.session.Subscriptions())
+	assert.Equal(t, []string{wcalive.RoundSubscriptionKey(147464)}, tracker.session.Subscriptions())
 }
 
 func TestTracker_CapsConcurrentlyTrackedCompetitions(t *testing.T) {
@@ -223,12 +225,12 @@ func TestOpenRounds_SkipsUnopenedRounds(t *testing.T) {
 }
 
 func TestSubscriptionKeyRoundTrip(t *testing.T) {
-	roundID, err := roundIDFromKey(subscriptionKey(147464))
+	roundID, err := wcalive.RoundIDFromKey(wcalive.RoundSubscriptionKey(147464))
 
 	require.NoError(t, err)
 	assert.Equal(t, 147464, roundID)
 
-	_, err = roundIDFromKey("nem-ilyen-kulcs")
+	_, err = wcalive.RoundIDFromKey("nem-ilyen-kulcs")
 	assert.Error(t, err)
 }
 

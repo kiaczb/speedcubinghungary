@@ -4,30 +4,11 @@ import (
 	"context"
 	"sort"
 	"strconv"
-	"time"
 
 	"speedcubinghungary/internal/wcalive"
 )
 
-type (
-	SocketClient      = wcalive.SocketClient
-	Broadcaster       = wcalive.Broadcaster
-	SubscriptionEvent = wcalive.SubscriptionEvent
-	Session           = wcalive.Session
-	Subscription      = wcalive.Subscription
-)
-
-func NewSocketClient(baseURL string) *SocketClient { return wcalive.NewSocketClient(baseURL) }
-func NewBroadcaster() *Broadcaster                 { return wcalive.NewBroadcaster() }
-
-func NewSession(name string, socket *SocketClient, refreshInterval time.Duration) *Session {
-	return wcalive.NewSession(name, socket, refreshInterval)
-}
-
-// A kör-feliratkozások kulcsa; a WCA Live kör-azonosítók globálisan egyediek.
-func subscriptionKey(liveRoundID int) string { return wcalive.RoundSubscriptionKey(liveRoundID) }
-func roundIDFromKey(key string) (int, error) { return wcalive.RoundIDFromKey(key) }
-
+// LiveClient a közös WCA Live kliens az All-Rounder saját lekérdezéseivel.
 type LiveClient struct {
 	*wcalive.Client
 }
@@ -207,9 +188,8 @@ func roundResultsFromLive(identity roundIdentity, round liveRound) RoundResults 
 	})
 
 	return RoundResults{
-		EventID:     identity.EventID,
-		RoundTypeID: strconv.Itoa(identity.RoundNumber),
-		Rank:        identity.RoundNumber,
-		Placements:  placements,
+		EventID:    identity.EventID,
+		Rank:       identity.RoundNumber,
+		Placements: placements,
 	}
 }

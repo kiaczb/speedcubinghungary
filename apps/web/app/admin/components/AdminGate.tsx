@@ -5,12 +5,10 @@ import Button from "@/app/components/ui/Button";
 import StateMessage from "@/app/components/ui/StateMessage";
 import AdminToolGrid from "./AdminToolGrid";
 
-// Kliensoldali RBAC-kapu: a szerepkör csak a `/me`-ből (auth cookie) derül ki,
-// ezért a tartalom csak akkor renderelődik, ha ez megérkezett és admin szerepkört
-// tartalmaz. Ugyanazt a mintát követi, mint a `PostsListClient` admin-gate-je.
+// Kliensoldali kapu: a szerepkör csak a `/me` válaszából derül ki, ezért a
+// tartalom csak akkor renderelődik, ha az megérkezett és admint jelez.
 export default function AdminGate() {
-  const { user, isLoading } = useUser();
-  const isAdmin = user?.roles.includes("admin");
+  const { user, isAdmin, isLoading } = useUser();
 
   if (isLoading) {
     return (
