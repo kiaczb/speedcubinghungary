@@ -11,8 +11,7 @@ type Props = {
 };
 
 const PredictionList = ({ predictions }: Props) => {
-  const { user } = useUser();
-  const isAdmin = user?.roles.includes("admin");
+  const { isAdmin } = useUser();
 
   return (
     <>

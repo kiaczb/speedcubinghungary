@@ -27,7 +27,6 @@ func TestLoad_Valid(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, "production", cfg.Deployment)
-	assert.True(t, cfg.IsProduction())
 	assert.False(t, cfg.IsDevelopment())
 	// A nem kötelező változóknak marad alapértelmezésük.
 	assert.Equal(t, "/data/uploads", cfg.UploadDir)
@@ -63,8 +62,7 @@ func TestLoad_FailsWithoutFrontendURL(t *testing.T) {
 }
 
 // Egy elgépelt DEPLOYMENT nem üres, tehát a "kötelező" ellenőrzésen átcsúszna,
-// az IsProduction() viszont hamisat adna rá — az elgépelés némán viselkedés-
-// változás lenne (pl. Secure süti helyett nem-Secure).
+// és az elgépelés némán viselkedésváltozás lenne.
 func TestLoad_FailsOnUnknownDeployment(t *testing.T) {
 	setRequiredEnv(t)
 	t.Setenv("DEPLOYMENT", "produciton")

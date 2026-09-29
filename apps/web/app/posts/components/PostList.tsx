@@ -11,8 +11,7 @@ type Props = {
 };
 
 export default function PostsListClient({ posts }: Props) {
-  const user = useUser();
-  const isAdmin = user?.user?.roles.includes("admin");
+  const { isAdmin } = useUser();
 
   return (
     <>

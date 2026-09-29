@@ -44,7 +44,7 @@ func TestService_SweepsExpiredCacheEntries(t *testing.T) {
 // esett volna ki, pedig csak rossz az azonosító.
 func TestHandler_MapsWCANotFoundTo404(t *testing.T) {
 	cases := map[error]int{
-		ErrNotFound:               http.StatusNotFound,
+		ErrNotFound:              http.StatusNotFound,
 		errors.New("status 503"): http.StatusBadGateway,
 	}
 

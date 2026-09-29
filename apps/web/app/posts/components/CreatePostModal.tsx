@@ -20,7 +20,6 @@ const ACCEPTED_IMAGE_TYPES = [
   "image/gif",
 ];
 
-
 type GalleryItem =
   | { kind: "existing"; path: string; url: string }
   | { kind: "new"; file: File; url: string };
@@ -145,20 +144,17 @@ export default function CreatePostModal({ onClose, post }: Props) {
       return;
     }
 
-    // multipart/form-data — a Content-Type fejlécet a böngésző állítja be
-    // (a boundary miatt kézzel NEM szabad megadni).
     const formData = new FormData();
     formData.append("title", title.trim());
     formData.append("tag", tag);
     formData.append("content", content.trim());
 
-
+    // Az `images` fájlok sorrendje tölti ki az image_order "new" helyeit.
     for (const item of images) {
       if (item.kind === "new") formData.append("images", item.file);
     }
 
     if (isEdit) {
-
       formData.append(
         "image_order",
         JSON.stringify(
@@ -169,8 +165,7 @@ export default function CreatePostModal({ onClose, post }: Props) {
 
     setSubmitting(true);
     try {
-      // FormData törzs: a Content-Type fejlécet a böngésző állítja be
-      // (a boundary miatt kézzel NEM szabad megadni) — ezért `body`, nem `json`.
+      // FormData: `body`, nem `json` — a Content-Type-ot a böngésző állítja be.
       await clientFetch(isEdit ? `/posts/${post!.id}` : "/posts", {
         method: isEdit ? "PUT" : "POST",
         body: formData,

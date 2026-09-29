@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"speedcubinghungary/internal/wcalive"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -23,7 +25,7 @@ func TestHandler_GetReport_QueryParams(t *testing.T) {
 	repo := new(mockRepo)
 	repo.On("ListRecordedTimes", testCompetitionID).Return([]RecordedTime{}, nil)
 
-	handler := NewHandler(newTestService(repo, server.URL, NewBroadcaster()))
+	handler := NewHandler(newTestService(repo, server.URL, wcalive.NewBroadcaster()))
 
 	get := func(url string) (*httptest.ResponseRecorder, Report) {
 		rec := httptest.NewRecorder()
@@ -68,7 +70,7 @@ func TestHandler_GetReport_QueryParams(t *testing.T) {
 
 func TestHandler_GetCompetitions(t *testing.T) {
 	server := fakeWCALive(t)
-	handler := NewHandler(newTestService(new(mockRepo), server.URL, NewBroadcaster()))
+	handler := NewHandler(newTestService(new(mockRepo), server.URL, wcalive.NewBroadcaster()))
 
 	rec := httptest.NewRecorder()
 	handler.GetCompetitions(rec, httptest.NewRequest(http.MethodGet, "/special/competitions", nil))

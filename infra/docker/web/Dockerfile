@@ -28,9 +28,7 @@ COPY apps/web/ .
 # NEXT_PUBLIC_* are inlined into the browser bundle at BUILD time, so they must
 # arrive as build args (provided by the test/prod compose overrides).
 ARG NEXT_PUBLIC_API_URL
-ARG NEXT_PUBLIC_BACKEND_LOGIN
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL \
-    NEXT_PUBLIC_BACKEND_LOGIN=$NEXT_PUBLIC_BACKEND_LOGIN \
     NEXT_TELEMETRY_DISABLED=1 \
     NODE_ENV=production
 RUN npm run build

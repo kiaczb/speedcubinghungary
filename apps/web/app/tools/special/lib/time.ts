@@ -1,3 +1,7 @@
+/** A WCA eredménykódjai: -1 DNF, -2 DNS, 0 nem teljesített (cutoff). */
+export const DNF = -1;
+export const DNS = -2;
+
 export function formatCentiseconds(centiseconds: number): string {
   const negative = centiseconds < 0;
   const value = Math.abs(centiseconds);
@@ -14,12 +18,9 @@ export function formatCentiseconds(centiseconds: number): string {
   return negative ? `-${body}` : body;
 }
 
-// Az időbevitel (formázás és érvényesség) a KÖZÖS app/lib/time.ts-ben van — itt
-// csak az marad, ami a WCA eredmények megjelenítésére jellemző.
-
 export function formatAttemptResult(result: number): string {
-  if (result === -1) return "DNF";
-  if (result === -2) return "DNS";
+  if (result === DNF) return "DNF";
+  if (result === DNS) return "DNS";
   if (result === 0) return "—";
   return formatCentiseconds(result);
 }

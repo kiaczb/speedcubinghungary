@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   FaCircle,
@@ -22,6 +22,15 @@ import type { Competition, Competitor, SpecialReport } from "../types";
 
 const FALLBACK_POLL_MS = 30_000;
 
+function fetchReport(
+  competition: string,
+  round: number | null,
+): Promise<SpecialReport> {
+  const roundParam = round === null ? "" : `&round=${round}`;
+  return clientJson<SpecialReport>(
+    `/special/report?competition=${encodeURIComponent(competition)}${roundParam}`,
+  );
+}
 
 function matchesQuery(competitor: Competitor, query: string): boolean {
   const needle = query.trim().toLowerCase();
@@ -35,8 +44,7 @@ function matchesQuery(competitor: Competitor, query: string): boolean {
 }
 
 const SpecialView = () => {
-  const { user } = useUser();
-  const isAdmin = user?.roles.includes("admin") ?? false;
+  const { isAdmin } = useUser();
 
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -74,19 +82,6 @@ const SpecialView = () => {
     router.replace("/tools/special", { scroll: false });
   };
 
-  const fetchReport = useCallback(
-    async (
-      competition: string,
-      round: number | null,
-    ): Promise<SpecialReport> => {
-      const path = `/special/report?competition=${encodeURIComponent(competition)}${
-        round === null ? "" : `&round=${round}`
-      }`;
-      return clientJson<SpecialReport>(path);
-    },
-    [],
-  );
-
   useEffect(() => {
     selectedRoundRef.current = selectedRound;
 
@@ -108,7 +103,7 @@ const SpecialView = () => {
     return () => {
       cancelled = true;
     };
-  }, [competitionId, selectedRound, fetchReport]);
+  }, [competitionId, selectedRound]);
 
   useEffect(() => {
     if (!competitionId) return;
@@ -140,7 +135,7 @@ const SpecialView = () => {
       clearInterval(fallback);
       setLive(false);
     };
-  }, [competitionId, fetchReport]);
+  }, [competitionId]);
 
   const handleRecord = async (
     liveResultId: number,

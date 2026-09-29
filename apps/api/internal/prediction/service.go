@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"speedcubinghungary/internal/competition"
-	"speedcubinghungary/internal/types"
 
 	"github.com/google/uuid"
 )
@@ -27,13 +26,6 @@ type Service struct {
 
 func NewService(repo Repository, competitions CompetitionLookup) *Service {
 	return &Service{repo: repo, competitions: competitions}
-}
-
-// NewExtraQuestion egy létrehozáskor kapott extra kérdés — a service adja a
-// szervergenerált ID-t és a sorrendet, a hívó csak a szöveget és a típust adja meg.
-type NewExtraQuestion struct {
-	Prompt string
-	Type   types.PredictionQuestionType
 }
 
 // GetContests az összes tippversenyt adja vissza, a WCA verseny-metaadatokkal
@@ -153,12 +145,12 @@ func buildContest(row contestRow, comp competition.Competition, podiumEventIDs [
 // város, dátum) nem itt validáljuk — a competitionID a WCA-tól jön, a
 // listázáskor derül ki, ha érvénytelen (lásd GetContests).
 func (s *Service) CreateContest(competitionID string, deadline time.Time, podiumEventIDs []string, questions []NewExtraQuestion, createdBy int) error {
-	extraQuestions := make([]ExtraQuestion, len(questions))
+	trimmed := make([]NewExtraQuestion, len(questions))
 	for i, q := range questions {
-		extraQuestions[i] = ExtraQuestion{Prompt: strings.TrimSpace(q.Prompt), Type: q.Type}
+		trimmed[i] = NewExtraQuestion{Prompt: strings.TrimSpace(q.Prompt), Type: q.Type}
 	}
 
-	if err := ValidateNewContest(competitionID, deadline, podiumEventIDs, extraQuestions); err != nil {
+	if err := ValidateNewContest(competitionID, deadline, podiumEventIDs, trimmed); err != nil {
 		return err
 	}
 
@@ -169,8 +161,8 @@ func (s *Service) CreateContest(competitionID string, deadline time.Time, podium
 		CreatedBy:          createdBy,
 	}
 
-	questionRows := make([]extraQuestionRow, len(extraQuestions))
-	for i, q := range extraQuestions {
+	questionRows := make([]extraQuestionRow, len(trimmed))
+	for i, q := range trimmed {
 		questionRows[i] = extraQuestionRow{
 			ID:      uuid.NewString(),
 			Prompt:  q.Prompt,

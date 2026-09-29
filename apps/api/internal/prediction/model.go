@@ -24,6 +24,13 @@ type ExtraQuestion struct {
 	Type   types.PredictionQuestionType `json:"type"`
 }
 
+// NewExtraQuestion egy létrehozáskor kapott extra kérdés; az azonosítót és a
+// sorrendet a service adja.
+type NewExtraQuestion struct {
+	Prompt string                       `json:"prompt"`
+	Type   types.PredictionQuestionType `json:"type"`
+}
+
 // Contest egy tippverseny — egy WCA versenyhez tartozó dobogó-tippek +
 // extra kérdések konfigurációja. A JSON kulcsok a frontend
 // PredictionContest típusával egyeznek (app/tools/prediction/types.ts).

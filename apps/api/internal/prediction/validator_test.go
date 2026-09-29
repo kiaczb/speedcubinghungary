@@ -10,11 +10,11 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func validNewContest() (string, time.Time, []string, []ExtraQuestion) {
+func validNewContest() (string, time.Time, []string, []NewExtraQuestion) {
 	return "HungarianOpen2026",
 		time.Now().Add(24 * time.Hour),
 		[]string{"333", "222"},
-		[]ExtraQuestion{{Prompt: "Hány rekord születik?", Type: types.QUESTION_NUMBER}}
+		[]NewExtraQuestion{{Prompt: "Hány rekord születik?", Type: types.QUESTION_NUMBER}}
 }
 
 func TestValidateNewContest_Valid(t *testing.T) {
@@ -70,32 +70,32 @@ func TestValidateNewContest_ExtraQuestions(t *testing.T) {
 
 	tests := []struct {
 		name      string
-		questions []ExtraQuestion
+		questions []NewExtraQuestion
 		wantErr   error
 	}{
 		{
 			"empty prompt",
-			[]ExtraQuestion{{Prompt: "", Type: types.QUESTION_NUMBER}},
+			[]NewExtraQuestion{{Prompt: "", Type: types.QUESTION_NUMBER}},
 			ErrEmptyQuestionPrompt,
 		},
 		{
 			"invalid type",
-			[]ExtraQuestion{{Prompt: "Ki nyer?", Type: types.PredictionQuestionType("banán")}},
+			[]NewExtraQuestion{{Prompt: "Ki nyer?", Type: types.PredictionQuestionType("banán")}},
 			ErrInvalidQuestionType,
 		},
 		{
 			"person type valid",
-			[]ExtraQuestion{{Prompt: "Ki nyeri a 3x3x3-at?", Type: types.QUESTION_PERSON}},
+			[]NewExtraQuestion{{Prompt: "Ki nyeri a 3x3x3-at?", Type: types.QUESTION_PERSON}},
 			nil,
 		},
 		{
 			"time type valid",
-			[]ExtraQuestion{{Prompt: "Mi lesz a győztes átlaga?", Type: types.QUESTION_TIME}},
+			[]NewExtraQuestion{{Prompt: "Mi lesz a győztes átlaga?", Type: types.QUESTION_TIME}},
 			nil,
 		},
 		{
 			"text type valid",
-			[]ExtraQuestion{{Prompt: "Milyen új trükköt fogunk látni?", Type: types.QUESTION_TEXT}},
+			[]NewExtraQuestion{{Prompt: "Milyen új trükköt fogunk látni?", Type: types.QUESTION_TEXT}},
 			nil,
 		},
 		{
@@ -136,17 +136,17 @@ func TestValidateNewContest_RejectsDuplicateAndMalformedPodiumEvents(t *testing.
 func TestValidateNewContest_RejectsBlankAndOversizedPrompts(t *testing.T) {
 	competitionID, deadline, podiumEventIDs, _ := validNewContest()
 
-	blank := []ExtraQuestion{{Prompt: "   \t ", Type: types.QUESTION_TEXT}}
+	blank := []NewExtraQuestion{{Prompt: "   \t ", Type: types.QUESTION_TEXT}}
 	assert.ErrorIs(t, ValidateNewContest(competitionID, deadline, podiumEventIDs, blank),
 		ErrEmptyQuestionPrompt)
 
-	long := []ExtraQuestion{{Prompt: strings.Repeat("é", MaxPromptLength+1), Type: types.QUESTION_TEXT}}
+	long := []NewExtraQuestion{{Prompt: strings.Repeat("é", MaxPromptLength+1), Type: types.QUESTION_TEXT}}
 	assert.ErrorIs(t, ValidateNewContest(competitionID, deadline, podiumEventIDs, long),
 		ErrQuestionPromptLong)
 
-	tooMany := make([]ExtraQuestion, MaxExtraQuestions+1)
+	tooMany := make([]NewExtraQuestion, MaxExtraQuestions+1)
 	for i := range tooMany {
-		tooMany[i] = ExtraQuestion{Prompt: "Kérdés", Type: types.QUESTION_TEXT}
+		tooMany[i] = NewExtraQuestion{Prompt: "Kérdés", Type: types.QUESTION_TEXT}
 	}
 	assert.ErrorIs(t, ValidateNewContest(competitionID, deadline, podiumEventIDs, tooMany),
 		ErrTooManyQuestions)

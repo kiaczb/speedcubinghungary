@@ -21,8 +21,6 @@ func NewHandler(service *Service) *Handler {
 func (h *Handler) GetUpcoming(w http.ResponseWriter, r *http.Request) {
 	competitions, err := h.service.GetUpcomingHungarian()
 	if err != nil {
-		// A WCA API elérhetetlensége nem a MI hibánk: 502, mint a másik két
-		// proxy-végponton. Korábban 500-at adott, a nyers upstream hibaszöveggel.
 		writeError(w, r, err)
 		return
 	}

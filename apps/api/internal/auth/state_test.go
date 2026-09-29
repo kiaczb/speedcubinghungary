@@ -116,9 +116,8 @@ func TestNewStateNonce(t *testing.T) {
 	seen := make(map[string]bool, 100)
 
 	for i := 0; i < 100; i++ {
-		nonce, err := newStateNonce()
+		nonce := newStateNonce()
 
-		assert.NoError(t, err)
 		assert.Len(t, nonce, stateNonceBytes*2)
 		assert.False(t, seen[nonce], "a nonce nem ismétlődhet")
 		seen[nonce] = true

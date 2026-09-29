@@ -64,7 +64,7 @@ def PublishWeeklyReportPost(report_data, period_start, period_end, replace=False
     Visszatérés: True, ha új poszt jött létre vagy felülírtuk; False, ha már
     létezett és érintetlenül hagytuk.
     """
-    week_start = WeekStart(period_end.date() if hasattr(period_end, "date") else period_end)
+    week_start = WeekStart(period_end.date())
     content = RenderPostContent(report_data)
 
     written = insert_weekly_report_post(

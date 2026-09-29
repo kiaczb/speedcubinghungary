@@ -37,16 +37,13 @@ const (
 	stateNonceBytes = 32
 )
 
-// newStateNonce kriptográfiailag erős véletlen nonce-ot ad. A crypto/rand hibája
-// Go 1.24+ alatt már nem fordulhat elő (a rand.Read sosem hibázik), de a hibát
-// mégis felvezetjük: ha valaha mégis, NEM szabad kitalálható nonce-szal indítani
-// a folyamatot.
-func newStateNonce() (string, error) {
+// newStateNonce kriptográfiailag erős véletlen nonce-ot ad. Go 1.24 óta a
+// rand.Read sosem tér vissza hibával: hiba esetén a program leáll, tehát
+// kitalálható nonce-szal nem indulhat el a folyamat.
+func newStateNonce() string {
 	buf := make([]byte, stateNonceBytes)
-	if _, err := rand.Read(buf); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(buf), nil
+	rand.Read(buf)
+	return hex.EncodeToString(buf)
 }
 
 // setStateCookie kiállítja a nonce + útvonal sütit.

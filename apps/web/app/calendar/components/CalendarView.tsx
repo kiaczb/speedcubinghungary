@@ -82,9 +82,6 @@ const CalendarView = () => {
           "/competitions/upcoming",
           { signal: controller.signal },
         );
-        // Defensive: ensure nearest upcoming date is first.
-        data.sort((a, b) => a.startDate.localeCompare(b.startDate));
-
         setCompetitions(data);
         setStatus("success");
       } catch (error) {

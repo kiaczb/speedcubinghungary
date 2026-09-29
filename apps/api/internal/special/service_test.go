@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"speedcubinghungary/internal/wcalive"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -182,9 +184,9 @@ func fakeWCALive(t *testing.T, rounds ...fakeRound) *httptest.Server {
 	return server
 }
 
-func newTestService(repo Repository, liveURL string, broadcaster *Broadcaster) *Service {
+func newTestService(repo Repository, liveURL string, broadcaster *wcalive.Broadcaster) *Service {
 	client := NewLiveClient(liveURL)
-	tracker := NewTracker(client, NewSocketClient(liveURL), broadcaster)
+	tracker := NewTracker(client, wcalive.NewSocketClient(liveURL), broadcaster)
 	return NewService(repo, client, tracker, broadcaster)
 }
 
@@ -203,7 +205,7 @@ func testCompetition() Competition {
 func TestService_ResolveCompetition(t *testing.T) {
 	server := fakeWCALive(t)
 
-	competition, err := newTestService(new(mockRepo), server.URL, NewBroadcaster()).
+	competition, err := newTestService(new(mockRepo), server.URL, wcalive.NewBroadcaster()).
 		ResolveCompetition(context.Background(), "  SpeedcubingHungary2026  ")
 
 	require.NoError(t, err)
@@ -212,7 +214,7 @@ func TestService_ResolveCompetition(t *testing.T) {
 
 func TestService_ResolveCompetition_Validation(t *testing.T) {
 	server := fakeWCALive(t)
-	service := newTestService(new(mockRepo), server.URL, NewBroadcaster())
+	service := newTestService(new(mockRepo), server.URL, wcalive.NewBroadcaster())
 
 	for _, invalid := range []string{"", "   ", "../competitions/1", "Speedcubing Hungary", "a/b"} {
 		t.Run("érvénytelen: "+invalid, func(t *testing.T) {
@@ -230,7 +232,7 @@ func TestService_ResolveCompetition_Validation(t *testing.T) {
 
 func TestService_ResolveCompetition_Caches(t *testing.T) {
 	server := fakeWCALive(t)
-	service := newTestService(new(mockRepo), server.URL, NewBroadcaster())
+	service := newTestService(new(mockRepo), server.URL, wcalive.NewBroadcaster())
 
 	_, err := service.ResolveCompetition(context.Background(), testCompetitionID)
 	require.NoError(t, err)
@@ -244,7 +246,7 @@ func TestService_ResolveCompetition_Caches(t *testing.T) {
 
 func TestService_Competitions(t *testing.T) {
 	server := fakeWCALive(t)
-	service := newTestService(new(mockRepo), server.URL, NewBroadcaster())
+	service := newTestService(new(mockRepo), server.URL, wcalive.NewBroadcaster())
 
 	t.Run("keresés nélkül csak a magyar versenyek", func(t *testing.T) {
 		competitions, err := service.Competitions(context.Background(), "")
@@ -285,7 +287,7 @@ func TestService_RecordElapsed(t *testing.T) {
 	repo.On("EnsureCompetition", testCompetition(), 7).Return(nil)
 	repo.On("SetElapsed", testCompetitionID, 900, 2, 3742, "bíró jegyezte", 7).Return(nil)
 
-	service := newTestService(repo, server.URL, NewBroadcaster())
+	service := newTestService(repo, server.URL, wcalive.NewBroadcaster())
 
 	elapsed := 3742
 	require.NoError(t, service.RecordElapsed(
@@ -299,7 +301,7 @@ func TestService_RecordElapsed_DeletesOnNil(t *testing.T) {
 	repo := new(mockRepo)
 	repo.On("DeleteElapsed", testCompetitionID, 900, 2).Return(nil)
 
-	service := newTestService(repo, "http://example.invalid", NewBroadcaster())
+	service := newTestService(repo, "http://example.invalid", wcalive.NewBroadcaster())
 
 	require.NoError(t, service.RecordElapsed(
 		context.Background(), testCompetitionID, 900, 2, nil, "", 7,
@@ -313,7 +315,7 @@ func TestService_RecordElapsed_NotifiesSubscribers(t *testing.T) {
 	repo := new(mockRepo)
 	repo.On("DeleteElapsed", testCompetitionID, 900, 2).Return(nil)
 
-	broadcaster := NewBroadcaster()
+	broadcaster := wcalive.NewBroadcaster()
 	events, unsubscribe := broadcaster.Subscribe(testCompetitionID)
 	defer unsubscribe()
 
@@ -340,7 +342,7 @@ func TestService_RecordElapsed_NotifiesSubscribers(t *testing.T) {
 }
 
 func TestService_RecordElapsed_Validation(t *testing.T) {
-	service := newTestService(new(mockRepo), "http://example.invalid", NewBroadcaster())
+	service := newTestService(new(mockRepo), "http://example.invalid", wcalive.NewBroadcaster())
 	ctx := context.Background()
 
 	t.Run("időtartam", func(t *testing.T) {
@@ -376,7 +378,7 @@ func TestService_GetReport(t *testing.T) {
 	repo.On("ListRecordedTimes", testCompetitionID).
 		Return([]RecordedTime{recorded(900, 2, 3742)}, nil)
 
-	report, err := newTestService(repo, server.URL, NewBroadcaster()).
+	report, err := newTestService(repo, server.URL, wcalive.NewBroadcaster()).
 		GetReport(context.Background(), testCompetitionID, nil)
 
 	require.NoError(t, err)
@@ -416,7 +418,7 @@ func TestService_GetReport_FiltersByRoundNumber(t *testing.T) {
 	repo := new(mockRepo)
 	repo.On("ListRecordedTimes", testCompetitionID).Return([]RecordedTime{}, nil)
 
-	service := newTestService(repo, server.URL, NewBroadcaster())
+	service := newTestService(repo, server.URL, wcalive.NewBroadcaster())
 
 	t.Run("első kör", func(t *testing.T) {
 		round := 1
@@ -462,7 +464,7 @@ func TestService_GetReport_UnknownCompetition(t *testing.T) {
 	server := fakeWCALive(t)
 	repo := new(mockRepo)
 
-	_, err := newTestService(repo, server.URL, NewBroadcaster()).
+	_, err := newTestService(repo, server.URL, wcalive.NewBroadcaster()).
 		GetReport(context.Background(), "NincsIlyen2026", nil)
 
 	assert.Error(t, err)

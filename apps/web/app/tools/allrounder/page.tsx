@@ -22,9 +22,6 @@ type AllRounderPageProps = {
   searchParams: Promise<{ year?: string | string[] }>;
 };
 
-// A szerver a saját zónájában fut, az olvasók viszont itthon vannak — a
-// gyorsítótár korát ezért fix zónában írjuk ki, nem a futtatóéban.
-
 async function getStandings(year?: string): Promise<Standings | null> {
   const query = year ? `?year=${encodeURIComponent(year)}` : "";
 

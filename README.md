@@ -98,7 +98,7 @@ git switch develop
 
 Workflows in `.github/workflows/`:
 
-- `ci.yml` — build + lint + test (Go and Next.js). Runs on `develop`/`feature/*`/`hotfix/*` and PRs, and is reused by the deploy workflows.
+- `ci.yml` — build + lint + test (Go, Next.js and the weekly-report tests). Runs on `develop`/`feature/*`/`hotfix/*` and PRs, and is reused by the deploy workflows.
 - `deploy-test.yml` — on push to `test`: run CI, then SSH-deploy with the `test` Compose files. Uses the `test` GitHub Environment.
 - `deploy-prod.yml` — on push to `main`: run CI, then SSH-deploy with the `prod` Compose files. Uses the `production` GitHub Environment.
 
@@ -144,10 +144,10 @@ templates and map them in `infra/docker-compose.yml`.
 A Python job that reads the shared Postgres and, in a single run:
 
 1. builds the weekly report from the WCA API + the shared database,
-2. emails it over SMTP (`EMAIL_TO`),
-3. **publishes it as a regular Post** on the site (`post_tag = 'report'`).
+2. **publishes it as a regular Post** on the site (`post_tag = 'report'`),
+3. emails it over SMTP (`EMAIL_TO`).
 
-Step 3 deliberately reuses the existing Post system rather than adding a parallel
+Step 2 deliberately reuses the existing Post system rather than adding a parallel
 content store, so the report inherits the normal listing (`/posts`), the detail
 page (`/posts/<id>`) and the badge rendering with no extra UI.
 

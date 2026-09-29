@@ -1,13 +1,6 @@
 /**
- * WCA versenyszám-azonosító → magyar név.
- *
- * ⚠️ Ez KÖZÖS, nem toolonkénti. Korábban az allrounder és a tippverseny is
- * vitte a saját, szó szerint egyező másolatát — ez nem az egyik tool
- * terméklogikája, hanem a WCA szókincse. Két példánynál egy új versenyszám
- * felvétele az egyik helyen megtörténik, a másikon pedig némán a nyers
- * azonosító jelenik meg a felületen ("sq1" a "Square-1" helyett).
- *
- * A sorrend a WCA saját versenyszám-sorrendje.
+ * WCA versenyszám-azonosító → magyar név, a WCA saját sorrendjében. Közös az
+ * összes tool számára — ne másold le egy toolba.
  */
 const EVENT_NAMES: Record<string, string> = {
   "222": "2x2x2",

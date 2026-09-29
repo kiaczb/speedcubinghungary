@@ -51,9 +51,3 @@ func (b *Broadcaster) Notify(key string) {
 		}
 	}
 }
-
-func (b *Broadcaster) SubscriberCount(key string) int {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return len(b.subscribers[key])
-}

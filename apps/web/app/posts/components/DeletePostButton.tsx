@@ -8,10 +8,9 @@ import { clientFetch } from "@/app/lib/api";
 type Props = {
   postId: string;
   title: string;
-  className?: string;
 };
 
-export default function DeletePostButton({ postId, title, className = "" }: Props) {
+export default function DeletePostButton({ postId, title }: Props) {
   const router = useRouter();
   const [confirming, setConfirming] = useState(false);
 
@@ -26,7 +25,7 @@ export default function DeletePostButton({ postId, title, className = "" }: Prop
         type="button"
         onClick={() => setConfirming(true)}
         aria-label={`${title} törlése`}
-        className={`relative z-10 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-control text-muted-foreground transition-colors duration-200 ease-smooth hover:bg-brand-red/10 hover:text-brand-red ${className}`}
+        className="relative z-10 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-control text-muted-foreground transition-colors duration-200 ease-smooth hover:bg-brand-red/10 hover:text-brand-red"
       >
         <FaRegTrashAlt className="h-4 w-4" />
       </button>

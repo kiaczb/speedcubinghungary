@@ -261,7 +261,9 @@ Other Go conventions observed:
   `<Link>`, or external `<a>` based on `href`/`external`), `Field` (+ the
   exported `controlClass` for inputs), `PageHeader`, `StateMessage`,
   `Modal` (**the shell every modal is built on**: backdrop, panel, header bar,
-  Escape, backdrop click, scroll lock — and the **focus trap**. Tab cycles
+  Escape, backdrop click, scroll lock — which also pads `body` by the
+  scrollbar's width, otherwise the page shifts right when the scrollbar
+  disappears — and the **focus trap**. Tab cycles
   inside the panel, focus lands there on open and returns to whatever opened it
   on close. The backdrop closes it only when the pointer went down **and** up
   on the backdrop — a text selection that starts in a field and ends outside
@@ -272,13 +274,13 @@ Other Go conventions observed:
   ⚠️ Don't hand-roll a backdrop + panel again — the four that existed had each
   dropped the focus trap, so Tab walked out of the dialog into the page behind
   it),
-  `ConfirmModal` (destructive-action confirmation, built on `Modal`;
-  takes `title`, `description` (any ReactNode — it renders in a `div`),
-  `confirmLabel` / `pendingLabel` (defaults to `${confirmLabel}…`),
-  `onConfirm: () => Promise<void>`, `onClose`; manages its own submitting/error
-  state and closes itself on a successful `onConfirm`). Plus
-  `app/components/Cards/Card.tsx` (variants `elevated`/`outlined`/`inverse`,
-  `padding`, `interactive`) and `app/components/Badge.tsx`. **Reuse these
+  `ConfirmModal` (delete confirmation, built on `Modal`; takes `title`,
+  `description` (any ReactNode — it renders in a `div`),
+  `onConfirm: () => Promise<void>`, `onClose`; the buttons read
+  "Mégse"/"Törlés"; manages its own submitting/error state and closes itself
+  on a successful `onConfirm`). Plus
+  `app/components/Cards/Card.tsx` (`padding`, `interactive`) and
+  `app/components/Badge.tsx`. **Reuse these
   instead of hand-rolling a button/card/field/confirm dialog** — in
   particular, never use the native `window.confirm`/`window.alert` for a
   destructive action; use `ConfirmModal` (see `DeletePostButton.tsx` /
@@ -288,7 +290,9 @@ Other Go conventions observed:
   two-base-URL split below plus the four things every call site otherwise has
   to get right on its own: `serverJson(path, fallback)` for Server Components
   (`cache: "no-store"`, logs and falls back so an unreachable API leaves an
-  empty page rather than an error screen), `clientFetch(path, init)` /
+  empty page rather than an error screen; its `catch` starts with
+  `unstable_rethrow`, because a no-store fetch signals "render dynamically"
+  by throwing, and swallowing that is a Next misuse), `clientFetch(path, init)` /
   `clientJson(path, init)` for the browser (**always** sends the JWT cookie —
   forgetting `credentials: "include"` silently sends a logged-out request — and
   turns a non-ok response into an `ApiError` carrying `status` and the server's
@@ -312,14 +316,8 @@ Other Go conventions observed:
   and every caller must run it before using the value. ⚠️ The formatter
   deliberately lets `1:75.00` through as an intermediate state: digits fill
   from the right, so typing `16:05.00` passes through `1:60.50`, and rejecting
-  that would make whole minute ranges untypeable), and `useBodyScrollLock.ts` (locks background scroll while
-  a modal is open — called by `Modal`, so a modal built on it gets this for
-  free). Add nav/contact entries there, not per-component.
-  - ⚠️ `useBodyScrollLock` also compensates `body`'s `padding-right` by the
-    scrollbar's width. A bare `overflow: hidden` on `body` makes the vertical
-    scrollbar disappear, and the page content reflows into that space — the
-    classic "page shifts right when a modal opens" bug. Every modal must use
-    this hook instead of setting `document.body.style.overflow` by hand.
+  that would make whole minute ranges untypeable). Add nav/contact entries in
+  `site.ts`, not per-component.
 - **Dark mode is implemented and follows the OS** (`prefers-color-scheme`; no
   toggle, no class strategy, so no JS and no hydration flash). It works by
   **redefining the design tokens** in a `@media (prefers-color-scheme: dark)`
@@ -357,7 +355,8 @@ Other Go conventions observed:
   competition" card reads our `/competitions/upcoming` like the calendar does.
 - Auth on the client is via `UserProvider` (`app/components/UserProvider.tsx`), a
   context calling `/me` and `/logout` with `credentials: "include"`. Use
-  `useUser()` to read `{ user, isLoading, logout }`.
+  `useUser()` to read `{ user, isAdmin, isLoading, logout }` — gate admin UI on
+  `isAdmin` rather than re-checking `roles` (the server enforces it anyway).
 - Styling is Tailwind v4 utility classes inline in JSX. UI copy is largely Hungarian.
 - **The post editor is Markdown-based, deliberately.** `CreatePostModal` uses
   `app/posts/components/MarkdownEditor.tsx` — a formatting toolbar that inserts
@@ -534,9 +533,9 @@ Notes / current state:
 - `posts.id` is a `uuid.NewString()` generated in the service (not a DB default).
 - `users.roles` is JSONB; login upsert **preserves existing roles** and only seeds
   `["user"]` on first insert (see `auth/repository.go` `Upsert` `ON CONFLICT`).
-- `records` is written by the Python job (`SaveRecords`); the Go API does not touch
-  it yet. `competition_count`/`delegated_count` on users are read by the API but
-  populated elsewhere **(inferred: by the Python job / future work)**.
+- `records` and `users.competition_count`/`delegated_count` are written and read
+  only by the Python job (`SaveRecords`, `upsert_person`); the Go API does not
+  touch them.
 - Competition data is **not** persisted — it is proxied live from WCA per request.
 
 ### Adding a migration
@@ -548,17 +547,21 @@ empty by design).
 
 ## 8. API architecture & endpoints
 
-chi router in `internal/router/router.go`. Global middleware: `middleware.JSON`
-(sets `Content-Type: application/json`) and CORS (allows `cfg.FrontendURL`,
-`AllowCredentials: true` for the cookie).
+chi router in `internal/router/router.go`. Global middleware:
+`middleware.SecurityHeaders` (`nosniff`) and CORS (allows `cfg.FrontendURL`,
+`AllowCredentials: true` for the cookie). `middleware.JSON` (sets
+`Content-Type: application/json`) wraps **only the JSON route group**; the
+non-JSON routes — `/uploads/*`, the two SSE streams and the `/login` redirects —
+are registered outside it, so they set their own Content-Type (§17). Every
+admin route sits in one `Auth + RBAC(admin)` group.
 
 | Method | Path | Auth | Handler |
 | ------ | ---- | ---- | ------- |
 | GET  | `/posts` | public | `post.GetPosts` |
 | GET  | `/posts/{id}` | public | `post.GetPostByID` (404 if the id doesn't exist, 400 if it isn't a UUID — `posts.id` is a `uuid` column, so a malformed id would otherwise reach Postgres as a type error and come back as a 500) |
 | GET  | `/posts/latest` | public | `post.GetLatestPosts` (limit 3) |
-| POST | `/posts` | JWT + `admin` | `post.CreatePost` (accepts **multipart/form-data** with up to `MaxImages` (10) repeated `images` file parts — their order is the gallery order — or the legacy JSON body) |
-| PUT  | `/posts/{id}` | JWT + `admin` | `post.UpdatePost` (multipart or JSON; `image_order` describes the **whole** resulting gallery, see §20; without it the legacy behaviour applies — new `images` are appended and `remove_image=true` clears the gallery; 404 if the id doesn't exist) |
+| POST | `/posts` | JWT + `admin` | `post.CreatePost` (**multipart/form-data only**: `tag`, `title`, `content` + up to `MaxImages` (10) repeated `images` file parts — their order is the gallery order) |
+| PUT  | `/posts/{id}` | JWT + `admin` | `post.UpdatePost` (multipart; the **required** `image_order` describes the whole resulting gallery, see §20; 404 if the id doesn't exist) |
 | GET  | `/uploads/*` | public | static file server over `cfg.UploadDir` (post images) |
 | DELETE | `/posts` | JWT + `admin` | `post.DeletePosts` (body `{ids:[]}`; also deletes the posts' image files from the volume, see §20) |
 | GET  | `/competitions/upcoming` | public | `competition.GetUpcoming` (HU only; DTO includes `eventIds` — the WCA API's `event_ids` passed straight through, no extra request) |
@@ -609,8 +612,8 @@ the OAuth `state` must be an unguessable server-issued nonce kept in an
 between `NEXT_PUBLIC_WCA_*` and `WCA_*`.
 
 Flow:
-1. `LoginButton` navigates to `NEXT_PUBLIC_BACKEND_LOGIN` (fallback
-   `clientApiUrl() + "/login"`) with `?redirect=<pathname>`.
+1. `LoginButton` navigates to `clientApiUrl() + "/login"` with
+   `?redirect=<pathname>`.
 2. `auth.Login` sanitizes that path, mints a 32-byte random nonce, stores
    `<nonce>:<path>` in the short-lived `oauth_state` cookie, and redirects to WCA
    `oauth/authorize` with `scope=public email` and `state=<nonce>`.
@@ -691,9 +694,11 @@ value set is validated too, so a typo (`produciton`) fails fast instead of
 quietly behaving like development. Don't add defaults back.
 
 Other important vars:
-- DB connection (used by `db/postgres.go`): `DB_HOST`, `DB_PORT`, `DB_USER`,
-  `DB_PASSWORD`, `DB_NAME` (separate from `DATABASE_URL`, which migrate uses).
-  **These are the single source of truth for the DB credentials.** The env
+- DB: the API uses **only `DATABASE_URL`** — for the connection pool
+  (`db.NewPostgres`) and for golang-migrate alike. `DB_HOST`, `DB_PORT`,
+  `DB_USER`, `DB_PASSWORD`, `DB_NAME` feed the `postgres` image, the weekly-report
+  job and the `DATABASE_URL` interpolation; the api service doesn't receive them.
+  **They are the single source of truth for the DB credentials.** The env
   files no longer also define `POSTGRES_USER`/`POSTGRES_PASSWORD`/`POSTGRES_DB`
   — `docker-compose.yml`'s `db` service sources those (which the `postgres`
   image itself requires under that name) from the same `DB_USER`/`DB_PASSWORD`/
@@ -704,8 +709,9 @@ Other important vars:
   exactly one place** (`DB_USER`/`DB_PASSWORD`/`DB_NAME` in the env file) — don't
   reintroduce a parallel `POSTGRES_*` block or hand-type `DATABASE_URL`, both of
   which previously had to be kept in sync by hand and could silently drift.
-- `DEPLOYMENT` (`development`/`test`/`production`) — controls cookie `Secure` +
-  helpers. `LOG_LEVEL`. `NODE_ENV`.
+- `DEPLOYMENT` (`development`/`test`/`production`) — controls cookie `Secure`
+  and whether `X-Forwarded-For` is trusted. `NODE_ENV` (web only). There is no
+  `LOG_LEVEL`: nothing ever read it, so it was removed.
 - `UPLOAD_DIR` — where post images are written (default `/data/uploads`). Not
   required in any env file; the base compose mounts the `uploads_data` named
   volume there. Deliberately **not** under `/app`, because the dev override
@@ -716,13 +722,14 @@ Other important vars:
   with an empty default. (There is no `WCA_LIVE_WATCHER` kill switch any more —
   the subscription only exists while someone has the page open, §18.)
 - Web: `SERVER_API_URL` (server→api, Docker service name), `NEXT_PUBLIC_API_URL`
-  (browser→api), `NEXT_PUBLIC_BACKEND_LOGIN` (the API's `/login` entry point).
+  (browser→api; the login entry point is simply `NEXT_PUBLIC_API_URL + /login`).
   **`NEXT_PUBLIC_*` are baked into the browser bundle at build time** (Docker build
-  args), so changing them requires a web rebuild. `NEXT_PUBLIC_WCA_CLIENT_ID` and
-  `NEXT_PUBLIC_WCA_REDIRECT_URI` were **removed**: the browser no longer builds the
-  WCA authorize URL (§9), so the OAuth client config lives only in `WCA_*` on the
-  API side. Don't reintroduce them — two sources for the same `redirect_uri` can
-  drift, and the WCA then rejects the token exchange with a confusing error.
+  args), so changing them requires a web rebuild. `NEXT_PUBLIC_WCA_CLIENT_ID`,
+  `NEXT_PUBLIC_WCA_REDIRECT_URI` and `NEXT_PUBLIC_BACKEND_LOGIN` were
+  **removed**: the browser no longer builds the WCA authorize URL (§9), so the
+  OAuth client config lives only in `WCA_*` on the API side, and the login URL
+  is derived from the API URL. Don't reintroduce them — two sources for the same
+  value drift.
 - Compose: `COMPOSE_PROJECT_NAME`, `COMPOSE_PROFILES=proxy` (test/prod),
   `WEB_DOMAIN`/`ACME_EMAIL` (Caddy — single domain, API path-routed under
   `WEB_DOMAIN/api`), `WEB_PORT`/`API_PORT`/
@@ -777,9 +784,9 @@ pass the handler into `router.New` (add it as a new parameter) to register route
 
 ### Add a frontend route
 Create `apps/web/app/<route>/page.tsx` (+ colocated `components/`, `lib/`,
-`types.ts`). Fetch server-side with `SERVER_API_URL` where possible; use
-`"use client"` + `NEXT_PUBLIC_API_URL` for interactive/browser fetches. Add nav
-links in `app/layout.tsx` if needed. **Read the Next 16 docs first** (§3 warning).
+`types.ts`). Fetch server-side with `serverJson` where possible; use
+`"use client"` + `clientFetch`/`clientJson` for interactive/browser fetches. Add
+nav links in `app/lib/site.ts` if needed. **Read the Next 16 docs first** (§3 warning).
 
 ---
 
@@ -807,10 +814,7 @@ links in `app/layout.tsx` if needed. **Read the Next 16 docs first** (§3 warnin
 - ~~`auth/service.go` / `auth/handler.go` bypass the `config` struct and read env
   directly~~ — **resolved**: both take `*config.Config` (wired in `main.go`), so
   there are no `os.Getenv` calls left in the `auth` package (§9).
-- `competition_count` / `delegated_count` / `records` are defined but not populated
-  by the Go API.
-- No structured logging/observability beyond stdlib `log` + `LOG_LEVEL` (the latter
-  is loaded into `cfg` but **not consumed** by any logger yet).
+- No structured logging/observability beyond stdlib `log`.
 - ~~No rate limiting anywhere, and no CSP~~ — **resolved**, see §14.
 - `apps/api/tmp/` (air build output) and `__pycache__/` dirs are build artifacts.
 - No Redis / message queue / object storage in the stack — the only data store is
@@ -931,7 +935,7 @@ links in `app/layout.tsx` if needed. **Read the Next 16 docs first** (§3 warnin
 - Go feature = `model/repository/service/handler` + interface + `NewXxx`
   constructor, wired manually in `cmd/server/main.go`; `router.New` only routes.
 - HTTP handler shape: decode into a local anonymous request struct → call service →
-  `json.NewEncoder(w).Encode(...)` or `http.Error(w, err.Error(), status)`.
+  `json.NewEncoder(w).Encode(...)` or `httperr.Write(w, r, status, err)` (§6).
 - Repository returns domain structs + `error`; SQL is raw and parameterized.
 - Enums live in `internal/types` as string types.
 - Frontend: server component fetches → passes props to client components; auth via
@@ -967,11 +971,11 @@ links in `app/layout.tsx` if needed. **Read the Next 16 docs first** (§3 warnin
 - JSON field casing: DB models/`post` use `snake_case`; the `competition` API DTO
   intentionally uses `camelCase` to match the web client. Match the neighboring
   file, don't unify blindly.
-- ⚠️ The global `middleware.JSON` sets `Content-Type: application/json` on **every**
-  response, and Go's `ServeContent` does **not** override an already-set
-  Content-Type. Any non-JSON route must therefore `w.Header().Del("Content-Type")`
-  before serving (see the `/uploads/*` file server in `router.New`), otherwise
-  images/files go out mislabeled as JSON.
+- ⚠️ `middleware.JSON` sets `Content-Type: application/json`, and Go's
+  `ServeContent` does **not** override an already-set Content-Type. That is why
+  it wraps only the JSON route group in `router.New`: register a non-JSON route
+  (files, SSE, redirects) **outside** that group, otherwise it goes out
+  mislabeled as JSON. `router_test.go` pins this for `/uploads/*`.
 - Uploaded images: the MIME type is detected from the file **contents**
   (`http.DetectContentType`), never from the client's Content-Type header, and the
   stored filename is a generated UUID — the client's filename is discarded to
@@ -1222,10 +1226,7 @@ event carries **no data**, only "something changed"; the client refetches the
 report. That keeps one source of truth and makes dropped or duplicated
 notifications harmless. The broadcaster **is keyed by competition** — several
 competitions can be open at once, and one's update must not make the other's
-viewers refetch.
-⚠️ The SSE handler must `w.Header().Del("Content-Type")` before setting
-`text/event-stream` — the global `middleware.JSON` would otherwise mislabel the
-stream (§17).
+viewers refetch. The stream route sits outside the JSON middleware group (§17).
 
 The SSE handler is also what tells the tracker a viewer is present
 (`AddViewer`), so the WCA Live subscription is tied to the page being open. The
@@ -1476,9 +1477,11 @@ metaadat (alt szöveg, szerző).
   képére hivatkozhatna, és a takarítás azt törölné. Ugyanígy hibás, ha marad
   hivatkozás nélküli feltöltött fájl (árva fájl lenne a volume-on), vagy ha egy
   útvonal kétszer szerepel.
-- `image_order` **nélkül** a régi viselkedés él tovább (új képek a végére,
-  `remove_image=true` üríti a galériát), így egy korábbi kliens nem törik el. Az
-  `image` (egyes számú) fájlmezőt is fogadjuk még az `images` mellett.
+- Szerkesztéskor az `image_order` **kötelező** (hiányában 400). A régi
+  kompatibilitási ágak — JSON törzs, egyes számú `image` mező,
+  `remove_image=true` — megszűntek: az egyetlen kliens, a `CreatePostModal`,
+  mindig multipartot és `image_order`-t küld. A létrehozás és a szerkesztés
+  közös `parsePostForm`-on megy át, a hibák státuszát egyetlen `errorStatus` adja.
 - A legfeljebb 10 kép × 5 MiB miatt a kérés törzsének korlátja `maxUploadBytes`;
   a **fájlonkénti** méretet a `FileHeader.Size` alapján utasítjuk el, mert a
   `SaveImage`-beli `LimitReader` csak csonkítana (néma félkép helyett 400).

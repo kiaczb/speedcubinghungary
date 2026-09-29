@@ -74,13 +74,12 @@ def test_build_title_does_not_claim_the_calendar_week():
 
 # --- JSON payload renderelés --------------------------------------------------
 
-def _competition(name="Miskolc Open 2026", iso="HU", is_hungarian=True, competitors=None):
+def _competition(name="Miskolc Open 2026", iso="HU", competitors=None):
     return SimpleNamespace(
         CompetitionName=name,
         CountryIso=iso,
         From=datetime(2026, 7, 18),
         To=datetime(2026, 7, 19),
-        isHungarian=is_hungarian,
         CompetitorWithRecords=competitors if competitors is not None else [],
     )
 
@@ -173,7 +172,7 @@ def test_build_report_data_keeps_all_competitors(monkeypatch):
     monkeypatch.setattr(reportData, "GetImportantCompetitors", lambda: [])
     monkeypatch.setattr(reportData, "GetImportantDelegates", lambda: [])
 
-    comp = _competition(is_hungarian=True, competitors=[
+    comp = _competition(competitors=[
         _competitor(name="Rekorder", records={"333": [SimpleNamespace(Type="single", Result=642, Badge="NR")]}),
         _competitor(name="Nincs rekordja", records={}),
     ])

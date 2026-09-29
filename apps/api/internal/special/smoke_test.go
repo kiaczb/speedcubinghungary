@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"speedcubinghungary/internal/wcalive"
+
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -22,7 +24,7 @@ func TestSmoke_AgainstRealWCALive(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	client := NewLiveClient(DefaultWCALiveURL)
+	client := NewLiveClient(wcalive.DefaultURL)
 
 	liveID, err := client.ResolveCompetitionID(ctx, competitionWCAID)
 	require.NoError(t, err, "a /link/ átirányításból kell jönnie a numerikus id-nak")
@@ -69,7 +71,7 @@ func TestSmoke_AgainstRealWCALive(t *testing.T) {
 		assert.NotEmpty(t, snapshot.Attempts, "üres eredmény nem kerül a pillanatképbe")
 	}
 
-	socket := NewSocketClient(DefaultWCALiveURL)
+	socket := wcalive.NewSocketClient(wcalive.DefaultURL)
 	connected := make(chan struct{}, 1)
 	socket.SetOnConnect(func() {
 		select {
@@ -78,7 +80,7 @@ func TestSmoke_AgainstRealWCALive(t *testing.T) {
 		}
 	})
 
-	socket.Subscribe(subscriptionKey(roundID), RoundSubscription, map[string]any{
+	socket.Subscribe(wcalive.RoundSubscriptionKey(roundID), RoundSubscription, map[string]any{
 		"id": strconv.Itoa(roundID),
 	})
 	go socket.Run(ctx)
@@ -107,9 +109,9 @@ func TestSmokeDatabase_EndToEnd(t *testing.T) {
 	defer cancel()
 
 	repo := NewPostgresRepository(db)
-	client := NewLiveClient(DefaultWCALiveURL)
-	broadcaster := NewBroadcaster()
-	tracker := NewTracker(client, NewSocketClient(DefaultWCALiveURL), broadcaster)
+	client := NewLiveClient(wcalive.DefaultURL)
+	broadcaster := wcalive.NewBroadcaster()
+	tracker := NewTracker(client, wcalive.NewSocketClient(wcalive.DefaultURL), broadcaster)
 	service := NewService(repo, client, tracker, broadcaster)
 
 	userID, _ := strconv.Atoi(os.Getenv("SMOKE_USER_ID"))
@@ -214,11 +216,11 @@ func TestSmokeTracker_LoadsWholeCompetition(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	client := NewLiveClient(DefaultWCALiveURL)
+	client := NewLiveClient(wcalive.DefaultURL)
 	liveID, err := client.ResolveCompetitionID(ctx, competitionWCAID)
 	require.NoError(t, err)
 
-	tracker := NewTracker(client, NewSocketClient(DefaultWCALiveURL), NewBroadcaster())
+	tracker := NewTracker(client, wcalive.NewSocketClient(wcalive.DefaultURL), wcalive.NewBroadcaster())
 
 	started := time.Now()
 	results, err := tracker.Results(ctx, Competition{
@@ -256,8 +258,8 @@ func TestSmokeCompetitions_AgainstRealWCALive(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	client := NewLiveClient(DefaultWCALiveURL)
-	service := NewService(nil, client, nil, NewBroadcaster())
+	client := NewLiveClient(wcalive.DefaultURL)
+	service := NewService(nil, client, nil, wcalive.NewBroadcaster())
 
 	found, err := service.Competitions(ctx, "Hungarian")
 	require.NoError(t, err)

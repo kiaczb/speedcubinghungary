@@ -8,11 +8,8 @@ from config import emailFrom, emailTo, emailSubject, emailCode
 logger = logging.getLogger(__name__)
 
 def WriteEmail(report_data):
-    """Elküldi a riportot e-mailben.
-
-    A riport adatait NEM itt állítjuk elő: a hívó adja át (lásd reportData.py),
-    mert ugyanazt az adathalmazt használja a weboldalra kerülő Post is.
-    """
+    """Elküldi a riportot e-mailben. Az adatot a hívó adja (lásd reportData.py),
+    mert ugyanazt használja a weboldalra kerülő Post is."""
     SendEmail(RenderHtmlEmail(report_data))
 
 def RenderHtmlEmail(report_data):
@@ -23,14 +20,10 @@ def RenderHtmlEmail(report_data):
         convert_result=ConvertResult,
         **report_data
     )
-def SendEmail(html_body):
-    """Elküldi a riportot e-mailben.
 
-    Sikertelen küldésnél a hibát logoljuk ÉS továbbdobjuk — a job álljon le
-    hibával (lásd main.py + a hívási sorrend ott), ne jelentsen csendben
-    sikert, ha az email valójában nem ment el. (Korábban a kivétel csak
-    print()-elve lett elnyelve, a job pedig "sikeresként" futott tovább.)
-    """
+def SendEmail(html_body):
+    """Sikertelen küldésnél a hibát logoljuk ÉS továbbdobjuk: a job álljon le
+    hibával, ne jelentsen csendben sikert (lásd main.py hívási sorrendje)."""
     msg = MIMEText(html_body, 'html', 'utf-8')
     msg['From'] = f"Bonsz <{emailFrom}>"
     msg['To'] = emailTo

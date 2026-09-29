@@ -121,7 +121,6 @@ func TestComputeStandingsByRound_MergesLiveLegWithOfficialOnes(t *testing.T) {
 
 	live := CompetitionRounds{
 		CompetitionWCAID: "C2",
-		Live:             true,
 		Rounds: []RoundResults{roundResultsFromLive(
 			roundIdentity{LiveRoundID: 9, EventID: "333", RoundNumber: 1},
 			liveRound{Results: []liveResult{

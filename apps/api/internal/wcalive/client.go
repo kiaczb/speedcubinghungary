@@ -40,8 +40,6 @@ func normalizeBaseURL(baseURL string) string {
 	return strings.TrimSuffix(baseURL, "/")
 }
 
-func (c *Client) BaseURL() string { return c.baseURL }
-
 type graphQLRequest struct {
 	Query     string         `json:"query"`
 	Variables map[string]any `json:"variables,omitempty"`
