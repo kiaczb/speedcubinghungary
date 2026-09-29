@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef } from "react";
+import type { PointerEvent } from "react";
 import { createPortal } from "react-dom";
 import { useBodyScrollLock } from "@/app/lib/useBodyScrollLock";
 
@@ -39,9 +40,9 @@ type Props = {
 };
 
 const SIZE_CLASS: Record<ModalSize, string> = {
-  sm: "max-w-sm",
-  md: "max-w-2xl",
-  lg: "max-w-lg",
+  sm: "max-w-sm", // megerősítés
+  md: "max-w-lg", // olvasnivaló (pl. szabályok)
+  lg: "max-w-2xl", // űrlap
 };
 
 const FOCUSABLE_SELECTOR = [
@@ -65,6 +66,7 @@ export default function Modal({
 }: Props) {
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
+  const pressedOnBackdrop = useRef(false);
 
   useBodyScrollLock(true);
 
@@ -129,15 +131,25 @@ export default function Modal({
   return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm dark:bg-black/70"
-      // A háttérre kattintás CSAK bezár, semmi mást nem indít el.
-      onClick={() => !closeDisabled && onClose()}
+      // ⚠️ Csak akkor zárunk, ha a gomb a háttéren ment le ÉS ott is jött fel.
+      // Egy szövegkijelölés a panelben kezdődhet és a háttéren érhet véget; a
+      // böngésző ilyenkor a közös ősnek, a háttérnek küldi a clicket — és egy
+      // félig kitöltött űrlap szó nélkül eltűnne.
+      onPointerDown={(event: PointerEvent<HTMLDivElement>) => {
+        pressedOnBackdrop.current = event.target === event.currentTarget;
+      }}
+      onClick={(event) => {
+        const onBackdrop =
+          pressedOnBackdrop.current && event.target === event.currentTarget;
+        pressedOnBackdrop.current = false;
+        if (onBackdrop && !closeDisabled) onClose();
+      }}
       role="presentation"
     >
       <div
         ref={panelRef}
         tabIndex={-1}
         className={`max-h-[90vh] w-full ${SIZE_CLASS[size]} overflow-y-auto rounded-panel border border-line bg-surface shadow-panel`}
-        onClick={(event) => event.stopPropagation()}
         role={role}
         aria-modal="true"
         {...(hideHeader ? { "aria-label": title } : { "aria-labelledby": titleId })}

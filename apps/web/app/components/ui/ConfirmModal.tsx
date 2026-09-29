@@ -7,6 +7,8 @@ type Props = {
   title: string;
   description: React.ReactNode;
   confirmLabel?: string;
+  /** A megerősítő gomb felirata a művelet alatt; alapból `${confirmLabel}…`. */
+  pendingLabel?: string;
   cancelLabel?: string;
   onConfirm: () => Promise<void>;
   onClose: () => void;
@@ -17,6 +19,7 @@ export default function ConfirmModal({
   title,
   description,
   confirmLabel = "Törlés",
+  pendingLabel = `${confirmLabel}…`,
   cancelLabel = "Mégse",
   onConfirm,
   onClose,
@@ -52,9 +55,11 @@ export default function ConfirmModal({
         <h2 className="text-lg font-bold text-foreground">
           {title}
         </h2>
-        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+        {/* div, nem p: a description ReactNode, és blokkelem egy <p>-ben
+            érvénytelen HTML (a böngésző szétbontja, a React hidratálás elbukik). */}
+        <div className="mt-2 text-sm leading-relaxed text-muted-foreground">
           {description}
-        </p>
+        </div>
 
         {error && (
           <p
@@ -80,7 +85,7 @@ export default function ConfirmModal({
             onClick={handleConfirm}
             disabled={submitting}
           >
-            {submitting ? "Törlés…" : confirmLabel}
+            {submitting ? pendingLabel : confirmLabel}
           </Button>
         </div>
       </div>

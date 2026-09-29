@@ -127,6 +127,7 @@ export default function CreatePredictionModal({ onClose }: Props) {
     <Modal
       title="Új tippverseny létrehozása"
       onClose={onClose}
+      size="lg"
       closeDisabled={submitting}
       initialFocusRef={selectRef}
     >

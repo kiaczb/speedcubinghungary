@@ -189,6 +189,7 @@ export default function CreatePostModal({ onClose, post }: Props) {
     <Modal
       title={isEdit ? "Poszt szerkesztése" : "Új poszt létrehozása"}
       onClose={onClose}
+      size="lg"
       closeDisabled={submitting}
       initialFocusRef={titleInputRef}
     >
