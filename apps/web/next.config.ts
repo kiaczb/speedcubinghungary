@@ -3,10 +3,12 @@ import type { NextConfig } from "next";
 const isDev = process.env.NODE_ENV !== "production";
 
 /**
- * A böngészőből induló fetch-ek az API-ra mennek. Test/prod alatt ez UGYANAZ a
- * domain (a Caddy a `/api` előtagot route-olja), tehát a `'self'` fedi —
- * fejlesztésben viszont külön origin (`http://localhost:8080`), azt fel kell
- * venni, különben a CSP a saját API-hívásainkat tiltja le.
+ * Az API origin-je. Test/prod alatt ez UGYANAZ a domain (a Caddy a `/api`
+ * előtagot route-olja), tehát a `'self'` fedi — fejlesztésben viszont külön
+ * origin (`http://localhost:8080`), amit fel kell venni MINDEN direktívába,
+ * amin keresztül az API-hoz nyúlunk: a fetch-ekhez (`connect-src`) és a
+ * poszt-képekhez (`img-src`, a `/uploads/*` az API-ról jön, és a `https:`
+ * a http-s fejlesztői API-t nem fedi).
  */
 function apiOrigin(): string | null {
   const raw = process.env.NEXT_PUBLIC_API_URL;
@@ -19,7 +21,7 @@ function apiOrigin(): string | null {
   }
 }
 
-const connectSrc = ["'self'", apiOrigin()].filter(Boolean).join(" ");
+const selfAndApi = ["'self'", apiOrigin()].filter(Boolean).join(" ");
 
 /**
  * ⚠️ `script-src` `'unsafe-inline'`-t tartalmaz, és ez SZÁNDÉKOS.
@@ -48,9 +50,9 @@ const contentSecurityPolicy = [
   "form-action 'self'",
   `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https:",
+  `img-src ${selfAndApi} data: blob: https:`,
   "font-src 'self' data:",
-  `connect-src ${connectSrc}`,
+  `connect-src ${selfAndApi}`,
   // Fejlesztésben nincs HTTPS, és ez a localhost:8080-as API-hívásokat törné el.
   ...(isDev ? [] : ["upgrade-insecure-requests"]),
 ].join("; ");

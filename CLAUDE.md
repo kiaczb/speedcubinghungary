@@ -901,8 +901,10 @@ links in `app/layout.tsx` if needed. **Read the Next 16 docs first** (§3 warnin
   (`headers()`), plus `X-Content-Type-Options: nosniff` from
   `middleware.SecurityHeaders` on the API, which matters for the
   attacker-influenced bytes served at `/uploads/*`. ⚠️ Two things to know:
-  `headers()` is evaluated at **build time**, so `connect-src`'s API origin is
-  baked in from `NEXT_PUBLIC_API_URL` like every other `NEXT_PUBLIC_*` (§10);
+  `headers()` is evaluated at **build time**, so the API origin in
+  `connect-src` **and `img-src`** (post images come from the API's
+  `/uploads/*`) is baked in from `NEXT_PUBLIC_API_URL` like every other
+  `NEXT_PUBLIC_*` (§10) — any new directive that reaches the API needs it too;
   and `script-src` deliberately keeps `'unsafe-inline'`, because the strict
   nonce variant needs a `proxy.ts` and forces **every** page to render
   dynamically — that is a separate architectural decision, not a side effect of
