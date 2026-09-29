@@ -49,14 +49,17 @@ func (h *Handler) GetCompetitors(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(competitors)
 }
 
-// writeError maps a client-caused id error to 400 and everything else — the
-// WCA API being down or rate-limiting us — to 502. The upstream error's text
-// stays in the server log (httperr), because it carries WCA URLs and our own
-// query parameters.
+// writeError maps a malformed id to 400, an id the WCA does not know to 404,
+// and everything else — the WCA API being down or rate-limiting us — to 502.
+// The upstream error's text stays in the server log (httperr), because it
+// carries WCA URLs and our own query parameters.
 func writeError(w http.ResponseWriter, r *http.Request, err error) {
 	status := http.StatusBadGateway
-	if errors.Is(err, ErrInvalidID) {
+	switch {
+	case errors.Is(err, ErrInvalidID):
 		status = http.StatusBadRequest
+	case errors.Is(err, ErrNotFound):
+		status = http.StatusNotFound
 	}
 	httperr.Write(w, r, status, err)
 }

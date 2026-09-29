@@ -46,6 +46,8 @@ type Service struct {
 	// flight collapses concurrent misses for the same key into one upstream
 	// request — React StrictMode alone doubles every fetch in development.
 	flight singleflight.Group
+	// nextSweep is when the caches are next swept for expired entries.
+	nextSweep time.Time
 }
 
 func NewService(repo Repository) *Service {
@@ -184,6 +186,7 @@ func cached[T any](s *Service, cache map[string]cacheEntry[T], key string, fetch
 			return nil, err
 		}
 		s.mu.Lock()
+		s.sweepLocked()
 		cache[key] = cacheEntry[T]{value: fetched, at: time.Now()}
 		s.mu.Unlock()
 		return fetched, nil
@@ -193,4 +196,27 @@ func cached[T any](s *Service, cache map[string]cacheEntry[T], key string, fetch
 		return zero, err
 	}
 	return value.(T), nil
+}
+
+// sweepLocked drops expired entries from every cache, at most once per TTL.
+// The keys are client-supplied ids, so without it every id anyone ever asked
+// about would stay in memory for the life of the process.
+func (s *Service) sweepLocked() {
+	now := time.Now()
+	if now.Before(s.nextSweep) {
+		return
+	}
+	s.nextSweep = now.Add(upstreamCacheTTL)
+
+	sweep(s.competitions, now)
+	sweep(s.psychSheets, now)
+	sweep(s.competitors, now)
+}
+
+func sweep[T any](cache map[string]cacheEntry[T], now time.Time) {
+	for key, entry := range cache {
+		if now.Sub(entry.at) >= upstreamCacheTTL {
+			delete(cache, key)
+		}
+	}
 }
