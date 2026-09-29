@@ -1,21 +1,17 @@
-import { Competition } from "@/app/types";
 import { FaCalendarAlt, FaMapMarkerAlt } from "react-icons/fa";
+import { UpcomingCompetition } from "@/app/calendar/types";
+import { serverJson } from "@/app/lib/api";
+import { formatDateRange } from "@/app/lib/date";
 
-async function getNextCompetition(): Promise<Competition | null> {
-  const today = new Date().toISOString().split("T")[0];
-
-  try {
-    const res = await fetch(
-      `https://www.worldcubeassociation.org/api/v0/competitions?sort=start_date&start=${today}&country_iso2=HU`,
-    );
-    if (!res.ok) return null;
-
-    const competitions: Competition[] = await res.json();
-    return competitions?.[0] ?? null;
-  } catch (error) {
-    console.error("Közelgő versenyek lekérése sikertelen:", error);
-    return null;
-  }
+// A saját /competitions/upcoming végpontunkon át, nem közvetlenül a WCA-tól:
+// ott van a WCA-hívás egyetlen helye (lapozás, gyorsítótár, párhuzamossági
+// korlát), és így ugyanazt mutatjuk, amit a naptár.
+async function getNextCompetition(): Promise<UpcomingCompetition | null> {
+  const competitions = await serverJson<UpcomingCompetition[]>(
+    "/competitions/upcoming",
+    [],
+  );
+  return competitions[0] ?? null;
 }
 
 const UpcomingEvent = async () => {
@@ -29,7 +25,7 @@ const UpcomingEvent = async () => {
 
      {next ? (
        <a
-         href={`https://www.worldcubeassociation.org/competitions/${next.id}`}
+         href={next.url}
          target="_blank"
          rel="noopener noreferrer"
        >
@@ -40,12 +36,14 @@ const UpcomingEvent = async () => {
            <div className="mt-3 flex flex-col gap-1.5 text-sm text-muted-foreground">
              <span className="flex items-center gap-2">
                <FaCalendarAlt className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-               <span className="tabular">{next.date_range}</span>
+               <span className="tabular">
+                 {formatDateRange(next.startDate, next.endDate)}
+               </span>
              </span>
              <span className="flex items-center gap-2">
                <FaMapMarkerAlt className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                <span>
-                 {[next.city, next.country_iso2].filter(Boolean).join(", ")}
+                 {[next.city, next.country].filter(Boolean).join(", ")}
                </span>
              </span>
            </div>
