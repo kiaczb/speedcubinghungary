@@ -1575,8 +1575,11 @@ végpontot.** `GET /predictions/{id}` nem létezik, ezért a szerveroldali
 `getPrediction` a teljes `GET /predictions` listát kéri le és szűr `id`
 szerint; ha a backend kap egyedi lekérő végpontot, ezt cseréld le. A form
 állapota a `PredictionForm` client komponensben él (a `page.tsx` Server
-Component marad); a "Tipp leadása" gomb `disabled`, ha a tippverseny már
-`closed`. A mezők a kérdés típusához igazodnak:
+Component marad). A "Tipp leadása" gomb **mindig `disabled`**, amíg nincs
+leadási végpont, és a felület ki is mondja, hogy a mezők nem mentődnek.
+⚠️ A `<form onSubmit={e => e.preventDefault()}>` nem hagyható el: nélküle a
+gomb vagy egy Enter natív GET submitot indít, ami újratölti az oldalt, és a
+kitöltött tipp elveszik. Ha a leadás megépül, ide kerül a valódi handler. A mezők a kérdés típusához igazodnak:
 
 - **Versenyző** (`CompetitorInput`): typeahead, a választás a NEVET adja
   vissza. A dobogó-tippeknél a versenyszám **psych sheet-je** a lista
