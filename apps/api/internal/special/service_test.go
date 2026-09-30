@@ -50,9 +50,7 @@ type fakeRound struct {
 	number    int
 	timeLimit *liveTimeLimit
 	results   []liveResult
-	// fail: ha be van állítva és igaz, EZ a kör hibával válaszol, a többi
-	// továbbra is kiszolgálódik — így lehet részleges WCA Live kiesést játszani.
-	fail *atomic.Bool
+	fail      *atomic.Bool
 }
 
 func result(id string, registrantID int, name string, atts []liveAttempt) liveResult {

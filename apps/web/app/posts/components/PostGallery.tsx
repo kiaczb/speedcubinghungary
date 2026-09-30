@@ -3,32 +3,20 @@ import { useRef, useState } from "react";
 import { FaChevronLeft, FaChevronRight } from "react-icons/fa";
 
 type Props = {
-  /** A képek teljes URL-jei a megjelenítés sorrendjében (lásd postImageUrls). */
   images: string[];
-  /** A poszt címe — a képek alt szövegéhez, hogy ne üres alt maradjon. */
   title: string;
 };
 
-// Ennyi vízszintes elhúzás számít lapozásnak (px). Kisebb mozdulat véletlen
-// érintés is lehet, és a függőleges görgetést nem akarjuk elnyelni.
 const SWIPE_THRESHOLD = 50;
 
-/**
- * A poszt képgalériája. Egyetlen képnél nincs vezérlő — akkor ez pontosan az a
- * kép, ami korábban is látszott a poszt oldalán; több képnél nyilakkal, pöttyökkel,
- * billentyűzettel és mobilon húzással lehet lapozni. A lapozás KÖRBEÉR: az utolsó
- * kép után újra az első jön.
- */
 export default function PostGallery({ images, title }: Props) {
   const [index, setIndex] = useState(0);
-  // Az érintés kezdőpontja — ref, mert a húzás közben nem kell újrarenderelni.
   const touchStartX = useRef<number | null>(null);
 
   if (images.length === 0) return null;
 
   if (images.length === 1) {
     return (
-      /* Sima img: a kép domainje környezetenként más — így nem kell remotePatterns. */
       /* eslint-disable-next-line @next/next/no-img-element */
       <img
         src={images[0]}
@@ -76,21 +64,16 @@ export default function PostGallery({ images, title }: Props) {
         onTouchEnd={handleTouchEnd}
         className="group relative overflow-hidden rounded-panel border border-line bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground"
       >
-        {/* Egy sáv, amit eltolunk — így a váltás animált, és minden kép a DOM-ban
-            marad (a böngésző előre betölti a következőt). */}
         <div
           className="flex transition-transform duration-500 ease-smooth"
           style={{ transform: `translateX(-${index * 100}%)` }}
         >
           {images.map((src, i) => (
             <div key={src} className="w-full shrink-0">
-              {/* Sima img: a kép domainje környezetenként más — így nem kell remotePatterns. */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={src}
                 alt={`${title} — ${i + 1}. kép`}
-                // A nem látszó képeket kivesszük a képernyőolvasó és a
-                // tabsorrend elől, hogy a galéria egy elemként viselkedjen.
                 aria-hidden={i !== index}
                 className="aspect-video w-full object-cover"
               />

@@ -19,8 +19,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// A feltöltött képeket a valódi típusukkal kell kiszolgálni: a JSON
-// middleware csak a JSON-t visszaadó route-okon fut, a fájlszerveren nem.
 func TestUploadsAreNotServedAsJSON(t *testing.T) {
 	uploadDir := t.TempDir()
 	png := []byte("\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR")

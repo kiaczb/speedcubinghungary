@@ -12,7 +12,6 @@ import { formatShortDate } from "@/app/lib/date";
 import { reportSummary } from "../lib/report";
 import DeletePostButton from "./DeletePostButton";
 
-// Lásd CreatePostButton: a szerkesztő külön chunkban tölt be, csak ha kell.
 const CreatePostModal = dynamic(() => import("./CreatePostModal"), {
   ssr: false,
 });
@@ -25,16 +24,12 @@ type Props = {
 const PostsListItem = ({ postsItem, isAdmin }: Props) => {
   const badge = badgeMap[postsItem.tag];
   const imageUrl = postCoverUrl(postsItem.image_paths);
-  // A borítókép mellett jelezzük, ha a poszthoz több kép is tartozik.
   const imageCount = postsItem.image_paths?.length ?? 0;
   const [editing, setEditing] = useState(false);
-  // A riport tartalma JSON — összefoglalót mutatunk, nem a nyers tartalmat.
   const preview =
     postsItem.tag === "report"
       ? reportSummary(postsItem.content)
       : postPreview(postsItem.content);
-  // A riport posztot NEM szerkesztjük ezzel a modallal: a tartalma JSON, a modal
-  // viszont markdownt vár — a job írja/frissíti (idempotens).
   const canEdit = isAdmin && postsItem.tag !== "report";
 
   return (
@@ -71,7 +66,6 @@ const PostsListItem = ({ postsItem, isAdmin }: Props) => {
 
             {imageUrl && (
               <div className="relative hidden h-24 w-32 shrink-0 sm:block">
-                {/* Sima img: a kép domainje környezetenként más — így nem kell remotePatterns. */}
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={imageUrl}

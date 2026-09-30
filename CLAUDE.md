@@ -239,8 +239,11 @@ Other Go conventions observed:
   of its sentinels means what.
 - Enums are string types in `internal/types` (`Role`, `PostTag`) with `UPPER_SNAKE`
   const names and lowercase string values.
-- Comments and some identifiers are **in Hungarian** (e.g. `// kell a cookie-hoz`).
-  This is normal here; match the surrounding language when editing a file.
+- **The source carries no comments** (removed deliberately, 2026-09). The only
+  exceptions are tool directives: `eslint-disable-*`, shebangs and the
+  Dockerfile `# syntax=` line. The *why* behind non-obvious decisions lives in
+  this file, not in the code. Some identifiers and test names are **in
+  Hungarian** — that's normal here.
 - Nullable DB columns use `sql.NullString` then copy into the struct.
 - `roles` is stored as JSONB and marshaled/unmarshaled manually with `encoding/json`.
 
@@ -940,7 +943,7 @@ nav links in `app/lib/site.ts` if needed. **Read the Next 16 docs first** (§3 w
 - Enums live in `internal/types` as string types.
 - Frontend: server component fetches → passes props to client components; auth via
   `useUser()`; two API base URLs (server vs browser).
-- Hungarian is used freely in comments and UI copy.
+- Hungarian is used freely in UI copy and test names; the code has no comments.
 
 ---
 
@@ -1653,7 +1656,7 @@ When working in this repo:
    differs from training data. See `apps/web/AGENTS.md`.
 3. **Minimize unnecessary refactoring.** Don't rename constructors, unify JSON
    casing, or replace raw SQL with an ORM unless asked. Match the neighboring
-   file's style — including Hungarian comments/copy.
+   file's style — including Hungarian copy. Don't add comments to the code.
 4. **Keep changes focused and localized.** Touch the feature package (and its
    router wiring) you're changing; avoid cross-cutting sweeps.
 5. **Prefer consistency over cleverness.** Copy the closest existing example rather

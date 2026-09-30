@@ -5,7 +5,6 @@ type SectionProps = {
   title?: string;
   subtitle?: string;
   left?: boolean;
-  /** Saját konténert visz a tartalom (teljes szélességű háttérhez). */
   bleed?: boolean;
   children: React.ReactNode;
   className?: string;

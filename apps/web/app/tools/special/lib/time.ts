@@ -1,4 +1,3 @@
-/** A WCA eredménykódjai: -1 DNF, -2 DNS, 0 nem teljesített (cutoff). */
 export const DNF = -1;
 export const DNS = -2;
 

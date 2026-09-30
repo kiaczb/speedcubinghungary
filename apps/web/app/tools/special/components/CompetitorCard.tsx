@@ -72,20 +72,14 @@ const EditableAttemptCell = ({
   const [value, setValue] = useState(recorded);
   const [busy, setBusy] = useState(false);
   const [invalid, setInvalid] = useState(false);
-  // failed: a mentés elbukott, és a beírt idő MÉG NINCS a szerveren.
   const [failed, setFailed] = useState<string | null>(null);
 
-  // A most mentés alatt álló érték. Enterre a save() után a fókusz a következő
-  // mezőre ugrik, ami blur-t vált ki — az pedig ugyanarra az értékre indítana
-  // egy MÁSODIK mentést.
   const savingRef = useRef<string | null>(null);
 
   const [lastRecorded, setLastRecorded] = useState(recorded);
   if (recorded !== lastRecorded) {
     setLastRecorded(recorded);
     setValue(recorded);
-    // A szerveren lévő érték megváltozott, tehát a korábbi mentési hiba már
-    // nem erről az állapotról szól.
     setFailed(null);
   }
 
@@ -107,10 +101,6 @@ const EditableAttemptCell = ({
     try {
       await onRecord(liveResultId, attempt.attemptNumber, parsed);
     } catch (error) {
-      // ⚠️ Ez az ág NEM hagyható el. A mező tartalma marad, ahogy beírták, és a
-      // cella láthatóan jelzi, hogy nincs elmentve — különben a sikertelen
-      // mentés pontosan úgy néz ki, mint a sikeres (zöld keret, beírt idő), és
-      // verseny közben egy némán elveszett DNF-idő pótolhatatlan.
       console.error("A DNF idő mentése sikertelen:", error);
       setFailed(error instanceof Error ? error.message : "Ismeretlen hiba történt.");
     } finally {
@@ -125,8 +115,6 @@ const EditableAttemptCell = ({
       <input
         value={value}
         onChange={(event) => {
-          // Elutasított bevitelnél (null) a mező az ELŐZŐ értéken marad —
-          // verseny közben egy néma csonkolás rosszabb, mint ha nem lép semmi.
           const formatted = formatTimeInput(event.target.value);
           if (formatted === null) return;
 
@@ -179,8 +167,6 @@ const EditableAttemptCell = ({
         }`}
       />
 
-      {/* A hibát nem csak szín jelzi: a piros keret önmagában se a színtévesztő,
-          se a képernyőolvasós használónak nem mond semmit. */}
       {failed !== null && (
         <>
           <span

@@ -1,6 +1,5 @@
 name: Deploy TEST
 
-# Build + test, then deploy to the staging server. Runs on push to `test`.
 on:
   push:
     branches: [test]
@@ -38,7 +37,6 @@ jobs:
             git reset --hard origin/test
 
             echo "==> Building & starting staging stack"
-            # `up` never removes named volumes, so the database is never wiped.
             docker compose -f infra/docker-compose.yml -f infra/docker-compose.test.yml --env-file .env.test up -d --build
 
             echo "==> Pruning dangling images"

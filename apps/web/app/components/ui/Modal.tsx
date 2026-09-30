@@ -4,40 +4,23 @@ import { useEffect, useId, useRef } from "react";
 import type { PointerEvent } from "react";
 import { createPortal } from "react-dom";
 
-/**
- * A modális párbeszédek közös váza: háttér, panel, fejléc, Escape,
- * háttérkattintás, görgetészár és fókuszcsapda.
- *
- * ⚠️ A fókuszcsapda nélkül a Tab kiviszi a fókuszt a letakart, de továbbra is
- * elérhető oldalra: a billentyűzettel vagy képernyőolvasóval dolgozó ember
- * olyan gombokat üt le, amiket nem is lát.
- */
-
 type ModalSize = "sm" | "md" | "lg";
 
 type Props = {
-  /** A párbeszéd címe. Fejléc nélkül is ez lesz a hozzáférhető neve. */
   title: string;
   onClose: () => void;
   children: React.ReactNode;
   size?: ModalSize;
-  /** A megerősítő párbeszédek `alertdialog`-ot használnak. */
   role?: "dialog" | "alertdialog";
-  /**
-   * Mentés közben a bezárás minden útja tiltott (Escape, háttérkattintás, ×) —
-   * különben a felhasználó egy futó kérés közben csukná be az űrlapot.
-   */
   closeDisabled?: boolean;
-  /** A megerősítő párbeszédnek nincs fejlécsávja: a címe a törzsben áll. */
   hideHeader?: boolean;
-  /** Nyitáskor ide kerül a fókusz; enélkül magára a panelre. */
   initialFocusRef?: React.RefObject<HTMLElement | null>;
 };
 
 const SIZE_CLASS: Record<ModalSize, string> = {
-  sm: "max-w-sm", // megerősítés
-  md: "max-w-lg", // olvasnivaló (pl. szabályok)
-  lg: "max-w-2xl", // űrlap
+  sm: "max-w-sm",
+  md: "max-w-lg",
+  lg: "max-w-2xl",
 };
 
 const FOCUSABLE_SELECTOR = [
@@ -63,13 +46,7 @@ export default function Modal({
   const panelRef = useRef<HTMLDivElement>(null);
   const pressedOnBackdrop = useRef(false);
 
-  // Csak mountkor/unmountkor fut: a fókuszt egyszer állítjuk be, és bezáráskor
-  // oda adjuk vissza, ahonnan a párbeszéd indult. A closeDisabled váltakozása
-  // nem indíthatja újra, különben a mentés elindítása elugrasztaná a fókuszt.
-  // Ugyanitt zárjuk a háttér görgetését.
   useEffect(() => {
-    // A padding-right a görgetősáv helyét tartja meg: nélküle az oldal a sáv
-    // eltűnésekor jobbra ugrana.
     const { overflow, paddingRight } = document.body.style;
     const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
     document.body.style.overflow = "hidden";
@@ -104,8 +81,6 @@ export default function Modal({
         panel.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
       );
 
-      // Nincs mit fókuszálni (pl. minden mező disabled mentés közben): a
-      // fókusz akkor is a panelen marad, nem szökik ki az oldalra.
       if (focusable.length === 0) {
         event.preventDefault();
         panel.focus();
@@ -129,17 +104,11 @@ export default function Modal({
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [onClose, closeDisabled]);
 
-  // A párbeszéd csak felhasználói művelet után renderelődik, de a portál
-  // szerveroldalon nem működne — ez a kapu teszi biztonságossá.
   if (typeof document === "undefined") return null;
 
   return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm dark:bg-black/70"
-      // ⚠️ Csak akkor zárunk, ha a gomb a háttéren ment le ÉS ott is jött fel.
-      // Egy szövegkijelölés a panelben kezdődhet és a háttéren érhet véget; a
-      // böngésző ilyenkor a közös ősnek, a háttérnek küldi a clicket — és egy
-      // félig kitöltött űrlap szó nélkül eltűnne.
       onPointerDown={(event: PointerEvent<HTMLDivElement>) => {
         pressedOnBackdrop.current = event.target === event.currentTarget;
       }}

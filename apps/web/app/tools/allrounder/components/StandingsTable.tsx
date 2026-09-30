@@ -8,13 +8,9 @@ type StandingsTableProps = {
   podiumCount: number;
 };
 
-// A táblázat `border-separate`, nem `border-collapse`: összevont keretnél a
-// böngészők nem viszik magukkal a szegélyt a ragadós (sticky) cellákkal, így
-// vízszintes görgetéskor szétesne a rács.
 const HEAD_CELL =
   "sticky top-0 border-b border-line bg-surface-muted px-3 py-2.5 " +
   "text-xs font-semibold uppercase tracking-wide text-muted-foreground";
-
 
 const FROZEN =
   "sticky left-0 border-r border-line " +
@@ -66,11 +62,6 @@ const StandingsTable = ({
                   scope="row"
                   className={`${BODY_CELL} ${FROZEN} ${ROW_HOVER} relative z-10 bg-surface text-left font-normal`}
                 >
-                  {/* A díjazott helyezéseket a sor bal szélén futó vonal jelöli:
-                      abszolút pozícióban, hogy ne tolja el a cella tartalmát.
-                      Az 1–3. hely arany/ezüst/bronz, a többi díjazott hely
-                      semleges zöld — a `podiumCount` a szoros dobogónál
-                      nagyobb is lehet. */}
                   {isPodium && (
                     <span
                       className={`absolute inset-y-0 left-0 w-0.5 ${

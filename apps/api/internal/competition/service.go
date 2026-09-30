@@ -11,24 +11,14 @@ import (
 	"golang.org/x/sync/singleflight"
 )
 
-// countryNames maps ISO 3166-1 alpha-2 codes to human-readable country names.
 var countryNames = map[string]string{
 	"HU": "Hungary",
 }
 
-// idPattern matches a WCA competition or event id. Both end up directly in
-// the upstream request path (GetPsychSheet, GetWCIF), so they are validated
-// before use rather than trusted from the client.
 var idPattern = regexp.MustCompile(`^[A-Za-z0-9]{1,64}$`)
 
-// ErrInvalidID is returned when a client-supplied competition or event id
-// fails idPattern.
 var ErrInvalidID = errors.New("invalid id")
 
-// upstreamCacheTTL bounds how long a psych sheet / registrant list is served
-// from memory. The WCA API rate-limits bursts at roughly 15 requests, and a
-// prediction page with a dozen podium events would exceed that on every load
-// without this cache.
 const upstreamCacheTTL = 15 * time.Minute
 
 type cacheEntry[T any] struct {
@@ -44,11 +34,8 @@ type Service struct {
 	competitions map[string]cacheEntry[Competition]
 	psychSheets  map[string]cacheEntry[[]PsychSheetEntry]
 	competitors  map[string]cacheEntry[[]Competitor]
-	// flight collapses concurrent misses for the same key into one upstream
-	// request — React StrictMode alone doubles every fetch in development.
-	flight singleflight.Group
-	// nextSweep is when the caches are next swept for expired entries.
-	nextSweep time.Time
+	flight       singleflight.Group
+	nextSweep    time.Time
 }
 
 func NewService(repo Repository) *Service {
@@ -61,10 +48,6 @@ func NewService(repo Repository) *Service {
 	}
 }
 
-// GetUpcomingHungarian returns the simplified list of upcoming Hungarian
-// competitions, already sorted by start date by the upstream API. Cached like
-// the rest: it walks every page of the WCA listing (two requests at least),
-// and the home page, the calendar and the prediction modal all read it.
 func (s *Service) GetUpcomingHungarian() ([]Competition, error) {
 	return cached(s, s.upcoming, "upcoming:HU", func() ([]Competition, error) {
 		raw, err := s.repo.GetUpcomingByCountry("HU")
@@ -80,11 +63,6 @@ func (s *Service) GetUpcomingHungarian() ([]Competition, error) {
 	})
 }
 
-// GetCompetition returns one competition by id, whatever its date. Use this —
-// not GetUpcomingHungarian — to describe a competition you already know the id
-// of: the upcoming list drops a competition once it is over, which is exactly
-// when a prediction contest about it is most interesting. ErrNotFound means
-// the WCA does not know the id.
 func (s *Service) GetCompetition(competitionID string) (Competition, error) {
 	if !idPattern.MatchString(competitionID) {
 		return Competition{}, ErrInvalidID
@@ -112,8 +90,6 @@ func toCompetition(c wcaCompetition) Competition {
 	}
 }
 
-// countryName resolves an ISO2 code to a readable name, falling back to the
-// code itself when it is not known.
 func countryName(iso2 string) string {
 	if name, ok := countryNames[iso2]; ok {
 		return name
@@ -121,8 +97,6 @@ func countryName(iso2 string) string {
 	return iso2
 }
 
-// GetPsychSheet returns the psych-sheet (PR-ranked start list) for one event
-// of one competition, ordered by position.
 func (s *Service) GetPsychSheet(competitionID, eventID string) ([]PsychSheetEntry, error) {
 	if !idPattern.MatchString(competitionID) || !idPattern.MatchString(eventID) {
 		return nil, ErrInvalidID
@@ -146,9 +120,6 @@ func (s *Service) GetPsychSheet(competitionID, eventID string) ([]PsychSheetEntr
 	})
 }
 
-// GetCompetitors returns every accepted, competing registrant of a
-// competition, sorted by name. Sourced from the public WCIF because the
-// /registrations endpoint only carries user ids, not names.
 func (s *Service) GetCompetitors(competitionID string) ([]Competitor, error) {
 	if !idPattern.MatchString(competitionID) {
 		return nil, ErrInvalidID
@@ -174,9 +145,6 @@ func (s *Service) GetCompetitors(competitionID string) ([]Competitor, error) {
 	})
 }
 
-// cached serves key from cache while it is fresh, otherwise runs fetch once
-// for all concurrent callers and stores the result. Failures are not cached,
-// so a transient upstream error is retried on the next request.
 func cached[T any](s *Service, cache map[string]cacheEntry[T], key string, fetch func() (T, error)) (T, error) {
 	s.mu.Lock()
 	entry, ok := cache[key]
@@ -203,9 +171,6 @@ func cached[T any](s *Service, cache map[string]cacheEntry[T], key string, fetch
 	return value.(T), nil
 }
 
-// sweepLocked drops expired entries from every cache, at most once per TTL.
-// The keys are client-supplied ids, so without it every id anyone ever asked
-// about would stay in memory for the life of the process.
 func (s *Service) sweepLocked() {
 	now := time.Now()
 	if now.Before(s.nextSweep) {

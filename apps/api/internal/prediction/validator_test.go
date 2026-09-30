@@ -113,8 +113,6 @@ func TestValidateNewContest_ExtraQuestions(t *testing.T) {
 	}
 }
 
-// A (contest_id, event_id) elsődleges kulcs: a duplikátum korábban csak az
-// INSERT-nél, kulcssértésként bukott el — 500-ként, 400 helyett.
 func TestValidateNewContest_RejectsDuplicateAndMalformedPodiumEvents(t *testing.T) {
 	competitionID, deadline, _, questions := validNewContest()
 
@@ -131,8 +129,6 @@ func TestValidateNewContest_RejectsDuplicateAndMalformedPodiumEvents(t *testing.
 		ErrTooManyPodiumEvents)
 }
 
-// A csak szóközből álló prompt nem üres a Go szemében, de a felületen üres
-// kérdésként jelenne meg.
 func TestValidateNewContest_RejectsBlankAndOversizedPrompts(t *testing.T) {
 	competitionID, deadline, podiumEventIDs, _ := validNewContest()
 
@@ -152,8 +148,6 @@ func TestValidateNewContest_RejectsBlankAndOversizedPrompts(t *testing.T) {
 		ErrTooManyQuestions)
 }
 
-// Minden validációs hiba ErrValidation is — a handler erre az egyre nézve ad
-// 400-at, így egy új szabály nem eshet ki a leképezésből.
 func TestValidationErrorsShareOneRoot(t *testing.T) {
 	for _, err := range []error{
 		ErrInvalidContestID, ErrInvalidCompetitionID, ErrPastDeadline,

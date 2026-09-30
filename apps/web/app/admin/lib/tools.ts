@@ -7,8 +7,6 @@ import {
 } from "react-icons/fa";
 import type { AdminTool } from "../types";
 
-// Minden admin eszköz itt kerül regisztrálásra — új csempe hozzáadásához
-// elég ide felvenni egy bejegyzést, a rács automatikusan megjeleníti.
 export const ADMIN_TOOLS: AdminTool[] = [
   {
     id: "posts",

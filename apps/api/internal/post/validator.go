@@ -13,7 +13,6 @@ var (
 	ErrPostNotFound = errors.New("post not found")
 )
 
-// isValidTag: a post_tag DB enum megengedett értékei.
 func isValidTag(t types.PostTag) bool {
 	switch t {
 	case types.TAG_EVENT, types.TAG_COMPETITION, types.TAG_NEWS,
@@ -27,7 +26,6 @@ func ValidatePost(p Post) error {
 	if p.ID == "" {
 		return ErrInvalidID
 	}
-	// Enélkül egy hibás tag csak az INSERT-nél bukna el, 500-ként.
 	if !isValidTag(p.Tag) {
 		return ErrInvalidTag
 	}

@@ -22,10 +22,6 @@ type LiveTracker struct {
 	client      *LiveClient
 	broadcaster *wcalive.Broadcaster
 
-	// session a WCA Live kapcsolat életciklusa — közös a special csomaggal,
-	// lásd internal/wcalive/session.go. Itt CSAK az marad, ami az All-Rounder
-	// sajátja: egyszerre EGY állomást követünk (a sorozat dönti el, melyiket),
-	// ezért nincs szükség a special többversenyes gépezetére.
 	session *wcalive.Session
 
 	mu      sync.Mutex
@@ -71,10 +67,6 @@ func (t *LiveTracker) Rounds(ctx context.Context, competitionWCAID string, liveC
 func (t *LiveTracker) AddViewer(competitionWCAID string, liveCompetitionID, year int) func() {
 	entry := t.entry(competitionWCAID, liveCompetitionID, year)
 
-	// ⚠️ A nézőszámot a session INDÍTÁSA ELŐTT kell növelni: az induló session
-	// első dolga egy Reload, az pedig néző nélkül nem csinál semmit. Fordított
-	// sorrendben a nyitó betöltés kimaradhatna, és az állomás csak a következő
-	// (2 perces) frissítéskor jelenne meg.
 	t.mu.Lock()
 	t.viewers++
 	if t.viewers == 1 {
@@ -85,7 +77,6 @@ func (t *LiveTracker) AddViewer(competitionWCAID string, liveCompetitionID, year
 	releaseSession, startedSession := t.session.AddViewer()
 
 	if !startedSession {
-		// A session már futott: a saját állomásunkat külön kell betöltetni.
 		go t.ensureLoaded(t.session.Context(), entry)
 	}
 
@@ -199,17 +190,11 @@ func (t *LiveTracker) load(ctx context.Context, entry *trackedCompetition) ([]Ro
 
 	wg.Wait()
 
-	// Ha egyetlen kör sem jött le, az elérhetetlen upstream, nem részleges hiba:
-	// ne írjuk felül a meglévő állapotot, és a loadedAt-ot se frissítsük.
 	if len(failed) > 0 && len(rounds) == 0 {
 		return nil, fmt.Errorf("every round query failed for %s", entry.competitionWCAID)
 	}
 
 	t.mu.Lock()
-	// ⚠️ Egy kör lekérési hibája NEM törölheti a kör addigi eredményeit: a map
-	// teljes cseréjével az élő állomás pontjai látványosan lecsökkennének, majd
-	// a következő frissítéskor visszajönnének — a versenyzőnek ez elvesztett
-	// pontnak látszik. A hibás körök ezért az ELŐZŐ pillanatképükkel élnek tovább.
 	for roundID := range failed {
 		if previous, known := entry.rounds[roundID]; known {
 			rounds[roundID] = previous
@@ -244,8 +229,6 @@ func (t *LiveTracker) ensureLoaded(ctx context.Context, entry *trackedCompetitio
 	}
 }
 
-// Reload a wcalive.Watcher tagja: a session indulásakor, a socket
-// (újra)kapcsolódásakor és a frissítési időzítőre hívódik.
 func (t *LiveTracker) Reload(ctx context.Context) {
 	t.mu.Lock()
 	entry := t.tracked
@@ -261,8 +244,6 @@ func (t *LiveTracker) Reload(ctx context.Context) {
 	}
 }
 
-// HandleEvent a wcalive.Watcher tagja. Minden roundUpdated esemény TELJES
-// kör-pillanatképet hoz, ezért a kimaradt vagy duplikált esemény magától gyógyul.
 func (t *LiveTracker) HandleEvent(event wcalive.SubscriptionEvent) {
 	roundID, err := wcalive.RoundIDFromKey(event.Key)
 	if err != nil {
@@ -306,8 +287,6 @@ func (t *LiveTracker) HandleEvent(event wcalive.SubscriptionEvent) {
 	}
 }
 
-// WantedSubscriptions a wcalive.Watcher tagja: az éppen figyelt állomás nyitott
-// köreire akarunk feliratkozni. Néző nélkül üres, így a session elengedi őket.
 func (t *LiveTracker) WantedSubscriptions() map[string]wcalive.Subscription {
 	t.mu.Lock()
 	defer t.mu.Unlock()

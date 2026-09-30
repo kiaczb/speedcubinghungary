@@ -28,7 +28,6 @@ const NewsCard: React.FC<NewsCardProps> = ({ post, imageUrl }) => {
       >
         <div className="relative aspect-video overflow-hidden bg-surface-muted">
           {imageUrl ? (
-            /* Sima img: a kép domainje környezetenként más — így nem kell remotePatterns. */
             /* eslint-disable-next-line @next/next/no-img-element */
             <img
               src={imageUrl}

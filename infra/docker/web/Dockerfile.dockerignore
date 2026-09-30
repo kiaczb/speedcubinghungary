@@ -1,5 +1,3 @@
-# Per-Dockerfile ignore for the web build (context: repo root).
-# Excludes everything the web image doesn't need, keeping the build context lean.
 .git
 .github
 docs

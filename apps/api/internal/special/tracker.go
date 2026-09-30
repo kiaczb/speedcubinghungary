@@ -31,10 +31,6 @@ type Tracker struct {
 	client      *LiveClient
 	broadcaster *wcalive.Broadcaster
 
-	// session a WCA Live kapcsolat életciklusa (nézőszámlálás, socket
-	// indítás/leállítás, feliratkozás-szinkron) — lásd internal/wcalive/session.go.
-	// Ez a réteg közös az allrounder csomaggal; itt CSAK az marad, ami a
-	// Special sajátja: több verseny követése egyszerre, és a pillanatkép alakja.
 	session *wcalive.Session
 
 	mu           sync.Mutex
@@ -91,9 +87,6 @@ func (t *Tracker) AddViewer(competition Competition) (func(), error) {
 		return nil, err
 	}
 
-	// A versenyenkénti nézőszám a MI könyvelésünk (ebből derül ki, melyik
-	// verseny köreire kell feliratkozni, és hogy a pillanatkép magától
-	// frissül-e); a socket életciklusát a session számolja.
 	t.mu.Lock()
 	entry.viewers++
 	if entry.viewers == 1 {
@@ -104,8 +97,6 @@ func (t *Tracker) AddViewer(competition Competition) (func(), error) {
 	releaseSession, startedSession := t.session.AddViewer()
 
 	if !startedSession {
-		// A session már futott, tehát EZT a versenyt külön kell betölteni és
-		// feliratkoztatni; az induló session ezt magától megtenné.
 		go t.ensureLive(t.session.Context(), entry)
 	}
 
@@ -122,8 +113,6 @@ func (t *Tracker) AddViewer(competition Competition) (func(), error) {
 
 			releaseSession()
 
-			// Ha a session él tovább (más versenyt még néznek), ennek a
-			// versenynek a feliratkozásait el kell engedni.
 			if t.session.Running() {
 				t.session.SyncSubscriptions()
 			}
@@ -251,19 +240,11 @@ func (t *Tracker) load(ctx context.Context, entry *trackedCompetition, force boo
 
 	wg.Wait()
 
-	// Ha EGYETLEN kör sem jött le, az nem részleges hiba, hanem elérhetetlen
-	// upstream. Ilyenkor ne írjuk felül a meglévő állapotot, és a loadedAt-ot se
-	// frissítsük — így a következő kérés azonnal újrapróbálja, ahelyett hogy egy
-	// üres pillanatképet szolgálnánk ki a cache TTL végéig.
 	if len(failed) > 0 && len(rounds) == 0 {
 		return nil, fmt.Errorf("every round query failed for %s", entry.competition.CompetitionWCAID)
 	}
 
 	t.mu.Lock()
-	// ⚠️ Egy kör lekérési hibája NEM törölheti a kör addigi eredményeit. A map
-	// teljes cseréjével egy pillanatnyi WCA Live hiba eltüntetné a kört a
-	// riportból, és a kumulatív keret (A1a3) hibás „maradék időt” mutatna —
-	// ezért a hibás körök az ELŐZŐ pillanatképükkel élnek tovább.
 	for roundID := range failed {
 		if previous, known := entry.rounds[roundID]; known {
 			rounds[roundID] = previous
@@ -326,10 +307,6 @@ func openRounds(competition *liveCompetition) []trackedRound {
 	return rounds
 }
 
-// Reload a wcalive.Watcher tagja: a session indulásakor, a socket
-// (újra)kapcsolódásakor és a frissítési időzítőre hívódik. Minden ÉPPEN NÉZETT
-// verseny minden körét újratölti — ez az, ami pótolja a kapcsolat nélkül
-// eltelt időt, és ami észreveszi, hogy új kör nyílt.
 func (t *Tracker) Reload(ctx context.Context) {
 	t.mu.Lock()
 	t.evictLocked()
@@ -349,9 +326,6 @@ func (t *Tracker) Reload(ctx context.Context) {
 	}
 }
 
-// HandleEvent a wcalive.Watcher tagja. Minden roundUpdated esemény TELJES kör-
-// pillanatképet hoz (nem különbséget), ezért a duplikált, késve vagy egyáltalán
-// meg nem érkező esemény magától gyógyul — ne építs rá eseménynaplót.
 func (t *Tracker) HandleEvent(event wcalive.SubscriptionEvent) {
 	roundID, err := wcalive.RoundIDFromKey(event.Key)
 	if err != nil {
@@ -401,9 +375,6 @@ func (t *Tracker) roundOwner(roundID int) (*trackedCompetition, trackedRound, bo
 	return nil, trackedRound{}, false
 }
 
-// WantedSubscriptions a wcalive.Watcher tagja: a MOST nézett versenyek köreire
-// akarunk feliratkozni. Nézők nélküli verseny köre nincs benne, így a session
-// magától elengedi.
 func (t *Tracker) WantedSubscriptions() map[string]wcalive.Subscription {
 	t.mu.Lock()
 	defer t.mu.Unlock()

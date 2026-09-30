@@ -12,8 +12,6 @@ import {
   FaQuoteLeft,
 } from "react-icons/fa";
 
-// Csak az előnézet megnyitásakor töltjük be a markdown-renderelőt, hogy a
-// react-markdown ne kerüljön bele a /posts oldal kliens bundle-jébe.
 const PostContent = dynamic(() => import("./PostContent"), {
   ssr: false,
   loading: () => (
@@ -107,8 +105,6 @@ export default function MarkdownEditor({
 }: Props) {
   const [tab, setTab] = useState<"write" | "preview">("write");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  // A beszúrás után visszaállítandó kijelölés. Ref, nem state: így nem kell
-  // effectben setState-et hívni.
   const pendingSelection = useRef<[number, number] | null>(null);
 
   useLayoutEffect(() => {
@@ -147,13 +143,11 @@ export default function MarkdownEditor({
       const text = selected || "link szövege";
       const url = "https://";
       onChange(value.slice(0, start) + `[${text}](${url})` + value.slice(end));
-      // A kurzor az URL-re kerüljön, mert azt kell kitölteni.
       const from = start + text.length + 3;
       pendingSelection.current = [from, from + url.length];
       return;
     }
 
-    // Sor eleji jelölés: a kijelölést egész sorokra terjesztjük ki.
     const lineStart = value.lastIndexOf("\n", start - 1) + 1;
     const nextNewline = value.indexOf("\n", end);
     const lineEnd = nextNewline === -1 ? value.length : nextNewline;
@@ -229,7 +223,6 @@ export default function MarkdownEditor({
       ) : (
         <div
           className="min-h-48 bg-surface px-3.5 py-2.5 text-[15px] leading-relaxed text-foreground"
-          // Ugyanaz a renderelő fut, mint az éles poszt oldalon.
         >
           {value.trim() ? (
             <PostContent content={value} />

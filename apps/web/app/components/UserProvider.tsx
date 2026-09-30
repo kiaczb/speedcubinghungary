@@ -12,7 +12,6 @@ export interface MeResponse {
 
 interface UserContextType {
   user: MeResponse | null;
-  /** Csak a felület döntése — a jogosultságot a backend külön ellenőrzi. */
   isAdmin: boolean;
   isLoading: boolean;
   logout: () => Promise<void>;
@@ -35,7 +34,6 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({
   useEffect(() => {
     const fetchMe = async () => {
       try {
-        // A 401 itt VÁRT állapot: nincs bejelentkezve. Ezért nem naplózunk.
         setUser(await clientJson<MeResponse>("/me"));
       } catch {
         setUser(null);
@@ -53,9 +51,6 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({
     } catch (error) {
       console.error("Logout failed", error);
     }
-    // A helyi állapotot akkor is töröljük, ha a kérés elbukott — a süti
-    // egy órán belül amúgy is lejár, és a felhasználó kijelentkezettnek hiszi
-    // magát.
     setUser(null);
   };
 

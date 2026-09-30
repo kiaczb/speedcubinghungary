@@ -3,11 +3,6 @@ export type PostsItem = {
   tag: TagTypes;
   title: string;
   content: string;
-  /**
-   * A poszt képeinek API-relatív útvonalai (pl. "/uploads/<uuid>.webp") a
-   * MEGJELENÍTÉS sorrendjében — az első elem a borítókép, a többi a poszt
-   * oldalán lévő carousel további képe. Az API kép nélküli poszthoz []-t ad.
-   */
   image_paths?: string[];
   created_at: string;
 };
@@ -33,9 +28,6 @@ export const badgeMap = {
     color:
       "bg-amber-50 text-amber-800 ring-amber-600/25 dark:bg-amber-950 dark:text-amber-300 dark:ring-amber-400/25",
   },
-  // A weekly-report job által generált heti riport (post_tag 'report').
-  // Kötelező bejegyzés: a badge-et a tag alapján keressük ki, enélkül a
-  // riport posztok renderelése elszállna.
   report: {
     label: "Heti riport",
     color:
@@ -45,27 +37,22 @@ export const badgeMap = {
 
 export type TagTypes = keyof typeof badgeMap;
 
-// --- Weekly report (tag === "report") -----------------------------------------
-// A riport posztok `content`-je JSON ezzel a struktúrával (a weekly-report job
-// állítja elő, lásd apps/scripts/weekly-report/reportPayload.py). A frontend a
-// WeeklyReportView komponenssel rendereli, nem markdownként.
-
 export type WeeklyReportResult = {
   event: string;
-  type: string; // "single" | "average"
-  result: string; // már formázva a Python oldalon (pl. "6.42")
-  badge: string; // "NR" | "CR" | "WR" | "PR"
+  type: string;
+  result: string;
+  badge: string;
 };
 
 export type WeeklyReportCompetitor = {
   name: string;
-  results: WeeklyReportResult[]; // üres, ha a versenyzőnek nincs rekordja
+  results: WeeklyReportResult[];
 };
 
 export type WeeklyReportCompetition = {
   name: string;
   countryIso: string;
-  from: string; // ISO dátum (YYYY-MM-DD)
+  from: string;
   to: string;
   competitors: WeeklyReportCompetitor[];
 };

@@ -1,4 +1,3 @@
-# --- Node.js / Next.js ---
 node_modules/
 .next/
 out/
@@ -7,31 +6,22 @@ dist/
 *.log
 *.tsbuildinfo
 
-# --- Environment & Secrets ---
-# Never commit actual .env files - they contain secrets!
-# Ignores .env, .env.dev, .env.test, .env.prod, .env.local, etc...
 .env
 .env.*
 
-# ...but keep the committed templates (.env.example, .env.dev.example, ...)
 !.env.example
 !.env.*.example
 
-# Docker compose overrides
 docker-compose.override.yml
 
-# --- Operációs rendszer ---
 .DS_Store
 Thumbs.db
 *.swp
 
-# --- DBeaver / IDE ---
 .dbeaver/
 .vscode/
 .idea/
 
-# --- Adatok (ha van perzisztens adatod helyben) ---
 postgres_data/
 
-# --- Python ---
 __pycache__/

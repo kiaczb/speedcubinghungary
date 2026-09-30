@@ -35,7 +35,6 @@ func newTestHandler(svc Service) *Handler {
 	return NewHandler(svc, testConfig())
 }
 
-// cookieByName kikeresi a válaszban beállított sütit.
 func cookieByName(resp *http.Response, name string) *http.Cookie {
 	for _, c := range resp.Cookies() {
 		if c.Name == name {
@@ -63,12 +62,7 @@ func TestHandler_Login_SetsStateCookieAndRedirects(t *testing.T) {
 	state := cookieByName(resp, stateCookieName)
 	require.NotNil(t, state, "a CSRF nonce sütinek léteznie kell")
 	assert.True(t, state.HttpOnly, "a nonce-ot JS nem olvashatja")
-	// ⚠️ Lax, nem Strict: a WCA-tól visszaérkező kereszt-oldali navigációra a
-	// Strict sütit a böngésző NEM küldené vissza, és a belépés mindig elbukna.
 	assert.Equal(t, http.SameSiteLaxMode, state.SameSite)
-	// ⚠️ Path "/": test/prod alatt a Caddy levágja az /api prefixet, a böngésző
-	// viszont /api/login/callback-ot lát — egy /login-ra szűkített süti ott nem
-	// érkezne vissza.
 	assert.Equal(t, "/", state.Path)
 
 	nonce, redirectPath, found := strings.Cut(state.Value, ":")
@@ -76,13 +70,10 @@ func TestHandler_Login_SetsStateCookieAndRedirects(t *testing.T) {
 	assert.Len(t, nonce, 64, "32 bájt hex-ként 64 karakter")
 	assert.Equal(t, "/posts", redirectPath)
 
-	// A kiküldött state a nonce, nem az útvonal.
 	mockSvc.AssertCalled(t, "AuthorizeURL", nonce)
 }
 
 func TestHandler_Login_RejectsOpenRedirectTargets(t *testing.T) {
-	// A `redirect` a felhasználótól jön, és a belépés végén Location fejlécbe
-	// kerül — a saját oldalunkon kívülre mutató értéket el kell dobni.
 	for _, target := range []string{
 		"https://evil.example",
 		"//evil.example",
@@ -112,8 +103,6 @@ func TestHandler_Login_RejectsOpenRedirectTargets(t *testing.T) {
 	}
 }
 
-// startLogin lefuttatja a /login ágat, és visszaadja a state sütit, hogy a
-// callback tesztek valódi (nem kézzel gyártott) nonce-szal dolgozhassanak.
 func startLogin(t *testing.T, redirectPath string) *http.Cookie {
 	t.Helper()
 
@@ -150,7 +139,6 @@ func TestHandler_LoginCallback_Success(t *testing.T) {
 	defer resp.Body.Close()
 
 	assert.Equal(t, http.StatusFound, resp.StatusCode)
-	// A visszairányítás célja a SÜTIBŐL jön, nem a state-ből.
 	assert.Equal(t, "http://localhost:3000/posts", resp.Header.Get("Location"))
 
 	auth := cookieByName(resp, authCookieName)
@@ -160,7 +148,6 @@ func TestHandler_LoginCallback_Success(t *testing.T) {
 	assert.Equal(t, http.SameSiteStrictMode, auth.SameSite)
 	assert.Equal(t, 3600, auth.MaxAge)
 
-	// A state süti a folyamat végén törlődik.
 	state := cookieByName(resp, stateCookieName)
 	require.NotNil(t, state)
 	assert.Equal(t, -1, state.MaxAge)
@@ -168,12 +155,6 @@ func TestHandler_LoginCallback_Success(t *testing.T) {
 	mockSvc.AssertExpectations(t)
 }
 
-// ⚠️ EZ A TESZT ŐRZI A CSRF-VÉDELMET.
-//
-// A `state` a folyamat CSRF-tokenje. Enélkül (vagy nem egyező értékkel) a
-// támadó a SAJÁT WCA-fiókjához tartozó code-ot játszhatná be az áldozat
-// böngészőjébe, és az áldozat észrevétlenül a támadó fiókjában dolgozna.
-// Egyik ág sem válthatja be a kódot, és nem állíthat ki auth sütit.
 func TestHandler_LoginCallback_RejectsBadState(t *testing.T) {
 	valid := startLogin(t, "/posts")
 	validNonce, _, _ := strings.Cut(valid.Value, ":")
@@ -241,7 +222,6 @@ func TestHandler_LoginCallback_UpstreamFailureDoesNotLeakDetails(t *testing.T) {
 	assert.Equal(t, http.StatusFound, resp.StatusCode)
 	assert.Equal(t, "http://localhost:3000/?login=failed", resp.Header.Get("Location"))
 	assert.Nil(t, cookieByName(resp, authCookieName))
-	// Az upstream hibaszöveg nem kerülhet a válaszba.
 	assert.NotContains(t, w.Body.String(), assert.AnError.Error())
 }
 
@@ -270,7 +250,7 @@ func TestHandler_Me(t *testing.T) {
 	var body map[string]any
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
 
-	assert.Equal(t, float64(user.UserID), body["user_id"]) // JSON unmarshal miatt float64
+	assert.Equal(t, float64(user.UserID), body["user_id"])
 	assert.Equal(t, user.WCAID, body["wca_id"])
 	assert.Equal(t, user.Name, body["name"])
 	assert.Equal(t, user.AvatarURL, body["avatarURL"])
@@ -301,8 +281,6 @@ func TestHandler_Logout(t *testing.T) {
 	require.NotNil(t, auth)
 	assert.Equal(t, "", auth.Value)
 	assert.Equal(t, -1, auth.MaxAge)
-	// A törlő sütinek egyeznie kell a kiállítottal, különben a böngésző nem
-	// ugyanazt a sütit törli.
 	assert.True(t, auth.HttpOnly)
 	assert.Equal(t, http.SameSiteStrictMode, auth.SameSite)
 	assert.Equal(t, "/", auth.Path)
@@ -312,8 +290,6 @@ func TestHandler_Logout(t *testing.T) {
 	assert.Equal(t, "logged out", body["message"])
 }
 
-// A Secure flag a DEPLOYMENT-ből jön. A config csomag kötelezővé teszi és
-// értékkészletre ellenőrzi, így ez nem eshet vissza némán fejlesztői módra.
 func TestHandler_CookiesAreSecureOutsideDevelopment(t *testing.T) {
 	cfg := testConfig()
 	cfg.Deployment = "production"

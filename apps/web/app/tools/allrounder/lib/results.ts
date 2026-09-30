@@ -1,9 +1,5 @@
 import type { EventResult } from "../types";
 
-/**
- * Egy versenyző beszámító eredményei állomásonként csoportosítva. A táblázat
- * (asztali) és a lista (mobil) nézet ugyanezt a csoportosítást használja.
- */
 export function groupByCompetition(
   results: EventResult[],
 ): Map<string, EventResult[]> {
@@ -23,12 +19,6 @@ export function groupByCompetition(
 
 export type Medal = "gold" | "silver" | "bronze";
 
-/**
- * Az 1–3. helyezés érme-színe. Csak a szoros dobogóra (top 3) vonatkozik —
- * a `podiumCount` (a sorozat végén díjazott helyezettek száma) ettől
- * független és lehet annál nagyobb is; azokra a helyekre marad a semleges
- * kiemelés.
- */
 export function medalForRank(rank: number): Medal | null {
   if (rank === 1) return "gold";
   if (rank === 2) return "silver";
@@ -36,9 +26,6 @@ export function medalForRank(rank: number): Medal | null {
   return null;
 }
 
-// Az érmék tényleges, ismert színei — nem márkaszín, ezért nincs saját
-// design tokenjük és nem invertálódnak sötét módban, csak kicsit
-// felfényesednek a jobb kontrasztért sötét háttéren.
 const MEDAL_STYLES: Record<Medal, { accent: string; text: string }> = {
   gold: {
     accent: "bg-[#d4af37] dark:bg-[#e8c766]",

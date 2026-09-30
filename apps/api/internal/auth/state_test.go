@@ -17,7 +17,7 @@ func TestSanitizeRedirectPath(t *testing.T) {
 		"/tools/special?competition=Foo&round=2",
 		"/posts#section",
 		"/x:y",
-		"/kocka%C3%A9p%C3%ADt%C5%91", // percent-kódolt ékezetes útvonal
+		"/kocka%C3%A9p%C3%ADt%C5%91",
 	}
 
 	for _, path := range kept {
@@ -26,9 +26,6 @@ func TestSanitizeRedirectPath(t *testing.T) {
 		})
 	}
 
-	// Minden más a gyökérre esik vissza. A lényeg, hogy semmi ne tudjon a saját
-	// oldalunkon KÍVÜLRE mutatni (nyílt átirányítás), és semmi ne juthasson
-	// vezérlőkarakterrel a Location fejlécbe (fejléc-injektálás).
 	rejected := map[string]string{
 		"üres":                           "",
 		"abszolút http":                  "https://evil.example/x",
@@ -81,8 +78,6 @@ func TestVerifyState(t *testing.T) {
 		assert.Equal(t, "/", path)
 	})
 
-	// A sütit mi állítjuk ki (HttpOnly), de egy elrontott /login ág vagy egy
-	// jövőbeli változtatás sem tud rajta keresztül nyílt átirányítást okozni.
 	t.Run("a sütiben lévő útvonalat is szanitáljuk", func(t *testing.T) {
 		path, ok := verifyState(withCookie(nonce+"://evil.example"), nonce)
 
@@ -111,7 +106,6 @@ func TestVerifyState(t *testing.T) {
 	}
 }
 
-// A nonce legyen kitalálhatatlan és mindig különböző.
 func TestNewStateNonce(t *testing.T) {
 	seen := make(map[string]bool, 100)
 

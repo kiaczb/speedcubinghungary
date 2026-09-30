@@ -16,7 +16,6 @@ def AddCompetitionToDelegate(delegate):
     upsert_person(delegate.WcaId, delegate.CompetitorName, del_count=new_count)
 
 def IsHungarianDelegate(person):
-    """Magyar delegált az, aki a közös `users` táblában delegált versenyekkel szerepel."""
     if not person.WcaId:
         return False
 

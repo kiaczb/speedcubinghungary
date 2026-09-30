@@ -1,4 +1,3 @@
-# --- Go ---
 *.exe
 *.dll
 *.so
@@ -6,14 +5,10 @@
 bin/
 dist/
 
-# --- Environment & Secrets ---
-# Never commit actual .env files - they contain secrets!
 .env
 
-# Allow .env.example files (templates only, no secrets)
 !.env.example
 
-# --- IDE & Editors ---
 .vscode/
 .idea/
 *.swp
@@ -22,12 +17,10 @@ dist/
 .DS_Store
 Thumbs.db
 
-# --- Go build artifacts ---
 *.test
 *.out
 coverage.txt
 
-# --- Development ---
 /tmp/
 /vendor/
 .vscode/settings.json

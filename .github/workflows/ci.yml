@@ -1,8 +1,5 @@
 name: CI
 
-# Build, lint and test. Runs on develop / feature / hotfix branches and on PRs,
-# and is reused by the deploy workflows (workflow_call) so test/prod only deploy
-# after CI passes. No deployment happens here.
 on:
   push:
     branches: [develop, "feature/**", "hotfix/**"]

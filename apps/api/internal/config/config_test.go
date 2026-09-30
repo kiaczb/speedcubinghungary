@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// setRequiredEnv beállítja a minimális, érvényes környezetet.
 func setRequiredEnv(t *testing.T) {
 	t.Helper()
 
@@ -28,19 +27,10 @@ func TestLoad_Valid(t *testing.T) {
 
 	assert.Equal(t, "production", cfg.Deployment)
 	assert.False(t, cfg.IsDevelopment())
-	// A nem kötelező változóknak marad alapértelmezésük.
 	assert.Equal(t, "/data/uploads", cfg.UploadDir)
 	assert.Equal(t, "https://live.worldcubeassociation.org", cfg.WCALiveURL)
 }
 
-// ⚠️ EZ A KETTŐ VÉDI A COOKIE-BIZTONSÁGOT.
-//
-// Korábban a DEPLOYMENT-nek "development", a FRONTEND_URL-nek
-// "http://localhost:3000" alapértelmezése volt, ezért a "kötelező" ellenőrzésük
-// SOSEM csapott le. Egy prodban lemaradt DEPLOYMENT így nem leállást okozott,
-// hanem némán fejlesztői módot — vagyis `Secure` NÉLKÜLI auth sütit —, a
-// hiányzó FRONTEND_URL pedig localhostra engedte a CORS-t és oda irányított
-// bejelentkezés után.
 func TestLoad_FailsWithoutDeployment(t *testing.T) {
 	setRequiredEnv(t)
 	t.Setenv("DEPLOYMENT", "")
@@ -61,8 +51,6 @@ func TestLoad_FailsWithoutFrontendURL(t *testing.T) {
 	assert.Contains(t, err.Error(), "FRONTEND_URL")
 }
 
-// Egy elgépelt DEPLOYMENT nem üres, tehát a "kötelező" ellenőrzésen átcsúszna,
-// és az elgépelés némán viselkedésváltozás lenne.
 func TestLoad_FailsOnUnknownDeployment(t *testing.T) {
 	setRequiredEnv(t)
 	t.Setenv("DEPLOYMENT", "produciton")

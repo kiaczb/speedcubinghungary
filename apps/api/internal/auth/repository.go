@@ -17,9 +17,6 @@ func NewPostgresRepository(db *sql.DB) Repository {
 	return &postgresRepository{db: db}
 }
 
-// Upsert a bejelentkezéskor frissíti a WCA-tól kapott adatokat. A szerepköröket
-// csak új felhasználónál írja be: egy meglévő admin jogát a login nem veheti el.
-// Az id és a szerepkörök a DB-ből jönnek, minden más a bemenettel egyezik.
 func (r *postgresRepository) Upsert(u *User) (*User, error) {
 	rolesJSON, _ := json.Marshal(u.Roles)
 

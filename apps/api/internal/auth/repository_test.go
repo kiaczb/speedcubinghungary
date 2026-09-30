@@ -10,8 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// A szerepkörök a DB-ből jönnek vissza, nem a bemenetből: egy meglévő admin
-// a következő bejelentkezéskor is admin marad.
 func TestPostgresRepository_UpsertKeepsStoredRoles(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)

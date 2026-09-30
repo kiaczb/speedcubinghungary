@@ -8,7 +8,6 @@ import CompetitorInput from "./CompetitorInput";
 type Props = {
   competitionId: string;
   eventId: string;
-  /** A 3 dobogós hely tippjei, 1-2-3. hely sorrendben. */
   picks: [string, string, string];
   onChange: (place: 0 | 1 | 2, name: string) => void;
 };
@@ -25,7 +24,6 @@ const PodiumEventForm = ({
   picks,
   onChange,
 }: Props) => {
-  // Versenyszámonként EGY lekérés, amin a három mező osztozik.
   const competitors = useCompetitorOptions(
     `/competitions/${encodeURIComponent(competitionId)}/psych-sheet/${encodeURIComponent(eventId)}`,
   );

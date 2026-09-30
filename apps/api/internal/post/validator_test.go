@@ -8,8 +8,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// A tag-listának szinkronban kell maradnia a post_tag DB enummal
-// (db/migrations/000001_init_schema + 000003_add_weekly_report_post).
 func TestValidatePost_Tag(t *testing.T) {
 	const validContent = "elég hosszú tartalom a validációhoz"
 
@@ -22,7 +20,6 @@ func TestValidatePost_Tag(t *testing.T) {
 		{"competition", types.TAG_COMPETITION, nil},
 		{"news", types.TAG_NEWS, nil},
 		{"announcement", types.TAG_ANNOUNCEMENT, nil},
-		// A heti riport a meglévő Post rendszert használja, saját taggel.
 		{"report", types.TAG_REPORT, nil},
 		{"empty", types.PostTag(""), ErrInvalidTag},
 		{"unknown", types.PostTag("blogpost"), ErrInvalidTag},

@@ -4,7 +4,6 @@ type StateMessageProps = {
   icon: React.ReactNode;
   title: string;
   description: string;
-  /** Opcionális CTA (pl. gomb) a leírás alatt. */
   children?: React.ReactNode;
 };
 

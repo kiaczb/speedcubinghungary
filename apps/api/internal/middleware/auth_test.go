@@ -44,7 +44,6 @@ func signHS256(t *testing.T, claims UserClaims, secret string) string {
 	return token
 }
 
-// requestWithToken egy kérés az `auth` sütivel.
 func requestWithToken(token string) *http.Request {
 	req := httptest.NewRequest(http.MethodGet, "/me", nil)
 	if token != "" {
@@ -53,7 +52,6 @@ func requestWithToken(token string) *http.Request {
 	return req
 }
 
-// run lefuttatja a middleware-t; a visszaadott claims nil, ha a kérés elbukott.
 func run(cfg *config.Config, req *http.Request) (*httptest.ResponseRecorder, *UserClaims) {
 	var seen *UserClaims
 
@@ -82,13 +80,9 @@ func TestAuthMiddleware_Rejects(t *testing.T) {
 	expired := validClaims()
 	expired.ExpiresAt = jwt.NewNumericDate(time.Now().Add(-time.Minute))
 
-	// ⚠️ A golang-jwt alapértelmezésben ÉRVÉNYESNEK veszi az `exp` nélküli
-	// tokent — az örök életű munkamenet lenne. A middleware ezért
-	// WithExpirationRequired-del parse-ol.
 	noExpiry := validClaims()
 	noExpiry.ExpiresAt = nil
 
-	// Jövőbeli `nbf`: a token még nem lépett életbe.
 	notYetValid := validClaims()
 	notYetValid.NotBefore = jwt.NewNumericDate(time.Now().Add(time.Hour))
 
@@ -115,8 +109,6 @@ func TestAuthMiddleware_Rejects(t *testing.T) {
 	}
 }
 
-// ⚠️ ALG-CONFUSION. A "none" algoritmusú token aláírás nélkül érkezik; ha a
-// könyvtár elfogadná, bárki gyárthatna tetszőleges (akár admin) claimset.
 func TestAuthMiddleware_RejectsNoneAlgorithm(t *testing.T) {
 	claims := validClaims()
 	claims.Roles = []types.Role{types.ROLE_ADMIN}
@@ -131,9 +123,6 @@ func TestAuthMiddleware_RejectsNoneAlgorithm(t *testing.T) {
 	assert.Nil(t, seen)
 }
 
-// ⚠️ ALG-CONFUSION, a másik irány: RS256-tal aláírt token. Ha a middleware nem
-// szűkítené HMAC-re, a könyvtár a HMAC titkot RSA PUBLIKUS kulcsként
-// értelmezhetné — klasszikus token-hamisítási út.
 func TestAuthMiddleware_RejectsRSAToken(t *testing.T) {
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
@@ -193,7 +182,6 @@ func TestRBACMiddleware(t *testing.T) {
 	}
 }
 
-// requestWithClaims a context-be teszi a claimset, ahogy az auth middleware tenné.
 func requestWithClaims(req *http.Request, claims *UserClaims) (*http.Request, *UserClaims) {
 	return req.WithContext(context.WithValue(req.Context(), userContextKey, claims)), claims
 }

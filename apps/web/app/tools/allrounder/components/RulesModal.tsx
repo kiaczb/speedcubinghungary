@@ -11,7 +11,6 @@ type RulesModalProps = {
   podiumCount: number;
 };
 
-/** A pontozási szabályok és a helyezésenkénti pontok táblázata. */
 const RulesModal = ({
   pointsTable,
   countingResults,
@@ -19,7 +18,6 @@ const RulesModal = ({
 }: RulesModalProps) => {
   const [open, setOpen] = useState(false);
 
-  // Két oszlopban fut a lista, hogy a 20 helyezés görgetés nélkül elférjen.
   const half = Math.ceil(pointsTable.length / 2);
   const columns = [pointsTable.slice(0, half), pointsTable.slice(half)];
 

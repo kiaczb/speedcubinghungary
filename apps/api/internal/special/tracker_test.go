@@ -234,12 +234,6 @@ func TestSubscriptionKeyRoundTrip(t *testing.T) {
 	assert.Error(t, err)
 }
 
-// ⚠️ Egy kör lekérési hibája nem törölheti a kör addigi eredményeit.
-//
-// A load korábban a TELJES rounds map-et lecserélte, így egy pillanatnyi WCA
-// Live hiba eltüntette a kört a riportból — a versenyző kumulatív kerete
-// (A1a3) pedig hibás „maradék időt” mutatott, amíg a következő frissítés
-// vissza nem hozta.
 func TestTracker_KeepsRoundWhenItsQueryFails(t *testing.T) {
 	var failing atomic.Bool
 
@@ -270,9 +264,6 @@ func TestTracker_KeepsRoundWhenItsQueryFails(t *testing.T) {
 		"a hibás kör az előző pillanatképével él tovább")
 }
 
-// Ha EGYETLEN kör sem jött le, az nem részleges hiba: ilyenkor hibát adunk, és
-// a korábbi állapotot érintetlenül hagyjuk, hogy a következő kérés azonnal
-// újrapróbálja ahelyett, hogy üres riportot szolgálnánk ki a cache TTL végéig.
 func TestTracker_TotalRoundFailureKeepsPreviousState(t *testing.T) {
 	var failing atomic.Bool
 

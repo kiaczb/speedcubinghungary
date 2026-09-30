@@ -11,7 +11,6 @@ const OtherSection = () => {
       </p>
 
       <div className="mt-6 grid grid-cols-1 items-stretch gap-5 md:grid-cols-2">
-        {/* TODO: ideiglenes leírások — cseréld le a véglegesre. */}
         <ToolCard
           title="Szavazás"
           links={[
