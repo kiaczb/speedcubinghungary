@@ -4,8 +4,6 @@ import dynamic from "next/dynamic";
 import { FaPlus } from "react-icons/fa";
 import Button from "@/app/components/ui/Button";
 
-// A szerkesztő csak adminnak kell — külön chunkban, hogy a /posts oldal
-// bundle-je ne vigye magával minden látogatónak.
 const CreatePostModal = dynamic(() => import("./CreatePostModal"), {
   ssr: false,
 });

@@ -10,10 +10,9 @@ from delegatesCount import IsHungarianDelegate, AddCompetitionToDelegate
 import time
 from utils import ReverseHungarianName
 def UpdateRecords(record_type, value, competitor, event_id, localNationalRecords, badges):
-    #Frissíti a versenyző rekordjait és kezeli a nemzeti és speciális rekordokat.
     if value > 0:
         for index, nationalRecord in enumerate(localNationalRecords.values()):
-            if competitor.WcaId in excludedCompetitorWcaIds and index == 2: #If the person is not representing Hungary but a member of the Hungarian community
+            if competitor.WcaId in excludedCompetitorWcaIds and index == 2:
                 continue
             if value <= nationalRecord[event_id][record_type]:
                 nationalRecord[event_id][record_type] = value
@@ -60,7 +59,6 @@ def ProcessPerson(person, events ,isHungarianComp):
             UpdateRecords("average", result["average"], competitor, event["id"], localNationalRecords, badges)
             UpdateRecords("single", result["best"], competitor, event["id"], localNationalRecords, badges)
 
-    # Csak az esik ki, akinek egyetlen versenyszámban sincs eredménye.
     if not has_any_result:
         return None
 

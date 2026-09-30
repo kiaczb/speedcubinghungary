@@ -1,5 +1,3 @@
-// A `@cubing/icons` a hivatalos WCA versenyszám-ikonokat adja ikonfontként
-// (~13 KB). A CSS itt kerül be, így csak erre az útvonalra töltődik le.
 import "@cubing/icons";
 import { eventName } from "@/app/lib/events";
 import type { EventResult } from "../types";
@@ -8,11 +6,6 @@ type EventChipsProps = {
   results: EventResult[];
 };
 
-/**
- * Egy versenyző egy állomáson szerzett BESZÁMÍTÓ eredményei, versenyszámonként
- * egy csipeszen: ikon + helyezés. A pontszám a tooltipben van, hogy a rács
- * sűrű maradjon.
- */
 const EventChips = ({ results }: EventChipsProps) => {
   if (results.length === 0) {
     return (

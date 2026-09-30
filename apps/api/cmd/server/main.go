@@ -39,7 +39,6 @@ func main() {
 		log.Fatal("Migration run error:", err)
 	}
 
-	// Budapest Special
 	specialLive := special.NewLiveClient(cfg.WCALiveURL)
 	specialBroadcaster := wcalive.NewBroadcaster()
 	specialTracker := special.NewTracker(specialLive, wcalive.NewSocketClient(cfg.WCALiveURL), specialBroadcaster)
@@ -47,7 +46,6 @@ func main() {
 		special.NewService(special.NewPostgresRepository(dbConn), specialLive, specialTracker, specialBroadcaster),
 	)
 
-	// Hungarian All-Rounder
 	allrounderLive := allrounder.NewLiveClient(cfg.WCALiveURL)
 	allrounderBroadcaster := wcalive.NewBroadcaster()
 	allrounderTracker := allrounder.NewLiveTracker(allrounderLive, wcalive.NewSocketClient(cfg.WCALiveURL), allrounderBroadcaster)
@@ -64,7 +62,6 @@ func main() {
 	competitionService := competition.NewService(competition.NewWCARepository())
 	competitionHandler := competition.NewHandler(competitionService)
 
-	// A tippverseny a versenyadatokat a competition service-en keresztül kéri le.
 	predictionHandler := prediction.NewHandler(prediction.NewService(
 		prediction.NewPostgresRepository(dbConn),
 		competitionService,

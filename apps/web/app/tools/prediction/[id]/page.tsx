@@ -19,8 +19,6 @@ type PageProps = {
 };
 
 async function getPrediction(id: string): Promise<PredictionContest | null> {
-  // Nincs még GET /predictions/{id} végpont — a listából szűrünk, amíg a
-  // backend csak a listázást és a létrehozást támogatja (lásd CLAUDE.md §21).
   const predictions = await serverJson<PredictionContest[]>("/predictions", []);
 
   return predictions.find((p) => p.id === id) ?? null;

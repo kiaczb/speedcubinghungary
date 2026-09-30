@@ -13,11 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// ⚠️ A WCA API kb. 15 párhuzamos kérés után 429-et ad. Egy tippverseny-oldal
-// versenyszámonként kér egy psych sheetet, és a singleflight csak AZONOS
-// kulcsokat von össze — hideg cache mellett egy tucat különböző versenyszám
-// egyszerre ment ki. A korlátnak a kimenő oldalon kell ülnie, mert ott
-// független attól, ki és honnan kérdez.
 func TestWCARepository_BoundsConcurrentUpstreamRequests(t *testing.T) {
 	var inFlight, peak atomic.Int32
 
@@ -55,7 +50,6 @@ func TestWCARepository_BoundsConcurrentUpstreamRequests(t *testing.T) {
 		"egyszerre legfeljebb maxConcurrentUpstream kérés lehet úton a WCA felé")
 }
 
-// A túl nagy válasz nem kerülhet teljes egészében a memóriába.
 func TestWCARepository_CapsTheResponseBody(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `{"persons":[`)
@@ -72,9 +66,6 @@ func TestWCARepository_CapsTheResponseBody(t *testing.T) {
 	assert.Error(t, err, "a korlát fölötti választ nem szabad dekódolni")
 }
 
-// A GetCompetition bármely dátumú versenyt visszaad ID szerint; a WCA 404-e
-// saját sentinel hibává válik, hogy a hívó meg tudja különböztetni a nem
-// létező versenyt a WCA kiesésétől.
 func TestWCARepository_GetCompetition(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/BudapestOpen2025" {

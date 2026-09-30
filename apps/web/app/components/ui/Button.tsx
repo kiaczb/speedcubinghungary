@@ -34,7 +34,6 @@ type CommonProps = {
   variant?: ButtonVariant;
   size?: ButtonSize;
   icon?: React.ReactNode;
-  /** Hoverre finoman jobbra csúszik. */
   iconRight?: React.ReactNode;
   fullWidth?: boolean;
   className?: string;
@@ -49,7 +48,6 @@ type ButtonAsButton = CommonProps &
 type ButtonAsLink = CommonProps &
   Omit<AnchorHTMLAttributes<HTMLAnchorElement>, "className" | "children" | "href"> & {
     href: string;
-    /** Külső link: új fülön nyílik, `rel="noopener noreferrer"`-rel. */
     external?: boolean;
   };
 
@@ -89,7 +87,6 @@ export default function Button(props: ButtonProps) {
     </>
   );
 
-  // A `group` kell ahhoz, hogy a jobb oldali ikon a gomb hoverére reagáljon.
   const withGroup = `group ${classes}`;
 
   if (props.href !== undefined) {

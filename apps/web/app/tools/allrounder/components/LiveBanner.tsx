@@ -29,13 +29,6 @@ const LiveBanner = ({ year, live }: LiveBannerProps) => {
       source.onerror = () => setConnected(false);
     };
 
-    // Mobil böngészők a háttérbe került lapot felfüggesztik/limitálják, ami a
-    // meglévő EventSource kapcsolatot megszakíthatja anélkül, hogy az `onerror`
-    // lefutna. A komponens ilyenkor is bent marad a DOM-ban (nincs újbóli
-    // mountolás), tehát semmi nem indítaná újra a kapcsolatot — a lap
-    // visszatérésekor ezért zárjuk és nyitjuk újra kézzel, és egyúttal
-    // azonnal frissítünk is, hogy a kiesett idő alatti változás ne maradjon
-    // észrevétlen a következő `update` eseményig.
     const handleVisibilityChange = () => {
       if (document.visibilityState !== "visible") return;
 

@@ -16,8 +16,6 @@ const (
 	neverWindow = 150 * time.Millisecond
 )
 
-// fakeWatcher feliratkozás NÉLKÜL: így a socket tétlen marad (a Run nem is
-// próbál kapcsolódni), és a session életciklusát önmagában vizsgálhatjuk.
 type fakeWatcher struct {
 	mu      sync.Mutex
 	reloads int
@@ -50,17 +48,12 @@ func newTestSession(t *testing.T) (*Session, *fakeWatcher) {
 	t.Helper()
 
 	watcher := &fakeWatcher{}
-	// A cím szándékosan érvénytelen: feliratkozás nélkül a socket tétlen, tehát
-	// sosem tárcsáz. A frissítési időzítő hosszú, hogy csak az indulási Reload
-	// számítson.
 	session := NewSession("teszt", NewSocketClient("http://example.invalid"), time.Hour)
 	session.Watch(watcher)
 
 	return session, watcher
 }
 
-// A WCA Live kapcsolat CSAK addig élhet, amíg van nézője: az első néző indítja,
-// az utolsó leállítja. Enélkül a háttérben futna egy örökös websocket.
 func TestSession_RunsOnlyWhileViewersArePresent(t *testing.T) {
 	session, watcher := newTestSession(t)
 
@@ -88,8 +81,6 @@ func TestSession_RunsOnlyWhileViewersArePresent(t *testing.T) {
 	}, waitTimeout, waitTick, "az utolsó néző távozásakor le kell állni")
 }
 
-// A leiratkozó függvényt a hívó (SSE handler) defer-ből hívja, de hibaágon
-// előfordulhat kétszer is. Kétszeri hívás nem vihet nullába egy élő session-t.
 func TestSession_ReleaseIsIdempotent(t *testing.T) {
 	session, _ := newTestSession(t)
 
@@ -111,10 +102,6 @@ func TestSession_ReleaseIsIdempotent(t *testing.T) {
 	}, waitTimeout, waitTick)
 }
 
-// ⚠️ A session-ök nem fedhetnek át: a SocketClient kapcsolatonként nullázza a
-// belső állapotát, ezért az új session megvárja az előző lefutását. Ha ez a
-// láncolás elromlik (holtpont vagy kihagyott várakozás), a második session
-// sosem indulna el — ezt méri ez a teszt.
 func TestSession_RestartsAfterFullStop(t *testing.T) {
 	session, watcher := newTestSession(t)
 
@@ -139,8 +126,6 @@ func TestSession_RestartsAfterFullStop(t *testing.T) {
 	}, waitTimeout, waitTick, "a második session is lefut")
 }
 
-// Context a futó session context-jét adja, hogy a háttérben indított
-// betöltések a session leállásakor elengedjenek.
 func TestSession_ContextFollowsTheSession(t *testing.T) {
 	session, _ := newTestSession(t)
 

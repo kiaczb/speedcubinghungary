@@ -12,7 +12,6 @@ type Props = {
   question: ExtraQuestion;
   value: string;
   onChange: (value: string) => void;
-  /** A verseny teljes nevezői listája — csak a "person" típusú kérdés használja. */
   competitors: CompetitorOptions;
 };
 

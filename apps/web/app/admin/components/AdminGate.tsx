@@ -5,8 +5,6 @@ import Button from "@/app/components/ui/Button";
 import StateMessage from "@/app/components/ui/StateMessage";
 import AdminToolGrid from "./AdminToolGrid";
 
-// Kliensoldali kapu: a szerepkör csak a `/me` válaszából derül ki, ezért a
-// tartalom csak akkor renderelődik, ha az megérkezett és admint jelez.
 export default function AdminGate() {
   const { user, isAdmin, isLoading } = useUser();
 

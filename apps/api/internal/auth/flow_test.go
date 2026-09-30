@@ -16,21 +16,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Végponttól végpontig futó teszt a teljes WCA OAuth folyamatra, VALÓDI
-// süti-kezeléssel (cookiejar) és valódi átirányítás-követéssel. A darabonkénti
-// tesztek mindegyike egy-egy lépést rögzít; ez azt igazolja, hogy a lépések
-// össze is állnak: a /login-ban kiállított nonce ténylegesen megfordul a
-// WCA-n, és a callback ugyanazt látja viszont.
-//
-// Amit egy Go-teszt NEM tud ellenőrizni: a SameSite attribútumot (azt csak
-// böngésző értelmezi). Azt a handler_test.go rögzíti attribútum-szinten.
-
-// fakeWCA a WCA három végpontját utánozza: authorize, token, /me.
 type fakeWCA struct {
 	server *httptest.Server
 
 	mu            sync.Mutex
-	authorizeSeen url.Values // az authorize-ra érkezett query
+	authorizeSeen url.Values
 	tokenCalls    int
 	meCalls       int
 }
@@ -41,8 +31,6 @@ func newFakeWCA(t *testing.T) *fakeWCA {
 	wca := &fakeWCA{}
 	mux := http.NewServeMux()
 
-	// A felhasználó "jóváhagyja" a belépést: a WCA visszairányít a redirect_uri-ra
-	// a code-dal és a VÁLTOZATLAN state-tel.
 	mux.HandleFunc("/oauth/authorize", func(w http.ResponseWriter, r *http.Request) {
 		wca.mu.Lock()
 		wca.authorizeSeen = r.URL.Query()
@@ -91,21 +79,18 @@ func newFakeWCA(t *testing.T) *fakeWCA {
 	return wca
 }
 
-// loginFlow felépíti a három szereplőt (frontend, API, WCA), és lefuttatja a
-// teljes belépést. Visszaadja a végén kikötött URL-t és a kliens sütijeit.
 func loginFlow(t *testing.T, startPath string) (finalURL *url.URL, cookies []*http.Cookie, wca *fakeWCA) {
 	t.Helper()
 
 	wca = newFakeWCA(t)
 
-	// A "frontend": csak visszaigazolja, hogy a belépés ide tért vissza.
 	frontend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	t.Cleanup(frontend.Close)
 
 	cfg := testConfig()
-	cfg.Deployment = "development" // httptest http-n szolgál ki: Secure süti nem jöhet
+	cfg.Deployment = "development"
 	cfg.FrontendURL = frontend.URL
 
 	repo := new(MockRepo)
@@ -130,7 +115,6 @@ func loginFlow(t *testing.T, startPath string) (finalURL *url.URL, cookies []*ht
 	api := httptest.NewServer(mux)
 	t.Cleanup(api.Close)
 
-	// A redirect_uri csak most, a szerver felállása után ismert.
 	cfg.WCARedirectURI = api.URL + "/login/callback"
 
 	jar, err := cookiejar.New(nil)
@@ -150,7 +134,6 @@ func loginFlow(t *testing.T, startPath string) (finalURL *url.URL, cookies []*ht
 func TestLoginFlow_EndToEnd(t *testing.T) {
 	final, cookies, wca := loginFlow(t, "/posts")
 
-	// 1) A WCA a config értékeit kapta — és CSAK a szükséges scope-ot.
 	wca.mu.Lock()
 	authorize := wca.authorizeSeen
 	tokenCalls, meCalls := wca.tokenCalls, wca.meCalls
@@ -162,11 +145,9 @@ func TestLoginFlow_EndToEnd(t *testing.T) {
 	assert.Equal(t, 1, tokenCalls)
 	assert.Equal(t, 1, meCalls)
 
-	// 2) A folyamat a frontend kért útvonalán ért véget.
 	assert.Equal(t, "/posts", final.Path)
 	assert.Empty(t, final.Query().Get("login"), "nem a hibaágon futott végig")
 
-	// 3) A böngésző munkamenet-sütit kapott, a state süti pedig eltűnt.
 	var auth, state *http.Cookie
 	for _, c := range cookies {
 		switch c.Name {
@@ -182,8 +163,6 @@ func TestLoginFlow_EndToEnd(t *testing.T) {
 	assert.Nil(t, state, "a state sütit a callback törli")
 }
 
-// A folyamat közepén a támadó saját code-ja érkezik, a mi nonce-unk NÉLKÜL
-// (login CSRF). A callback ilyenkor nem válthat be kódot és nem adhat sütit.
 func TestLoginFlow_CallbackWithoutStateCookieIsRejected(t *testing.T) {
 	wca := newFakeWCA(t)
 
@@ -213,7 +192,6 @@ func TestLoginFlow_CallbackWithoutStateCookieIsRejected(t *testing.T) {
 	require.NoError(t, err)
 	client := &http.Client{Jar: jar}
 
-	// Nincs előzetes /login, tehát nincs state süti — pont ez a támadás alakja.
 	resp, err := client.Get(api.URL + "/login/callback?code=attacker-code&state=whatever")
 	require.NoError(t, err)
 	defer resp.Body.Close()

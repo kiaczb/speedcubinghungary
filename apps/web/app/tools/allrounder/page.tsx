@@ -56,8 +56,6 @@ export default async function AllRounderPage({
           <>
             <div className="mt-8 flex flex-wrap items-center justify-between gap-4">
               <YearPicker
-                // Az évadra kulcsolva: egy vissza-navigáció friss helyi
-                // állapottal indítja újra a legördülőt.
                 key={standings.year}
                 selectedYear={standings.year}
                 availableYears={standings.availableYears}
@@ -84,12 +82,6 @@ export default async function AllRounderPage({
                 />
               ) : (
                 <>
-                  {/* Mobilon lista, `md` felett táblázat. Egy évad 12 állomása
-                      vízszintesen nem fér ki egy telefonra, a rács pedig csak
-                      akkor olvasható, ha az állomások egymás mellett látszanak
-                      — ezért két külön nézet, nem egy zsugorított táblázat. A
-                      lista összecsukott állapotban nem rendeli ki az
-                      eredményeket, így a kettős DOM sem drága. */}
                   <div className="md:hidden">
                     <StandingsList
                       competitions={standings.competitions}

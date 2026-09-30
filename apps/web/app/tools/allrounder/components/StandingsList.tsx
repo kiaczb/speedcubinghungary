@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { FaChevronDown } from "react-icons/fa";
-// A `@cubing/icons` a hivatalos WCA versenyszám-ikonokat adja ikonfontként.
 import "@cubing/icons";
 import { eventName } from "@/app/lib/events";
 import { groupByCompetition, medalAccentClass, medalForRank, medalTextClass } from "../lib/results";
@@ -14,19 +13,6 @@ type StandingsListProps = {
   podiumCount: number;
 };
 
-/**
- * A pontverseny MOBIL nézete — nem a táblázat kicsinyítése.
- *
- * Egy 12 állomásos évad vízszintesen nem fér ki egy telefonra, a vízszintes
- * görgetéshez pedig ragadós névoszlop kell, ami épp a maradék helyet veszi el.
- * A gond tehát a SZÉLESSÉG, nem a magasság: itt versenyzőnként egy sor áll
- * (helyezés, név, összpont), és koppintásra nyílik az állomásonkénti bontás.
- * Semmi nem lóg ki oldalra.
- *
- * A kinyitott nézet kiírja a versenyszám nevét, a helyezést és a pontot is:
- * érintőképernyőn nincs `title` tooltip, amiben a táblázat csipeszei tartják
- * ezt az információt, függőlegesen viszont van hely.
- */
 const StandingsList = ({
   competitions,
   people,
@@ -63,10 +49,6 @@ const StandingsList = ({
               aria-controls={`allrounder-person-${person.wcaId}`}
               className="relative flex w-full items-center gap-3 px-4 py-3 text-left transition-colors duration-200 ease-smooth hover:bg-surface-muted"
             >
-              {/* Ugyanaz a dobogó-jelölés, mint az asztali táblázatban — de
-                  csak a versenyző sorát kíséri, a kinyitott bontást nem. Az
-                  1–3. hely arany/ezüst/bronz, a többi díjazott hely semleges
-                  zöld — a `podiumCount` a szoros dobogónál nagyobb is lehet. */}
               {isPodium && (
                 <span
                   className={`absolute inset-y-0 left-0 w-0.5 ${

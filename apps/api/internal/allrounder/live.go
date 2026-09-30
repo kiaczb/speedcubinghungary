@@ -8,7 +8,6 @@ import (
 	"speedcubinghungary/internal/wcalive"
 )
 
-// LiveClient a közös WCA Live kliens az All-Rounder saját lekérdezéseivel.
 type LiveClient struct {
 	*wcalive.Client
 }

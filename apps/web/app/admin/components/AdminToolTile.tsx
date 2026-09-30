@@ -38,7 +38,6 @@ export default function AdminToolTile({ tool }: Props) {
     </Card>
   );
 
-  // A be nem kötött eszközök csempéje nem kattintható — csak bemutatja a rácsot.
   if (!isActive) {
     return (
       <div aria-disabled className="cursor-not-allowed select-none">

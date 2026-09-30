@@ -3,12 +3,6 @@ import remarkGfm from "remark-gfm";
 import type { Components } from "react-markdown";
 import { RECORD_BADGE_COLORS } from "../lib/recordBadges";
 
-/**
- * BIZTONSÁG: nincs `rehype-raw`, ezért a react-markdown a forrásban lévő nyers
- * HTML-t NEM rendereli (escape-eli). Így XSS-t nem lehet beinjektálni még akkor
- * sem, ha egy admin fiók kompromittálódik. Ne adj hozzá rehype-raw-t.
- */
-
 const components: Components = {
   h1: ({ children }) => (
     <h1 className="mb-4 mt-10 text-2xl font-bold first:mt-0">{children}</h1>
@@ -51,7 +45,6 @@ const components: Components = {
   strong: ({ children }) => (
     <strong className="font-semibold text-foreground">{children}</strong>
   ),
-  // Inline kód: ha a tartalma egy ismert rekord-jelölés, színes chippé alakítjuk.
   code: ({ children }) => {
     const text = String(children);
     const badge = RECORD_BADGE_COLORS[text];
@@ -70,7 +63,6 @@ const components: Components = {
       </code>
     );
   },
-  // Vízszintesen görgethető konténer, hogy mobilon ne törje szét a layoutot.
   table: ({ children }) => (
     <div className="my-6 overflow-x-auto rounded-card border border-line">
       <table className="w-full border-collapse text-sm">{children}</table>

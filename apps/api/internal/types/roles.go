@@ -1,4 +1,3 @@
-// internal/auth/roles.go
 package types
 
 type Role string

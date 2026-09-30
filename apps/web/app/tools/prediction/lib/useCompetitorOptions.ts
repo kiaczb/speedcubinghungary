@@ -11,12 +11,6 @@ export type CompetitorOptions = {
   status: CompetitorOptionsStatus;
 };
 
-// Egy versenyző-listát tölt be a backendről (psych sheet vagy nevezői
-// lista), hogy a CompetitorInput-ok osztozhassanak rajta. Egy dobogós
-// versenyszám 3 mezője EGY kérést jelentsen, ne hármat — a WCA API kb. 15
-// párhuzamos kérésnél már 429-et ad, és egy tucat versenyszámmal ezt a
-// mezőnkénti lekérés simán túllépte. `null` path esetén nem kér le semmit
-// (pl. nincs versenyző-típusú extra kérdés).
 export function useCompetitorOptions(path: string | null): CompetitorOptions {
   const [state, setState] = useState<CompetitorOptions & { path: string | null }>(
     { path: null, options: [], status: "loading" },
@@ -40,9 +34,6 @@ export function useCompetitorOptions(path: string | null): CompetitorOptions {
     };
   }, [path]);
 
-  // Az állapot a path-hoz van kötve, így egy másik listára váltáskor nem a
-  // régi találatokat mutatjuk "ready"-ként (effectben setState nélkül, lásd
-  // a react-hooks/set-state-in-effect szabályt).
   if (path === null || state.path !== path) {
     return { options: [], status: "loading" };
   }

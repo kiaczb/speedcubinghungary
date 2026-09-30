@@ -10,8 +10,7 @@ import Field, { controlClass } from "@/app/components/ui/Field";
 import Modal from "@/app/components/ui/Modal";
 import MarkdownEditor from "./MarkdownEditor";
 
-// Egyezzenek a backend korlátaival: apps/api/internal/post/upload.go + validator.go
-const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5 MB
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MIN_CONTENT_LENGTH = 20;
 const ACCEPTED_IMAGE_TYPES = [
   "image/jpeg",
@@ -26,8 +25,6 @@ type GalleryItem =
 
 type Props = {
   onClose: () => void;
-  // Ha meg van adva, a modal SZERKESZTÉS módban indul (PUT /posts/{id}),
-  // különben új posztot hoz létre (POST /posts).
   post?: PostsItem;
 };
 
@@ -117,8 +114,6 @@ export default function CreatePostModal({ onClose, post }: Props) {
     setError(null);
   };
 
-  // A sorrend maga az adat: az első kép a borítókép, és a poszt oldalán a
-  // carousel is ebben a sorrendben lapoz.
   const moveImage = (index: number, delta: number) => {
     const target = index + delta;
     if (target < 0 || target >= images.length) return;
@@ -149,7 +144,6 @@ export default function CreatePostModal({ onClose, post }: Props) {
     formData.append("tag", tag);
     formData.append("content", content.trim());
 
-    // Az `images` fájlok sorrendje tölti ki az image_order "new" helyeit.
     for (const item of images) {
       if (item.kind === "new") formData.append("images", item.file);
     }
@@ -165,7 +159,6 @@ export default function CreatePostModal({ onClose, post }: Props) {
 
     setSubmitting(true);
     try {
-      // FormData: `body`, nem `json` — a Content-Type-ot a böngésző állítja be.
       await clientFetch(isEdit ? `/posts/${post!.id}` : "/posts", {
         method: isEdit ? "PUT" : "POST",
         body: formData,
@@ -276,7 +269,6 @@ export default function CreatePostModal({ onClose, post }: Props) {
                     key={item.url}
                     className="relative overflow-hidden rounded-control border border-line bg-surface-muted"
                   >
-                    {/* Sima img: a kép domainje környezetenként más — így nem kell remotePatterns. */}
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={item.url}

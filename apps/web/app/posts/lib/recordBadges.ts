@@ -1,4 +1,3 @@
-/** WR = világrekord, CR = kontinensrekord, NR = országos rekord, PR = egyéni rekord. */
 export const RECORD_BADGE_COLORS: Record<string, string> = {
   WR: "bg-amber-300 text-amber-950",
   CR: "bg-sky-600 text-white",

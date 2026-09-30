@@ -1,6 +1,3 @@
-# Single domain: WEB_DOMAIN/api/* -> api (prefix stripped), everything else -> web.
-# Caddy provisions and renews a trusted cert automatically, as long as the
-# domain's public DNS points at this server and 80/443 are open.
 {
 	email {$ACME_EMAIL}
 }

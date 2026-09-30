@@ -21,9 +21,6 @@ func (s *Service) GetLatestPosts() ([]Post, error) {
 	return s.repo.GetLatestPosts()
 }
 
-// validID: a posts.id UUID oszlop. Egy nem UUID alakú azonosítót a Postgres
-// „invalid input syntax for type uuid" hibával utasítana vissza, ami 500-ként
-// menne ki — pedig a KLIENS küldött rosszat. Ezért még a repo előtt szűrjük.
 func validID(id string) error {
 	if _, err := uuid.Parse(id); err != nil {
 		return ErrInvalidID
@@ -51,8 +48,6 @@ func (s *Service) CreatePost(tag types.PostTag, title, content string, imagePath
 	return s.repo.Create(post)
 }
 
-// DeletePosts törli a posztokat, és visszaadja a hozzájuk tartozó
-// képútvonalakat — azokra a fájlokra a törlés után semmi nem hivatkozik.
 func (s *Service) DeletePosts(ids []string) ([]string, error) {
 	for _, id := range ids {
 		if err := validID(id); err != nil {

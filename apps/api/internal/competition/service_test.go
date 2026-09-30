@@ -23,8 +23,6 @@ func (s stubRepository) GetPsychSheet(string, string) (wcaPsychSheet, error) {
 }
 func (s stubRepository) GetWCIF(string) (wcaWCIF, error) { return wcaWCIF{}, s.err }
 
-// A cache kulcsa a KLIENS által adott azonosító. Takarítás nélkül minden
-// valaha lekérdezett id örökre a memóriában maradt, a lejártak is.
 func TestService_SweepsExpiredCacheEntries(t *testing.T) {
 	service := NewService(stubRepository{})
 
@@ -40,8 +38,6 @@ func TestService_SweepsExpiredCacheEntries(t *testing.T) {
 	assert.Contains(t, service.psychSheets, "psych-sheet:Uj2026/333", "a friss bejegyzés marad")
 }
 
-// A WCA 404-e (nem létező verseny) korábban 502-ként jutott ki — mintha a WCA
-// esett volna ki, pedig csak rossz az azonosító.
 func TestHandler_MapsWCANotFoundTo404(t *testing.T) {
 	cases := map[error]int{
 		ErrNotFound:              http.StatusNotFound,

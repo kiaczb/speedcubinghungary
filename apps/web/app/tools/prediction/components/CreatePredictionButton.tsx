@@ -4,8 +4,6 @@ import dynamic from "next/dynamic";
 import { FaPlus } from "react-icons/fa";
 import Button from "@/app/components/ui/Button";
 
-// Csak adminnak kell — külön chunkban, hogy a lista bundle-je ne vigye
-// magával minden látogatónak (lásd posts/components/CreatePostButton.tsx).
 const CreatePredictionModal = dynamic(
   () => import("./CreatePredictionModal"),
   { ssr: false },

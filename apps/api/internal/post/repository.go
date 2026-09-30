@@ -13,8 +13,6 @@ type Repository interface {
 	GetByID(id string) (Post, error)
 	Create(post Post) error
 	Update(post Post) error
-	// Delete visszaadja a törölt posztok képútvonalait: azokra a fájlokra
-	// ezután semmi nem hivatkozik, a hívó dolga letörölni őket a volume-ról.
 	Delete(ids []string) ([]string, error)
 }
 
@@ -26,8 +24,6 @@ func NewPostgresRepository(db *sql.DB) *PostgresRepository {
 	return &PostgresRepository{db: db}
 }
 
-// imagePathsParam: az image_paths oszlop NOT NULL, a pq.Array viszont nil
-// szeletből NULL-t csinálna — kép nélküli poszthoz üres tömb kell.
 func imagePathsParam(paths []string) any {
 	if paths == nil {
 		paths = []string{}
@@ -39,8 +35,6 @@ type rowScanner interface {
 	Scan(dest ...any) error
 }
 
-// scanPost egy `id, tag, title, content, image_paths, created_at` sort olvas be.
-// A kép nélküli poszt üres tömböt kap, nem null-t.
 func scanPost(row rowScanner) (Post, error) {
 	var p Post
 	if err := row.Scan(&p.ID, &p.Tag, &p.Title, &p.Content, pq.Array(&p.ImagePaths), &p.CreatedAt); err != nil {
@@ -114,9 +108,6 @@ func (r *PostgresRepository) Delete(ids []string) ([]string, error) {
 		return nil, nil
 	}
 
-	// RETURNING: a képútvonalakat a törléssel EGY lekérdezésben kérjük vissza.
-	// Külön SELECT + DELETE két lépés lenne, ahol a köztes időben változhat a
-	// galéria — és pont olyan fájlt törölnénk, amire még hivatkozik valami.
 	rows, err := r.db.Query(`
 		DELETE FROM posts
 		WHERE id = ANY($1)
@@ -131,8 +122,6 @@ func (r *PostgresRepository) Delete(ids []string) ([]string, error) {
 	for rows.Next() {
 		var postPaths []string
 		if err := rows.Scan(pq.Array(&postPaths)); err != nil {
-			// A sorok EKKOR MÁR törlődtek, ezért amit sikerült kiolvasni, azt
-			// a hiba mellett is visszaadjuk — legalább azok a fájlok eltűnnek.
 			return paths, err
 		}
 		paths = append(paths, postPaths...)
@@ -142,8 +131,6 @@ func (r *PostgresRepository) Delete(ids []string) ([]string, error) {
 }
 
 func (r *PostgresRepository) Update(p Post) error {
-	// A report_week-et szándékosan nem írjuk felül: az a heti riport idempotencia-
-	// kulcsa, a szerkesztés csak a megjelenített mezőket érinti.
 	res, err := r.db.Exec(`
 		UPDATE posts
 		SET tag = $2, title = $3, content = $4, image_paths = $5, updated_at = now()

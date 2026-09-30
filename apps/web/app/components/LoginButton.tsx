@@ -9,8 +9,6 @@ const LoginButton = () => {
   const { user, isAdmin, isLoading, logout } = useUser();
   const pathname = usePathname();
 
-  // A bejelentkezést a backend indítja (GET /login): ott születik az OAuth
-  // CSRF nonce, és ott áll össze a WCA authorize URL.
   const handleLogin = () => {
     window.location.href = `${clientApiUrl()}/login?redirect=${encodeURIComponent(pathname || "/")}`;
   };
@@ -39,8 +37,6 @@ const LoginButton = () => {
           title={`Kijelentkezés — ${user.name}`}
           icon={
             user.avatarURL ? (
-              /* next/image helyett sima img: a kép a WCA-ról jön (külső domain),
-                 remotePatterns config nélkül így szolgálható ki. */
               /* eslint-disable-next-line @next/next/no-img-element */
               <img
                 src={user.avatarURL}

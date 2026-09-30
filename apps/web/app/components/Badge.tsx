@@ -2,7 +2,6 @@ import React from "react";
 
 type BadgeProps = {
   label: string;
-  /** Tailwind osztályok a tónushoz (háttér + szöveg + ring), lásd `badgeMap`. */
   color: string;
   className?: string;
 };

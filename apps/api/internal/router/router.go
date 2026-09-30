@@ -16,8 +16,6 @@ import (
 	"github.com/go-chi/cors"
 )
 
-// New összeállítja a HTTP routert. A wiring (repo → service → handler) a
-// main.go-ban történik; ez a függvény kész handlereket vár és csak route-ol.
 func New(
 	cfg *config.Config,
 	postHandler *post.Handler,
@@ -33,17 +31,14 @@ func New(
 		AllowedOrigins:   []string{cfg.FrontendURL},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
-		AllowCredentials: true, // kell a cookie-hoz
+		AllowCredentials: true,
 	}))
 
-	// Nem JSON válaszok: feltöltött képek, SSE streamek, OAuth átirányítások.
 	r.Handle("/uploads/*", http.StripPrefix("/uploads/", http.FileServer(http.Dir(cfg.UploadDir))))
 	r.Get("/allrounder/stream", allrounderHandler.StreamUpdates)
 	r.Get("/special/stream", specialHandler.StreamUpdates)
 
 	r.Group(func(r chi.Router) {
-		// Az egyetlen per-IP korlát. Globális korlátot NE tegyél ide — lásd a
-		// middleware.RateLimit kommentjét (SSR, versenyhelyszín).
 		r.Use(middleware.RateLimit(cfg, middleware.LoginRateLimit))
 		r.Get("/login", authHandler.Login)
 		r.Get("/login/callback", authHandler.LoginCallback)

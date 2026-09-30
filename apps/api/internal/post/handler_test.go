@@ -6,8 +6,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// A galéria sorrendje maga az adat, ezért a szerkesztés a TELJES végső sorrendet
-// küldi: meglévő képútvonalak és "new" jelölők keverve.
 func TestResolveImageOrder(t *testing.T) {
 	existing := []string{"/uploads/a.jpg", "/uploads/b.jpg"}
 	uploaded := []string{"/uploads/c.jpg", "/uploads/d.jpg"}
@@ -45,7 +43,6 @@ func TestResolveImageOrder(t *testing.T) {
 			want:     []string{},
 		},
 		{
-			// Ez az, amiért a jelölő kell: az új kép a meglévők KÖZÉ kerül.
 			name:     "új kép beszúrása a meglévők közé",
 			raw:      `["/uploads/a.jpg","new","/uploads/b.jpg","new"]`,
 			existing: existing,
@@ -56,7 +53,6 @@ func TestResolveImageOrder(t *testing.T) {
 			},
 		},
 		{
-			// Idegen útvonalra hivatkozva más poszt képét lehetne törölni.
 			name:     "idegen útvonal elutasítva",
 			raw:      `["/uploads/masik-poszt.jpg"]`,
 			existing: existing,
@@ -69,7 +65,6 @@ func TestResolveImageOrder(t *testing.T) {
 			wantErr:  ErrInvalidImageOrder,
 		},
 		{
-			// Kevesebb hely, mint feltöltött kép: a fájl árván maradna.
 			name:     "hivatkozás nélküli feltöltés elutasítva",
 			raw:      `["/uploads/a.jpg"]`,
 			existing: existing,

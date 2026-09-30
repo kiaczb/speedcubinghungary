@@ -57,9 +57,6 @@ export default function CreatePredictionModal({ onClose }: Props) {
     return () => controller.abort();
   }, []);
 
-  // Verseny váltásakor a dobogó-jelölés a friss esemény-lista szerint marad
-  // csak érvényes — egy korábban kiválasztott versenyszám könnyen nem
-  // szerepel az új versenyen.
   const handleCompetitionChange = (id: string) => {
     setCompetitionId(id);
     const competition = competitions.find((c) => c.id === id);

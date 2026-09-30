@@ -49,8 +49,6 @@ def EstimateMilestoneCompetition(wca_id, current_count):
             upcoming = data.get("upcoming_competitions", [])
             upcoming_sorted = sorted(upcoming, key=lambda c: c.get("start_date", ""))
 
-            # needed == 0: épp most érte el — az a verseny számít, amelyikkel elérte
-            # (a legelső az upcoming listában).
             if needed == 0:
                 if upcoming_sorted:
                     target_comp = upcoming_sorted[0]
