@@ -222,9 +222,10 @@ Every feature is a package under `internal/<feature>/` with the same four files:
    Decode request, call service, encode JSON response / `http.Error`. `NewHandler(service)`.
 
 Wiring is manual constructor injection in `cmd/server/main.go` — `repo → service →
-handler`, one block per feature, then the finished handlers are passed into
-`router.New(cfg, postHandler, competitionHandler, predictionHandler, authHandler,
-specialHandler, allrounderHandler)`, which only registers routes.
+handler`, one block per feature, then the finished handlers (and the finished
+auth middleware) are passed into
+`router.New(cfg, authMiddleware, postHandler, competitionHandler, predictionHandler,
+authHandler, specialHandler, allrounderHandler)`, which only registers routes.
 **There is no DI framework; follow this manual pattern.**
 
 Other Go conventions observed:
@@ -453,7 +454,9 @@ see §20; the single cover image is backfilled into a one-element array) and
 `prediction_question_type` — a free-text extra question) and
 `000015_users_require_wca_id` (renames any blank-`wca_id` row left behind by the
 auth bug described in §9, then adds `CHECK (btrim(wca_id) <> '')` so that state
-cannot recur at the storage layer).
+cannot recur at the storage layer) and `000016_add_user_session_version`
+(`users.session_version INT NOT NULL DEFAULT 0` — server-side revocation of the
+12-hour session, see §9).
 Applied automatically on API startup via
 `migrate.New("file:///migrations", cfg.DatabaseURL)` (the prod image bakes
 `db/migrations` to `/migrations`).
@@ -475,6 +478,7 @@ posts(id UUID PK, title TEXT, tag post_tag, content TEXT,
 users(id SERIAL PK, wca_id VARCHAR(50) UNIQUE, name, email,
       avatar_url TEXT NULL,   -- 000004: WCA profilkép URL-je (nullable)
       roles JSONB default '[]', competition_count INT, delegated_count INT,
+      session_version INT NOT NULL DEFAULT 0,  -- 000016: kijelentkezés = +1 (§9)
       created_at, updated_at)
 
 records(region VARCHAR, event_id VARCHAR, single INT, average INT,
@@ -624,9 +628,10 @@ Flow:
 4. `auth.LoginCallback` **verifies `state` against the cookie before touching the
    code**, exchanges the code for a WCA access token, calls WCA `/me`, **upserts**
    the user (including the WCA `avatar.url` → `users.avatar_url`), mints an HS256
-   JWT (`middleware.UserClaims`: user_id, wca_id, name, avatarURL, roles; iat/nbf
-   + 1-hour exp), and sets it as cookie `auth`. `/me` echoes the claim's `avatarURL`.
-5. Cookie is `HttpOnly`, `SameSite=Strict`, `Path=/`, `MaxAge=3600`,
+   JWT (`middleware.UserClaims`: user_id, wca_id, name, avatarURL, roles,
+   session_version; iat/nbf + **12-hour** exp, fixed from login — no sliding
+   renewal), and sets it as cookie `auth`. `/me` echoes the claim's `avatarURL`.
+5. Cookie is `HttpOnly`, `SameSite=Strict`, `Path=/`, `MaxAge` = the token lifetime,
    `Secure` unless `DEPLOYMENT=development`. Then redirects to `FRONTEND_URL` +
    the path **taken from the cookie**. Any failure (bad state, missing code,
    upstream error) logs server-side and redirects to `FRONTEND_URL/?login=failed`
@@ -661,8 +666,9 @@ that pin each one):
   an actual endpoint that needs it.
 
 Authorization:
-- `middleware.AuthMiddlewareWithConfig(cfg)` reads the `auth` cookie, validates the
-  JWT, and puts `*UserClaims` in request context. Retrieve with
+- `middleware.AuthMiddlewareWithConfig(cfg, sessions)` reads the `auth` cookie,
+  validates the JWT, **checks it against the database**, and puts `*UserClaims`
+  in request context. Retrieve with
   `middleware.GetUserFromContext(r)`. It rejects non-HMAC algs **twice** (the
   manual `SigningMethodHMAC` check plus `jwt.WithValidMethods`), and passes
   `jwt.WithExpirationRequired()` — golang-jwt treats a token with **no** `exp` as
@@ -674,6 +680,32 @@ Authorization:
   second, identical `auth.UserClaims`, where a mismatched `json` tag silently
   dropped a field across the round trip (this happened once with `avatarURL`).
   Don't reintroduce a second copy.
+- ⚠️ **The token is checked against the DB on every authenticated request —
+  deliberately.** The session is 12 hours, and a stateless JWT that long has two
+  holes: logout only deletes the cookie (a copied token keeps working), and a
+  revoked admin stays admin until expiry. So the middleware calls
+  `SessionStore.GetSession(userID)` (one PK lookup on `users`). `auth.Service`
+  implements it (delegating to its repository), and `main.go` builds the
+  finished middleware from it and passes **that** to `router.New` — the router
+  receives only finished pieces (handlers, middleware), never a repository or
+  service, and the middleware goes through the service layer like everything
+  else:
+  - `users.session_version` (migration `000016`) must equal the token's
+    `session_version`, else 401. `POST /logout` increments it
+    (`RevokeSessions`), which **logs the user out on every device**. If that
+    update fails, the cookie is still cleared but the response is 500, so the
+    client knows the token was not revoked.
+  - **Roles are taken from the DB, not the token** — `claims.Roles` is
+    overwritten, so removing `admin` takes effect on the next request. Don't
+    read authorization from the token's own `roles` anywhere.
+  - A deleted user (`ErrSessionNotFound`) is 401; a DB error is 500 via
+    `httperr` (the `pq:` text is logged, not sent).
+  This trades the "no DB lookup" property of JWTs for immediate revocation;
+  that was a conscious choice (one API that owns the DB, and only `/me`,
+  `/logout` and admin actions are authenticated). The considered alternative —
+  1-hour access token + 12-hour refresh token, DB hit only on refresh — was
+  rejected as more frontend complexity (401-retry in `clientFetch`, refresh
+  races, `EventSource`) for weaker revocation (up to 1 hour lag).
 
 ---
 

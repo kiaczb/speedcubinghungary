@@ -18,6 +18,7 @@ import (
 
 func New(
 	cfg *config.Config,
+	authMiddleware func(http.Handler) http.Handler,
 	postHandler *post.Handler,
 	competitionHandler *competition.Handler,
 	predictionHandler *prediction.Handler,
@@ -63,13 +64,13 @@ func New(
 		r.Get("/special/report", specialHandler.GetReport)
 
 		r.Group(func(r chi.Router) {
-			r.Use(middleware.AuthMiddlewareWithConfig(cfg))
+			r.Use(authMiddleware)
 			r.Get("/me", authHandler.Me)
 			r.Post("/logout", authHandler.Logout)
 		})
 
 		r.Group(func(r chi.Router) {
-			r.Use(middleware.AuthMiddlewareWithConfig(cfg))
+			r.Use(authMiddleware)
 			r.Use(middleware.RBACMiddleware(types.ROLE_ADMIN))
 
 			r.Post("/posts", postHandler.CreatePost)

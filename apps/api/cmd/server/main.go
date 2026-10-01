@@ -8,6 +8,7 @@ import (
 	"speedcubinghungary/internal/competition"
 	"speedcubinghungary/internal/config"
 	"speedcubinghungary/internal/db"
+	"speedcubinghungary/internal/middleware"
 	"speedcubinghungary/internal/post"
 	"speedcubinghungary/internal/prediction"
 	"speedcubinghungary/internal/router"
@@ -67,9 +68,11 @@ func main() {
 		competitionService,
 	))
 
-	authHandler := auth.NewHandler(auth.NewService(auth.NewPostgresRepository(dbConn), cfg), cfg)
+	authService := auth.NewService(auth.NewPostgresRepository(dbConn), cfg)
+	authHandler := auth.NewHandler(authService, cfg)
+	authMiddleware := middleware.AuthMiddlewareWithConfig(cfg, authService)
 
-	r := router.New(cfg, postHandler, competitionHandler, predictionHandler, authHandler, specialHandler, allrounderHandler)
+	r := router.New(cfg, authMiddleware, postHandler, competitionHandler, predictionHandler, authHandler, specialHandler, allrounderHandler)
 
 	log.Printf("Server started on :8080 (mode: %s)", cfg.Deployment)
 	log.Fatal(http.ListenAndServe("0.0.0.0:8080", r))

@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -29,6 +30,15 @@ func (m *MockService) AuthorizeURL(state string) string {
 func (m *MockService) LoginCallback(ctx context.Context, code string) (string, error) {
 	args := m.Called(code)
 	return args.String(0), args.Error(1)
+}
+
+func (m *MockService) Logout(ctx context.Context, userID int) error {
+	return m.Called(userID).Error(0)
+}
+
+func (m *MockService) GetSession(ctx context.Context, userID int) (middleware.Session, error) {
+	args := m.Called(userID)
+	return args.Get(0).(middleware.Session), args.Error(1)
 }
 
 func newTestHandler(svc Service) *Handler {
@@ -146,7 +156,7 @@ func TestHandler_LoginCallback_Success(t *testing.T) {
 	assert.Equal(t, "mock-jwt-token", auth.Value)
 	assert.True(t, auth.HttpOnly)
 	assert.Equal(t, http.SameSiteStrictMode, auth.SameSite)
-	assert.Equal(t, 3600, auth.MaxAge)
+	assert.Equal(t, 12*60*60, auth.MaxAge)
 
 	state := cookieByName(resp, stateCookieName)
 	require.NotNil(t, state)
@@ -288,6 +298,38 @@ func TestHandler_Logout(t *testing.T) {
 	var body map[string]string
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
 	assert.Equal(t, "logged out", body["message"])
+}
+
+func withUser(req *http.Request, userID int) *http.Request {
+	claims := &middleware.UserClaims{UserID: userID}
+	return req.WithContext(context.WithValue(req.Context(), middleware.UserClaimsContextKey, claims))
+}
+
+func TestHandler_LogoutRevokesTheSessionServerSide(t *testing.T) {
+	svc := new(MockService)
+	svc.On("Logout", 7).Return(nil)
+
+	w := httptest.NewRecorder()
+	newTestHandler(svc).Logout(w, withUser(httptest.NewRequest(http.MethodPost, "/logout", nil), 7))
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	svc.AssertExpectations(t)
+}
+
+func TestHandler_LogoutClearsTheCookieEvenIfRevocationFails(t *testing.T) {
+	svc := new(MockService)
+	svc.On("Logout", 7).Return(errors.New("pq: connection refused"))
+
+	w := httptest.NewRecorder()
+	newTestHandler(svc).Logout(w, withUser(httptest.NewRequest(http.MethodPost, "/logout", nil), 7))
+
+	resp := w.Result()
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode, "a kliens tudja meg, hogy a token nincs visszavonva")
+	auth := cookieByName(resp, authCookieName)
+	require.NotNil(t, auth)
+	assert.Equal(t, -1, auth.MaxAge)
 }
 
 func TestHandler_CookiesAreSecureOutsideDevelopment(t *testing.T) {

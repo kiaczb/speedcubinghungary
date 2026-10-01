@@ -1,8 +1,11 @@
 package auth
 
 import (
+	"context"
+	"database/sql"
 	"testing"
 
+	"speedcubinghungary/internal/middleware"
 	"speedcubinghungary/internal/types"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -25,7 +28,7 @@ func TestPostgresRepository_UpsertKeepsStoredRoles(t *testing.T) {
 
 	mock.ExpectQuery(`INSERT INTO users`).
 		WithArgs(input.WCAID, input.Name, input.Email, input.AvatarURL, []byte(`["user"]`)).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "roles"}).AddRow(7, `["user","admin"]`))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "roles", "session_version"}).AddRow(7, `["user","admin"]`, 3))
 
 	user, err := NewPostgresRepository(db).Upsert(input)
 
@@ -34,5 +37,43 @@ func TestPostgresRepository_UpsertKeepsStoredRoles(t *testing.T) {
 	assert.Equal(t, input.WCAID, user.WCAID)
 	assert.Equal(t, input.AvatarURL, user.AvatarURL)
 	assert.ElementsMatch(t, []types.Role{types.ROLE_USER, types.ROLE_ADMIN}, user.Roles)
+	assert.Equal(t, 3, user.SessionVersion, "a belépés a már visszavont munkamenetek utáni verzióval ír alá")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestPostgresRepository_GetSession(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	mock.ExpectQuery(`SELECT session_version, roles FROM users WHERE id = \$1`).
+		WithArgs(7).
+		WillReturnRows(sqlmock.NewRows([]string{"session_version", "roles"}).AddRow(2, `["user","admin"]`))
+	mock.ExpectQuery(`SELECT session_version, roles FROM users WHERE id = \$1`).
+		WithArgs(8).
+		WillReturnError(sql.ErrNoRows)
+
+	repo := NewPostgresRepository(db)
+
+	session, err := repo.GetSession(context.Background(), 7)
+	require.NoError(t, err)
+	assert.Equal(t, middleware.Session{Version: 2, Roles: []types.Role{types.ROLE_USER, types.ROLE_ADMIN}}, session)
+
+	_, err = repo.GetSession(context.Background(), 8)
+	assert.ErrorIs(t, err, middleware.ErrSessionNotFound, "törölt felhasználó tokenje ne legyen érvényes")
+
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestPostgresRepository_RevokeSessionsBumpsTheVersion(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	mock.ExpectExec(`UPDATE users SET session_version = session_version \+ 1 WHERE id = \$1`).
+		WithArgs(7).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	require.NoError(t, NewPostgresRepository(db).RevokeSessions(context.Background(), 7))
 	assert.NoError(t, mock.ExpectationsWereMet())
 }

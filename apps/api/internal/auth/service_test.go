@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"testing"
+	"time"
 
 	"speedcubinghungary/internal/config"
 	"speedcubinghungary/internal/middleware"
@@ -28,6 +29,15 @@ func (m *MockRepo) Upsert(user *User) (*User, error) {
 		return nil, args.Error(1)
 	}
 	return userRet.(*User), args.Error(1)
+}
+
+func (m *MockRepo) GetSession(ctx context.Context, userID int) (middleware.Session, error) {
+	args := m.Called(userID)
+	return args.Get(0).(middleware.Session), args.Error(1)
+}
+
+func (m *MockRepo) RevokeSessions(ctx context.Context, userID int) error {
+	return m.Called(userID).Error(0)
 }
 
 const testJWTSecret = "test-secret-that-is-at-least-32-chars-long"
@@ -89,6 +99,8 @@ func TestService_LoginCallback(t *testing.T) {
 		Email:     "john@example.com",
 		AvatarURL: "https://example.com/avatar.png",
 		Roles:     []types.Role{types.ROLE_ADMIN},
+
+		SessionVersion: 4,
 	}
 
 	mockRepo := new(MockRepo)
@@ -111,7 +123,32 @@ func TestService_LoginCallback(t *testing.T) {
 	assert.Equal(t, existingUser.AvatarURL, claims.AvatarURL)
 	assert.Contains(t, claims.Roles, types.ROLE_ADMIN)
 	assert.NotNil(t, claims.ExpiresAt, "a token lejárat nélkül örök életű munkamenet lenne")
+	assert.Equal(t, 4, claims.SessionVersion, "a verzió nélkül a kijelentkezés nem érvénytelenítené a tokent")
+	assert.WithinDuration(t, time.Now().Add(12*time.Hour), claims.ExpiresAt.Time, time.Minute)
 
+	mockRepo.AssertExpectations(t)
+}
+
+func TestService_IsTheSessionStoreOfTheAuthMiddleware(t *testing.T) {
+	mockRepo := new(MockRepo)
+	stored := middleware.Session{Version: 2, Roles: []types.Role{types.ROLE_ADMIN}}
+	mockRepo.On("GetSession", 7).Return(stored, nil)
+
+	var sessions middleware.SessionStore = newTestService(mockRepo, "", "")
+	session, err := sessions.GetSession(context.Background(), 7)
+
+	assert.NoError(t, err)
+	assert.Equal(t, stored, session)
+	mockRepo.AssertExpectations(t)
+}
+
+func TestService_LogoutRevokesTheUsersSessions(t *testing.T) {
+	mockRepo := new(MockRepo)
+	mockRepo.On("RevokeSessions", 7).Return(nil)
+
+	err := newTestService(mockRepo, "", "").Logout(context.Background(), 7)
+
+	assert.NoError(t, err)
 	mockRepo.AssertExpectations(t)
 }
 
