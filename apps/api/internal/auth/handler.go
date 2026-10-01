@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"speedcubinghungary/internal/config"
+	"speedcubinghungary/internal/httperr"
 	"speedcubinghungary/internal/middleware"
 )
 
@@ -98,6 +99,11 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
+	var revokeErr error
+	if user := middleware.GetUserFromContext(r); user != nil {
+		revokeErr = h.service.Logout(r.Context(), user.UserID)
+	}
+
 	http.SetCookie(w, &http.Cookie{
 		Name:     authCookieName,
 		Value:    "",
@@ -107,6 +113,11 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		MaxAge:   -1,
 	})
+
+	if revokeErr != nil {
+		httperr.Write(w, r, http.StatusInternalServerError, revokeErr)
+		return
+	}
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(`{"message":"logged out"}`))

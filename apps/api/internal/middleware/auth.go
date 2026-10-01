@@ -2,9 +2,11 @@ package middleware
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"speedcubinghungary/internal/config"
+	"speedcubinghungary/internal/httperr"
 	"speedcubinghungary/internal/types"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -17,15 +19,27 @@ const userContextKey = contextKey("user")
 var UserClaimsContextKey = userContextKey
 
 type UserClaims struct {
-	UserID    int          `json:"user_id"`
-	WCAID     string       `json:"wca_id"`
-	Name      string       `json:"name"`
-	AvatarURL string       `json:"avatarURL"`
-	Roles     []types.Role `json:"roles"`
+	UserID         int          `json:"user_id"`
+	WCAID          string       `json:"wca_id"`
+	Name           string       `json:"name"`
+	AvatarURL      string       `json:"avatarURL"`
+	Roles          []types.Role `json:"roles"`
+	SessionVersion int          `json:"session_version"`
 	jwt.RegisteredClaims
 }
 
-func AuthMiddlewareWithConfig(cfg *config.Config) func(http.Handler) http.Handler {
+type Session struct {
+	Version int
+	Roles   []types.Role
+}
+
+var ErrSessionNotFound = errors.New("session not found")
+
+type SessionStore interface {
+	GetSession(ctx context.Context, userID int) (Session, error)
+}
+
+func AuthMiddlewareWithConfig(cfg *config.Config, sessions SessionStore) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			cookie, err := r.Cookie("auth")
@@ -59,6 +73,20 @@ func AuthMiddlewareWithConfig(cfg *config.Config) func(http.Handler) http.Handle
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
 			}
+
+			session, err := sessions.GetSession(r.Context(), claims.UserID)
+			switch {
+			case errors.Is(err, ErrSessionNotFound):
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			case err != nil:
+				httperr.Write(w, r, http.StatusInternalServerError, err)
+				return
+			case session.Version != claims.SessionVersion:
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+			claims.Roles = session.Roles
 
 			ctx := context.WithValue(r.Context(), userContextKey, claims)
 			next.ServeHTTP(w, r.WithContext(ctx))

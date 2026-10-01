@@ -9,4 +9,6 @@ type User struct {
 	Email     string       `db:"email"`
 	AvatarURL string       `db:"avatar_url"`
 	Roles     []types.Role `db:"roles"`
+
+	SessionVersion int `db:"session_version"`
 }

@@ -24,7 +24,7 @@ const (
 
 	wcaScopes = "public email"
 
-	tokenLifetime = time.Hour
+	tokenLifetime = 12 * time.Hour
 
 	upstreamTimeout = 10 * time.Second
 	maxUpstreamBody = 1 << 20
@@ -33,6 +33,8 @@ const (
 type Service interface {
 	AuthorizeURL(state string) string
 	LoginCallback(ctx context.Context, code string) (string, error)
+	Logout(ctx context.Context, userID int) error
+	GetSession(ctx context.Context, userID int) (middleware.Session, error)
 }
 
 type service struct {
@@ -176,11 +178,12 @@ func (s *service) signToken(user *User) (string, error) {
 	now := time.Now()
 
 	claims := middleware.UserClaims{
-		UserID:    user.ID,
-		WCAID:     user.WCAID,
-		Name:      user.Name,
-		AvatarURL: user.AvatarURL,
-		Roles:     user.Roles,
+		UserID:         user.ID,
+		WCAID:          user.WCAID,
+		Name:           user.Name,
+		AvatarURL:      user.AvatarURL,
+		Roles:          user.Roles,
+		SessionVersion: user.SessionVersion,
 		RegisteredClaims: jwt.RegisteredClaims{
 			IssuedAt:  jwt.NewNumericDate(now),
 			NotBefore: jwt.NewNumericDate(now),
@@ -195,4 +198,12 @@ func (s *service) signToken(user *User) (string, error) {
 
 func decodeJSON(body io.Reader, out any) error {
 	return json.NewDecoder(io.LimitReader(body, maxUpstreamBody)).Decode(out)
+}
+
+func (s *service) Logout(ctx context.Context, userID int) error {
+	return s.repo.RevokeSessions(ctx, userID)
+}
+
+func (s *service) GetSession(ctx context.Context, userID int) (middleware.Session, error) {
+	return s.repo.GetSession(ctx, userID)
 }

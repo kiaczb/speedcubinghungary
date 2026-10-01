@@ -25,7 +25,7 @@ func TestUploadsAreNotServedAsJSON(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(uploadDir, "kep.png"), png, 0o644))
 
 	cfg := &config.Config{Deployment: "development", FrontendURL: "http://localhost:3000", UploadDir: uploadDir}
-	r := New(cfg,
+	r := New(cfg, func(next http.Handler) http.Handler { return next },
 		post.NewHandler(nil, uploadDir), competition.NewHandler(nil), prediction.NewHandler(nil),
 		auth.NewHandler(nil, cfg), special.NewHandler(nil), allrounder.NewHandler(nil),
 	)

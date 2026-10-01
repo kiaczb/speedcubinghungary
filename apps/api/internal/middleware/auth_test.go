@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -52,7 +53,24 @@ func requestWithToken(token string) *http.Request {
 	return req
 }
 
+type stubSessions struct {
+	session Session
+	err     error
+}
+
+func (s stubSessions) GetSession(context.Context, int) (Session, error) {
+	return s.session, s.err
+}
+
+func currentSession() stubSessions {
+	return stubSessions{session: Session{Version: 0, Roles: []types.Role{types.ROLE_USER}}}
+}
+
 func run(cfg *config.Config, req *http.Request) (*httptest.ResponseRecorder, *UserClaims) {
+	return runWith(cfg, currentSession(), req)
+}
+
+func runWith(cfg *config.Config, sessions SessionStore, req *http.Request) (*httptest.ResponseRecorder, *UserClaims) {
 	var seen *UserClaims
 
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -61,9 +79,48 @@ func run(cfg *config.Config, req *http.Request) (*httptest.ResponseRecorder, *Us
 	})
 
 	w := httptest.NewRecorder()
-	AuthMiddlewareWithConfig(cfg)(next).ServeHTTP(w, req)
+	AuthMiddlewareWithConfig(cfg, sessions)(next).ServeHTTP(w, req)
 
 	return w, seen
+}
+
+func TestAuthMiddleware_RolesComeFromTheDatabaseNotTheToken(t *testing.T) {
+	claims := validClaims()
+	claims.Roles = []types.Role{types.ROLE_USER, types.ROLE_ADMIN}
+
+	w, seen := runWith(testCfg(), currentSession(), requestWithToken(signHS256(t, claims, testSecret)))
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, []types.Role{types.ROLE_USER}, seen.Roles,
+		"az elvett admin jog azonnal hat, nem csak a 12 órás token lejártakor")
+}
+
+func TestAuthMiddleware_RejectsRevokedOrUnknownSessions(t *testing.T) {
+	token := signHS256(t, validClaims(), testSecret)
+
+	tests := []struct {
+		name     string
+		sessions stubSessions
+		expected int
+	}{
+		{
+			name:     "kijelentkezés után nagyobb a verzió",
+			sessions: stubSessions{session: Session{Version: 1, Roles: []types.Role{types.ROLE_USER}}},
+			expected: http.StatusUnauthorized,
+		},
+		{name: "törölt felhasználó", sessions: stubSessions{err: ErrSessionNotFound}, expected: http.StatusUnauthorized},
+		{name: "adatbázishiba", sessions: stubSessions{err: errors.New("pq: connection refused")}, expected: http.StatusInternalServerError},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w, seen := runWith(testCfg(), tt.sessions, requestWithToken(token))
+
+			assert.Equal(t, tt.expected, w.Code)
+			assert.Nil(t, seen, "a védett handler nem futhatott le")
+			assert.NotContains(t, w.Body.String(), "pq:", "a belső hiba szövege nem jut ki")
+		})
+	}
 }
 
 func TestAuthMiddleware_ValidToken(t *testing.T) {
