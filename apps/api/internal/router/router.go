@@ -6,6 +6,7 @@ import (
 	"speedcubinghungary/internal/auth"
 	"speedcubinghungary/internal/competition"
 	"speedcubinghungary/internal/config"
+	"speedcubinghungary/internal/learn"
 	"speedcubinghungary/internal/middleware"
 	"speedcubinghungary/internal/post"
 	"speedcubinghungary/internal/prediction"
@@ -25,6 +26,7 @@ func New(
 	authHandler *auth.Handler,
 	specialHandler *special.Handler,
 	allrounderHandler *allrounder.Handler,
+	learnHandler *learn.Handler,
 ) *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(middleware.SecurityHeaders)
@@ -63,6 +65,9 @@ func New(
 		r.Get("/special/competitions", specialHandler.GetCompetitions)
 		r.Get("/special/report", specialHandler.GetReport)
 
+		r.Get("/learn/level", learnHandler.GetLevel)
+		r.Get("/learn/tree", learnHandler.GetTree)
+
 		r.Group(func(r chi.Router) {
 			r.Use(authMiddleware)
 			r.Get("/me", authHandler.Me)
@@ -83,6 +88,15 @@ func New(
 			r.Post("/allrounder/refresh", allrounderHandler.Refresh)
 
 			r.Put("/special/results/{liveResultId}/attempts/{attemptNumber}/elapsed", specialHandler.RecordElapsed)
+
+			r.Post("/learn/nodes", learnHandler.CreateNode)
+			r.Put("/learn/nodes/order", learnHandler.ReorderNodes)
+			r.Put("/learn/nodes/{id}", learnHandler.UpdateNode)
+			r.Delete("/learn/nodes/{id}", learnHandler.DeleteNode)
+			r.Post("/learn/nodes/{id}/algorithms", learnHandler.CreateAlgorithm)
+			r.Put("/learn/nodes/{id}/algorithms/order", learnHandler.ReorderAlgorithms)
+			r.Put("/learn/algorithms/{id}", learnHandler.UpdateAlgorithm)
+			r.Delete("/learn/algorithms/{id}", learnHandler.DeleteAlgorithm)
 		})
 	})
 

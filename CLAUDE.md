@@ -55,6 +55,7 @@ speedcubinghungary/
 │   │       ├── allrounder/  # Hungarian All-Rounder: cached WCA results + live leg + scoring
 │   │       ├── special/     # Budapest Special: live WCA Live results + recorded DNF times
 │   │       ├── wcalive/     # shared WCA Live transport (GraphQL, Phoenix socket, broadcaster)
+│   │       ├── learn/       # Tanulás: tetszőleges mélységű fa + algoritmusok a leveleken (§22)
 │   │       ├── middleware/  # JSON content-type, JWT auth, RBAC
 │   │       ├── httperr/     # hiba → HTTP válasz (5xx szövege naplóba, nem a kliensnek)
 │   │       ├── config/      # env var loading + validation (fail-fast)
@@ -66,6 +67,7 @@ speedcubinghungary/
 │   └── scripts/
 │       └── weekly-report/   # Python weekly email job (WCA + Postgres + SMTP)
 ├── db/migrations/           # golang-migrate SQL files (schema, no seeds)
+├── db/seeds/                # optional example data, run by hand only (never by the API)
 ├── infra/
 │   ├── docker-compose.yml            # base stack (shared, values from --env-file)
 │   ├── docker-compose.dev.yml        # dev override: bind mounts, hot reload, host ports
@@ -118,6 +120,11 @@ as parameters and only registers routes.
   Each feature still owns its own `SocketClient` instance (two websockets is
   cheaper than sharing one connection's state), but the **lifecycle around it is
   shared** — see §18 for the `Session`/`Watcher` split.
+- `learn`: **Tanulás** — an arbitrary-depth tree of navigation nodes
+  (`learn_nodes`, self-referencing) with algorithms on the leaves
+  (`learn_algorithms`). No level concepts in code; one endpoint
+  (`/learn/level?path=`) serves every depth. Tree rules are enforced in the
+  repository under one advisory lock. See §22.
 
 ---
 
@@ -225,7 +232,7 @@ Wiring is manual constructor injection in `cmd/server/main.go` — `repo → ser
 handler`, one block per feature, then the finished handlers (and the finished
 auth middleware) are passed into
 `router.New(cfg, authMiddleware, postHandler, competitionHandler, predictionHandler,
-authHandler, specialHandler, allrounderHandler)`, which only registers routes.
+authHandler, specialHandler, allrounderHandler, learnHandler)`, which only registers routes.
 **There is no DI framework; follow this manual pattern.**
 
 Other Go conventions observed:
@@ -456,7 +463,10 @@ see §20; the single cover image is backfilled into a one-element array) and
 auth bug described in §9, then adds `CHECK (btrim(wca_id) <> '')` so that state
 cannot recur at the storage layer) and `000016_add_user_session_version`
 (`users.session_version INT NOT NULL DEFAULT 0` — server-side revocation of the
-12-hour session, see §9).
+12-hour session, see §9) and `000017_add_learn_hierarchy` (the Tanulás tree:
+`learn_nodes` + `learn_algorithms`, see §22) and `000018_add_learn_node_icon`
+(`learn_nodes.icon TEXT NOT NULL DEFAULT ''` — a `@cubing/icons` class, §22) and
+`000019_add_learn_node_image` (`learn_nodes.image_url TEXT NOT NULL DEFAULT ''`, §22).
 Applied automatically on API startup via
 `migrate.New("file:///migrations", cfg.DatabaseURL)` (the prod image bakes
 `db/migrations` to `/migrations`).
@@ -534,6 +544,20 @@ prediction_question_type ENUM ('person','time','number','text')  -- 'text': 0000
 prediction_extra_questions(id UUID PK, contest_id → prediction_contests,
         prompt TEXT, type prediction_question_type, ordinal INT)
         -- admin szabad kérdései, pl. "Hány rekord születik?" (number)
+
+-- 000017: Tanulás (§22). EGY önhivatkozó fa, szintfogalom nélkül — a
+-- "3x3 → CFOP → OLL → OLL 24" és a "Skewb → NS" ugyanaz a szerkezet.
+learn_nodes(id UUID PK, parent_id → learn_nodes NULL (NULL = legfelső szint,
+        ON DELETE CASCADE), slug TEXT, title TEXT, description TEXT DEFAULT '',
+        icon TEXT DEFAULT '',  -- 000018: @cubing/icons osztály (event-333), '' = nincs
+        image_url TEXT DEFAULT '',  -- 000019: https:// kép (ma pl. VisualCube), később feltöltött kép
+        sort_order INT, created_at, updated_at,
+        CHECK (parent_id <> id),
+        UNIQUE NULLS NOT DISTINCT (parent_id, slug))  -- testvérek közt egyedi URL-szegmens
+
+learn_algorithms(id UUID PK, node_id → learn_nodes (ON DELETE CASCADE),
+        notation TEXT, name TEXT DEFAULT '', notes TEXT DEFAULT '', sort_order INT, ...)
+        -- csak LEVÉLEN (gyerek nélküli elemen) lehet — ezt a Go réteg tartja, nem a séma
 ```
 
 Notes / current state:
@@ -548,7 +572,9 @@ Notes / current state:
 ### Adding a migration
 Create the next numbered pair `db/migrations/00000N_<name>.{up,down}.sql`. It runs
 on the next API start. Keep migrations schema-focused (no seed data — the DB starts
-empty by design).
+empty by design). Example data goes in `db/seeds/*.sql` instead: run by hand, must
+be safe to re-run (see `db/seeds/learn_example.sql` for the pattern — `pg_temp`
+helper functions that look up by natural key before inserting).
 
 ---
 
@@ -588,6 +614,16 @@ admin route sits in one `Auth + RBAC(admin)` group.
 | GET  | `/special/report` | public | `special.GetReport` (per-competitor view, assembled from **live** WCA Live results + our recorded DNF times). **`?competition=<wcaId>` is required** (400 without it). Optional `?round=N` narrows to the Nth round of **every** event (1 → `333-r1`, `222-r1`, …); invalid values 400, WCA Live unreachable 502, watch capacity exhausted 503 |
 | GET  | `/special/stream` | public | `special.StreamUpdates` (**SSE**: `update` event on every change of `?competition=<wcaId>`, required). An open stream is also what keeps *that competition's* WCA Live subscription alive (§18) |
 | PUT  | `/special/results/{liveResultId}/attempts/{attemptNumber}/elapsed` | JWT + `admin` | `special.RecordElapsed` (body `{competitionWcaId, elapsedCs, note}`; `elapsedCs: null` **deletes** the entry). Keyed by WCA Live ids, not our own — there is no row for an un-timed DNF |
+| GET  | `/learn/level` | public | `learn.GetLevel` — one level of the Tanulás tree: `?path=3x3/cfop/oll` (slugs, empty = top level) → `{node, ancestors, children, algorithms}`, every node carrying its full `path`. Malformed path 400, unresolved 404. **The only read the pages need, at any depth** (§22) |
+| GET  | `/learn/tree` | public | `learn.GetTree` — every node, flat, depth-first, with `path`; used by the admin "move" select |
+| POST | `/learn/nodes` | JWT + `admin` | `learn.CreateNode` (`{parentId: uuid\|null, title, slug, description, icon, imageUrl}`; blank `slug` = derived from `title`; `icon` is `""` or an `event-*`/`unofficial-*` cubing icon class; `imageUrl` is `""` or an `https://` URL). 201 + the node |
+| PUT  | `/learn/nodes/{id}` | JWT + `admin` | `learn.UpdateNode` — same body; a different `parentId` **moves** the node with its whole subtree (appended at the end of the new level). Returns the node with its new `path` |
+| DELETE | `/learn/nodes/{id}` | JWT + `admin` | `learn.DeleteNode` — cascades to the whole subtree and its algorithms |
+| PUT  | `/learn/nodes/order` | JWT + `admin` | `learn.ReorderNodes` (`{parentId, ids}` — must list exactly the current children, else 409) |
+| POST | `/learn/nodes/{id}/algorithms` | JWT + `admin` | `learn.CreateAlgorithm` (`{notation, name, notes}`; whitespace in `notation` is collapsed). 201 + the algorithm |
+| PUT  | `/learn/nodes/{id}/algorithms/order` | JWT + `admin` | `learn.ReorderAlgorithms` (`{ids}`, same rule) |
+| PUT  | `/learn/algorithms/{id}` | JWT + `admin` | `learn.UpdateAlgorithm` |
+| DELETE | `/learn/algorithms/{id}` | JWT + `admin` | `learn.DeleteAlgorithm` |
 
 **Reading `/special/*` is public; only recording a DNF duration is admin.** The
 Budapest Special is a public leaderboard — the same competitor results are
@@ -1675,6 +1711,148 @@ gondolkodás nélkül — a userenkénti válaszok tárolása és a pontozás lo
 valószínűleg saját táblát/service-réteget igényel, hasonlóan ahhoz, ahogy az
 allrounder is külön választja a "series config kódban" (§19) és a "letöltött
 eredmény DB-ben" felelősséget.
+
+## 22. Tanulás (`internal/learn` + `/learn`)
+
+Két rész: a **`/learn` főoldal** (két videóhely — bemutató és versenyzői
+útmutató — és alul egy belépő az algoritmusokhoz), valamint az
+**algoritmusgyűjtemény** a `/learn/algorithms/...` alatt.
+
+### ⚠️ Nincs rögzített szintszám — és ne is legyen
+
+A tananyag **egyetlen önhivatkozó fa** (`learn_nodes`), a leveleken
+algoritmusokkal (`learn_algorithms`). A kódban **nincs** kategória / metódus /
+lépés / eset fogalom: a `3x3 → CFOP → OLL → OLL 24` és a `Skewb → NS` ugyanaz a
+szerkezet, csak más mélységben, és mindkettőt **ugyanaz** az oldal és ugyanaz
+a komponens rajzolja ki. A kirakók és módszerek nevei **adatok** (a seedben),
+sehol nincsenek a kódban. Ne vezess be szintenkénti típust, oldalt vagy
+oszlopot — pontosan ezért dobtuk el a korábbi `feature/learn` megoldást
+(Event → Case → Algorithm, három fix tábla).
+
+### A fa szabályai (repository.go)
+
+- **Egy elemnek VAGY gyerekei, VAGY algoritmusai vannak, a kettő együtt nem.**
+  A séma ezt nem tudja kifejezni, ezért a Go réteg tartja (`ErrParentHasAlgorithms`,
+  `ErrNodeHasChildren`). Ugyanígy: áthelyezéskor nem keletkezhet kör
+  (`ErrMoveIntoOwnSubtree`), és a slug testvérek közt egyedi (`ErrSlugTaken` —
+  a séma `UNIQUE NULLS NOT DISTINCT`-je a háló alatta; a `NULLS NOT DISTINCT`
+  nélkül a legfelső szinten két `3x3` is lehetne).
+- ⚠️ **Minden írás `inTreeTx`-ben fut**, ami egy tranzakciós advisory lockot
+  vesz (`pg_advisory_xact_lock(hashtext('learn_nodes'))`). Ettől versenyhelyzet-
+  mentes az összes fenti ellenőrzés egyetlen, könnyen belátható mechanizmussal
+  (két egyidejű áthelyezés különben kört zárhatna). Csak admin ír, alacsony a
+  forgalom, a sorosítás ára nulla. **Ne adj hozzá olyan írási utat, ami
+  megkerüli.**
+- `MaxDepth = 32` **nem szintszám, hanem észszerűségi korlát**: a `?path`
+  hosszát ugyanez a konstans korlátozza, így minden elem elérhető marad
+  útvonallal. Áthelyezésnél az új szülő mélysége + a mozgatott **részfa
+  magassága** számít, nem csak az elemé.
+- A rendezés `sort_order`; új elem a szint végére kerül. Az átrendező
+  végpontok a **teljes** testvérlistát várják, és 409-et adnak, ha a halmaz
+  eltér a jelenlegitől — így egy elavult felület nem tud csendben elemet
+  kihagyni vagy idegent becsempészni.
+- Hibák: 400 = `ErrValidation`, 404 = nem létező elem/szülő/algoritmus,
+  409 = `ErrConflict` (a fa szabályai). A 4xx szövegek angolok, mint a többi
+  csomagban, és az admin modál szó szerint mutatja őket.
+
+### URL-ek
+
+- Az URL **slug-útvonal**: `/learn/algorithms/3x3/cfop/oll/oll-24`. A szervert
+  `GET /learn/level?path=3x3/cfop/oll/oll-24` oldja fel **egyetlen rekurzív
+  CTE-vel** (`ResolvePath`); ha a lánc rövidebb az útvonalnál → 404.
+- **A slugot csak a Go állítja elő** (`Slugify`, magyar ékezetekkel): a kliens
+  üresen küldi, vagy amit az admin beírt, azt is a szerver normalizálja. Ne
+  írj mellé TypeScript slugifyt — két implementáció elcsúszna.
+- Minden elem a válaszban a teljes `path`-jával jön; a frontend linket **csak**
+  `levelHref(path)`-szel épít (`app/learn/lib/nodes.ts`), sosem fűz össze
+  szegmenseket maga.
+- Slug-csere vagy áthelyezés megváltoztatja az URL-t, és **nincs átirányítás**
+  a régiről (tudatos — ha kell, az egy külön `learn_redirects` tábla lesz). Ha
+  az admin az épp megnyitott elemet szerkeszti, a modál `router.replace`-szel
+  az új címre visz.
+
+### Frontend
+
+- **Egyetlen oldal minden mélységre**: `app/learn/algorithms/[[...path]]/page.tsx`
+  (optional catch-all — a `/learn/algorithms` gyökér is ez). Server Component,
+  a `LevelView` (szintén szerveroldali) rakja össze a kliens-szigetekből:
+  `NodeGrid`, `AlgorithmPanel`, `admin/LevelAdminBar` — mindegyik maga hívja a
+  `useUser()`-t.
+- **A megjelenítést az adat dönti el, nem a mélység**: vannak gyerekek →
+  `NodeCard` grid; vannak algoritmusok → `AlgorithmPanel` (nagy, lenyitható
+  kártya, alapból nyitva; a `hidden` attribútum miatt csukva is benne van a
+  HTML-ben); egyik sincs → `StateMessage`.
+- Az admin szerkesztés **ugyanazon az oldalon** van, mint a posztoknál és a
+  tippversenynél: a szint sávján „Új elem” (csak ha nincs algoritmus) és
+  „Új algoritmus” (csak nem-gyökér, gyerek nélküli elemen); a kártyákon ←/→
+  sorrend, szerkesztés (benne az áthelyezés a `GET /learn/tree`-ből, a saját
+  részfa és az algoritmusos levelek kiszűrve) és törlés (`ConfirmModal`,
+  kaszkád-figyelmeztetéssel). A modálok és a `ConfirmModal` `next/dynamic`
+  (`ssr: false`), hogy a nem admin látogató ne töltse le őket.
+- A `/learn` főoldal belépője `rounded-panel bg-surface-inverse` doboz, **nem**
+  teljes szélességű sáv: közvetlenül a lábléc alatt van, ami ugyanilyen színű,
+  és a kettő összeolvadna.
+
+### Kártyaképek: kép-URL és ikon most, feltöltött kép később
+
+Sorrend a kártyán: `image_url` → `icon` → a cím kezdőbetűje.
+
+- `learn_nodes.image_url` (000019): ma egy `https://` kép-URL. A szerver csak
+  `https`-t fogad el, host-tal, felhasználói adat, szóköz és idézőjel nélkül,
+  max. 2000 karakter (`isImageURL`) — így `javascript:`/`data:` nem kerülhet
+  az `src`-be. A CSP `img-src`-je már most engedi a `https:`-t. Ha megépül a
+  képfeltöltés, **ugyanebbe az oszlopba** kerül a `/uploads/...` útvonal
+  (akkor bővítsd az `isImageURL`-t), nem új oszlopba.
+- **Esetábrák: VisualCube** (`https://visualcube.api.cubing.net`), az eset
+  saját algoritmusából (`stage=oll|pll`, `view=plan`, `case=<alg>` — a
+  `case` az inverzét alkalmazza, így az esetet mutatja). Licenc: „Cube images
+  generated by VisualCube are free to copy and distribute.” A seed
+  `pg_temp.visualcube()`/`learn_case()` a fő algoritmusból generálja, hogy
+  kép és algoritmus ne csúszhasson szét. Csak NxN kockát tud — Skewb, Pyraminx
+  stb. esetábrához más forrás (vagy a feltöltés) kell. Külső szolgáltatás:
+  ha kiesik, a kártyán üres kép marad, a navigáció működik.
+
+- `learn_nodes.icon` (000018) egy `@cubing/icons` osztálynév (`event-333`,
+  `unofficial-fto`), amit az admin a szerkesztő modálban választ. A lista a
+  csomag `CubingIcons` enumjából jön (`app/learn/lib/icons.ts`), **nincs kézzel
+  felsorolva**; a `penalty-*` ikonok kiszűrve. A szerver csak a formát
+  ellenőrzi (`event-`/`unofficial-` + `[a-z0-9_]`) — ettől nem kerülhet
+  tetszőleges szöveg a `className`-be.
+- Ha egy szinten **bármelyik** kártyának van képe vagy ikonja, a `NodeGrid`
+  képes kártyákat rajzol (a cubers.io eseménykártyái mintájára, de animáció
+  nélkül: nagy kép középen, alatta cím + darabszám, leírás nélkül, sűrűbb
+  rács), és mindegyiknek ad képterületet, hogy a grid egyforma maradjon.
+- ⚠️ Esetképeket **ne másolj és ne hotlinkelj** olyan forrásból, aminek nincs
+  szabad licence (pl. jperm.net, speedcubedb.com — utóbbi amúgy is
+  böngészőben rajzol, nincs képfájlja).
+
+### Videók — szándékosan NINCS megépítve
+
+`VideoPlaceholder` jelöli a helyüket: két nagy a `/learn`-en, és egy kompakt
+**algoritmusonként** az `AlgorithmItem`-ben. Ha megépül: külön tábla (pl.
+`learn_algorithm_videos`), a placeholder helyére ugyanott jön a lejátszó.
+**Ne tegyél videó-oszlopot a `learn_algorithms`-ba** (a migráció kommentje is
+ezt mondja).
+
+### Példaadat és ellenőrzés
+
+- `db/seeds/learn_example.sql` — kézzel futtatandó, újrafuttatható; a két
+  eltérő mélységű ágat tölti fel (3x3 → CFOP → OLL/PLL esetek, Skewb → NS).
+  ⚠️ A Skewb/NS algoritmus csak szerkezeti példa, nem valódi NS-eset.
+- Valós Postgres elleni smoke tesztek (invariánsok, áthelyezés, sorrend,
+  mélységkorlát) — saját, egyedi slugú gyökérelemet hoznak létre és a végén
+  törlik, de **írnak** a megadott DB-be:
+  `SMOKE_DATABASE_URL="postgres://…" go test ./internal/learn -run Smoke -v`
+- ⚠️ Ha egy dev DB-n valaha futott a régi `feature/learn` branch, abban
+  maradt `learn_events`/`learn_cases`/`learn_algorithms` tábla, és a `000017`
+  `relation "learn_algorithms" already exists` hibával elbukik (dirty 17).
+  Javítás: a három régi tábla eldobása, majd `schema_migrations` vissza
+  `16, false`-ra. Test/prod nem érintett — az a branch sosem volt telepítve.
+
+### Nincs még megépítve
+
+Piszkozat/publikálás (egy elem a létrehozás pillanatától publikus), képfeltöltés
+(a kép-URL helyett), átirányítás régi URL-ről, videók.
 
 ## Instructions for Claude
 

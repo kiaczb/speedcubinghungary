@@ -9,6 +9,7 @@ type NavLink = {
 export const NAV_LINKS: NavLink[] = [
   { href: "/calendar", label: "Versenynaptár" },
   { href: "/tools", label: "Eszközök" },
+  { href: "/learn", label: "Tanulás" },
   { href: "/posts", label: "Hírek" },
   { href: "/about", label: "Rólunk" },
   { href: "/contact", label: "Kapcsolat" },

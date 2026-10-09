@@ -11,6 +11,7 @@ import (
 	"speedcubinghungary/internal/auth"
 	"speedcubinghungary/internal/competition"
 	"speedcubinghungary/internal/config"
+	"speedcubinghungary/internal/learn"
 	"speedcubinghungary/internal/post"
 	"speedcubinghungary/internal/prediction"
 	"speedcubinghungary/internal/special"
@@ -27,7 +28,7 @@ func TestUploadsAreNotServedAsJSON(t *testing.T) {
 	cfg := &config.Config{Deployment: "development", FrontendURL: "http://localhost:3000", UploadDir: uploadDir}
 	r := New(cfg, func(next http.Handler) http.Handler { return next },
 		post.NewHandler(nil, uploadDir), competition.NewHandler(nil), prediction.NewHandler(nil),
-		auth.NewHandler(nil, cfg), special.NewHandler(nil), allrounder.NewHandler(nil),
+		auth.NewHandler(nil, cfg), special.NewHandler(nil), allrounder.NewHandler(nil), learn.NewHandler(nil),
 	)
 
 	recorder := httptest.NewRecorder()
