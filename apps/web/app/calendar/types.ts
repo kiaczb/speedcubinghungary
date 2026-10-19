@@ -7,4 +7,8 @@ export interface UpcomingCompetition {
   country: string;
   url: string;
   eventIds: string[];
+  registrationOpen: string;
+  registrationClose: string;
+  competitorLimit: number | null;
+  acceptedCount: number | null;
 }

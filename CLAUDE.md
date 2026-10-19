@@ -125,7 +125,7 @@ as parameters and only registers routes.
 
 | Layer     | Stack |
 | --------- | ----- |
-| Frontend  | Next.js **16.2.7** (App Router, Turbopack default), React **19.2.4**, TypeScript 5, Tailwind CSS **v4** (`@tailwindcss/postcss`), `react-icons`, `@cubing/icons` (WCA event icon font, ~13 KB, imported only by `/tools/allrounder`). Node 22. |
+| Frontend  | Next.js **16.2.7** (App Router, Turbopack default), React **19.2.4**, TypeScript 5, Tailwind CSS **v4** (`@tailwindcss/postcss`), `react-icons`, `@cubing/icons` (WCA event icon font, ~13 KB, imported only by the `/tools/allrounder`, `/tools/special` and `/tools/prediction` client components). Node 22. |
 | Backend   | Go **1.25.5**, `go-chi/chi/v5` (router), `go-chi/cors`, `golang-jwt/jwt/v5`, `golang-migrate/migrate/v4`, `jackc/pgx/v5` (via `stdlib` driver) + `lib/pq` (for `pq.Array`), `google/uuid`, `coder/websocket` (WCA Live subscriptions). Tests: `stretchr/testify` + `DATA-DOG/go-sqlmock`. |
 | Scripts   | Python 3.11+ (weekly-report), Jinja-style HTML templates, SMTP email. `requirements.txt` at `apps/scripts/weekly-report/`. |
 | Data      | PostgreSQL **17**. |
@@ -571,7 +571,7 @@ admin route sits in one `Auth + RBAC(admin)` group.
 | PUT  | `/posts/{id}` | JWT + `admin` | `post.UpdatePost` (multipart; the **required** `image_order` describes the whole resulting gallery, see §20; 404 if the id doesn't exist) |
 | GET  | `/uploads/*` | public | static file server over `cfg.UploadDir` (post images) |
 | DELETE | `/posts` | JWT + `admin` | `post.DeletePosts` (body `{ids:[]}`; also deletes the posts' image files from the volume, see §20) |
-| GET  | `/competitions/upcoming` | public | `competition.GetUpcoming` (HU only; DTO includes `eventIds` — the WCA API's `event_ids` passed straight through, no extra request) |
+| GET  | `/competitions/upcoming` | public | `competition.GetUpcoming` (HU only; DTO includes `eventIds` — the WCA API's `event_ids` passed straight through, no extra request — plus `registrationOpen`/`registrationClose` (RFC3339, UTC), `competitorLimit` (null = no limit) and `acceptedCount`. ⚠️ `acceptedCount` is fetched **only for competitions whose registration is open right now** (WCA `/competitions/{id}/registrations` — that endpoint lists exactly the accepted competitors, verified equal to the WCIF's accepted + competing count, at ~18 KB instead of the WCIF's ~330 KB), in parallel. ⚠️ **The count has its own 1-minute cache (`registered`, `registrationCountTTL`), and "is registration open?" is decided per request, not when the list was cached.** The first version filled the count inside the 15-minute list cache, which missed the opening minutes entirely (the list was cached just before opening time) and would have shown a 15-minute-old "még N hely" — measured: All-Rounder 9 2026 took 10 of its 20 places in the first 6 minutes. The cached list itself never carries a count; `GetUpcomingHungarian` clones it before filling. It is `null` outside the open window **and** when that request fails — a failed count is logged, never fatal to the list) |
 | GET  | `/competitions/{id}/psych-sheet/{eventId}` | public | `competition.GetPsychSheet` — proxy of the WCA psych sheet (PR-ranked start list) for one event: `[{name, wcaId, position}]`, `position` 0 = no PR yet, `wcaId` empty for newcomers. Ids validated against `^[A-Za-z0-9]{1,64}$` (400), an id the WCA doesn't know 404, upstream failure 502. **Cached 15 min + singleflight**, expired entries swept, see §21 |
 | GET  | `/competitions/{id}/competitors` | public | `competition.GetCompetitors` — every accepted, competing registrant from the public WCIF, sorted by name: `[{name, wcaId}]`. (The WCA `/registrations` endpoint only carries user ids, no names — that's why WCIF.) Same validation/caching as above |
 | GET  | `/predictions` | public | `prediction.GetContests` — every tippverseny, `competitionName`/`City`/`Country`/`StartDate` enriched live from `competition.Service.GetUpcomingHungarian` (not stored, see §21). `status` is computed from `predictionDeadline`, never `"evaluated"` yet |
@@ -842,8 +842,71 @@ nav links in `app/lib/site.ts` if needed. **Read the Next 16 docs first** (§3 w
   participant counts/answer submission are not built yet; `participantCount`
   is hardcoded to 0 and `status` only ever reports `open`/`closed` (never
   `evaluated`, though the frontend type still has that state for later).
-- `/results`, `/rankings`, `/guide`, `/team`, `/registration` are linked from
-  `QuickToolsSection` but **no such routes exist yet** (they 404).
+- ~~`/results`, `/rankings`, `/guide`, `/team`, `/registration` linked from
+  `QuickToolsSection` (404)~~ — **resolved**: that section was replaced by
+  the live "Mi történik?" tiles (see below).
+- **The nav is grouped by topic** (`NAV_ITEMS` in `app/lib/site.ts`):
+  Versenyek ▾ (All-Rounder, Special) · Közösség ▾ · Hírek · Egyesület ▾.
+  **Versenynaptár is deliberately not in the nav** — it's reached from the
+  home page (hero button, upcoming card, "Fedezd fel") and the footer, which
+  is why `NAV_LINKS` prepends it to the flattened list. A group is
+  `{label, links}`, a direct link is `{href, label}`. On desktop a group opens
+  on **mouse hover** (the panel uses `pt-2` instead of `mt-2` so the pointer
+  doesn't leave the hover area on the way down); touch and keyboard open it
+  with a tap/Enter, which is why hover is keyed on `pointerType === "mouse"`.
+  The dropdown shows labels + a small icon (`icon` on every `NavLink`) only —
+  descriptions were tried and made it too big. On mobile the groups are a
+  tap-to-toggle accordion (one open at a time, `grid-rows-[0fr→1fr]`
+  animation, `inert` while closed). `NAV_LINKS` is derived from it (flat) for the footer. Add new pages
+  (e.g. `/learn` when it ships) as an entry there, not in `Navbar.tsx`.
+  The home page order is Hero → highlight tiles → Hírek → Rólunk → Versenyzés.
+- **The highlight tiles (`HighlightsSection` + `Sections/Main/Highlights/`)** are a
+  bento of **live-data tiles**, not a link grid (the old six-card
+  `QuickToolsSection` just repeated the nav and was removed). Three tiles:
+  - **All-Rounder** (large, left): season progress as one segment per leg,
+    top 8 on desktop / top 5 below `lg` (the extra rows are `hidden lg:flex`
+    so the tile fills the height of the two stacked right-hand tiles), live
+    badge + the provisional-points notice when a leg is live.
+  - **`FeaturedTile`** (top right) is **dynamic**: the nearest *open*
+    Tippverseny if there is one, else the latest `report` post
+    (`ReportTile`: record count, top 3 records ranked WR → CR → NR, first
+    achieved milestone), else the Tippverseny fallback copy. The weekly job
+    only ever emits `WR`/`CR`/`NR` badges (`config.py` `badges`) and sends
+    **raw** event ids/types (`"333"`, `"single"`) — the tile maps them through
+    `eventName()`; anything else is filtered out, not shown. The
+    rule behind it: a tile must show something fresh most weeks — an
+    occasional feature only takes the slot while it is live.
+  - **`UpcomingCompetitionsTile`** (bottom right): the next 3 competitions
+    with their **registration state** (`app/calendar/lib/registration.ts`:
+    upcoming → "Nevezés nyílik", open → "még N hely · zárul", full →
+    "Betelt · várólista", closed). Rows link out to the WCA page (where you
+    register), so this tile uses `Tile`'s `linkWholeCard={false}` variant —
+    only the "Versenynaptár" CTA is an internal link (no nested anchors).
+  **Tile headers are a plain `title` (`text-lg font-semibold`) + optional
+  `meta` on the right** (date, "8 / 10 forduló", a status badge). The first
+  version had an icon in a bordered box + a mono uppercase tracked label per
+  tile; the owner found that read as generic/AI-generated, so it was removed.
+  Don't bring back icon boxes or eyebrow labels on the tiles. **The section
+  heading is a plain "Aktuális" + today's date** (`formatLongDateWithWeekday`,
+  Budapest) over a thin rule, newspaper-masthead style. History: it was
+  "MOST / Mi történik?" + a subtitle listing the tile titles (too
+  template-like), then no heading at all (the tiles looked like they were
+  dropped there at random). The date is what makes it more than a label — it
+  says the tiles are today's data. Top padding is `pt-12 sm:pt-16`, tighter
+  than the other sections, since this heading is small.
+  A Special tile existed briefly and was **removed on purpose** — the
+  Special runs about once a year, so the tile was static copy 364 days out of
+  365. Don't add it back as a permanent tile.
+  ⚠️ **Each tile is its own async Server Component in its own `<Suspense>`**,
+  so one slow upstream can't hold back the whole home page. Every tile has a
+  no-data fallback, so an unreachable API leaves copy + link, not a hole.
+- The `/tools` page ("Programok", formerly "Eszközök") **is no longer in the
+  nav** — its pages are reachable directly from the Versenyek/Közösség groups.
+  The page itself still exists. Sections:
+  "Versenysorozatok és versenyformák" (Special, All-Rounder) and "Közösség"
+  (Tippverseny, Szavazás — the latter is still a `#events` placeholder). The
+  **URLs deliberately stay `/tools/*`**: Special/All-Rounder links are shared
+  (`?competition=`, `?year=`), so a rename would need redirects.
 - ~~The Hungarian All-Rounder tool card links out to `allrounderpoints.vercel.app`~~
   — **resolved**: the app is integrated at `/tools/allrounder`, see §19.
 - ~~`auth/service.go` / `auth/handler.go` bypass the `config` struct and read env

@@ -1,17 +1,56 @@
 import type { IconType } from "react-icons";
-import { FaEnvelope, FaFacebook, FaGlobe } from "react-icons/fa";
+import {
+  FaBullseye,
+  FaCalendarAlt,
+  FaEnvelope,
+  FaFacebook,
+  FaGlobe,
+  FaNewspaper,
+  FaStopwatch,
+  FaTrophy,
+  FaUserFriends,
+} from "react-icons/fa";
 
-type NavLink = {
+export type NavLink = {
   href: string;
   label: string;
+  icon: IconType;
 };
 
+export type NavGroup = {
+  label: string;
+  links: NavLink[];
+};
+
+export type NavItem = NavLink | NavGroup;
+
+export const isNavGroup = (item: NavItem): item is NavGroup => "links" in item;
+
+export const NAV_ITEMS: NavItem[] = [
+  {
+    label: "Versenyek",
+    links: [
+      { href: "/tools/allrounder", label: "Hungarian All-Rounder", icon: FaTrophy },
+      { href: "/tools/special", label: "Budapest Special", icon: FaStopwatch },
+    ],
+  },
+  {
+    label: "Közösség",
+    links: [{ href: "/tools/prediction", label: "Tippverseny", icon: FaBullseye }],
+  },
+  { href: "/posts", label: "Hírek", icon: FaNewspaper },
+  {
+    label: "Egyesület",
+    links: [
+      { href: "/about", label: "Rólunk", icon: FaUserFriends },
+      { href: "/contact", label: "Kapcsolat", icon: FaEnvelope },
+    ],
+  },
+];
+
 export const NAV_LINKS: NavLink[] = [
-  { href: "/calendar", label: "Versenynaptár" },
-  { href: "/tools", label: "Eszközök" },
-  { href: "/posts", label: "Hírek" },
-  { href: "/about", label: "Rólunk" },
-  { href: "/contact", label: "Kapcsolat" },
+  { href: "/calendar", label: "Versenynaptár", icon: FaCalendarAlt },
+  ...NAV_ITEMS.flatMap((item) => (isNavGroup(item) ? item.links : [item])),
 ];
 
 type ContactItem = {

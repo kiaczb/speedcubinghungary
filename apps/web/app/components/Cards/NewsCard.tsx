@@ -40,7 +40,7 @@ const NewsCard: React.FC<NewsCardProps> = ({ post, imageUrl }) => {
           <Badge
             label={badge.label}
             color={badge.color}
-            className="absolute left-3 top-3 bg-white/90 backdrop-blur-sm dark:bg-surface/90"
+            className="absolute left-3 top-3 shadow-sm"
           />
         </div>
 

@@ -2,7 +2,9 @@ package competition
 
 import (
 	"errors"
+	"log"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -21,6 +23,8 @@ var ErrInvalidID = errors.New("invalid id")
 
 const upstreamCacheTTL = 15 * time.Minute
 
+const registrationCountTTL = time.Minute
+
 type cacheEntry[T any] struct {
 	value T
 	at    time.Time
@@ -34,6 +38,7 @@ type Service struct {
 	competitions map[string]cacheEntry[Competition]
 	psychSheets  map[string]cacheEntry[[]PsychSheetEntry]
 	competitors  map[string]cacheEntry[[]Competitor]
+	registered   map[string]cacheEntry[int]
 	flight       singleflight.Group
 	nextSweep    time.Time
 }
@@ -45,11 +50,12 @@ func NewService(repo Repository) *Service {
 		competitions: make(map[string]cacheEntry[Competition]),
 		psychSheets:  make(map[string]cacheEntry[[]PsychSheetEntry]),
 		competitors:  make(map[string]cacheEntry[[]Competitor]),
+		registered:   make(map[string]cacheEntry[int]),
 	}
 }
 
 func (s *Service) GetUpcomingHungarian() ([]Competition, error) {
-	return cached(s, s.upcoming, "upcoming:HU", func() ([]Competition, error) {
+	listed, err := cached(s, s.upcoming, "upcoming:HU", func() ([]Competition, error) {
 		raw, err := s.repo.GetUpcomingByCountry("HU")
 		if err != nil {
 			return nil, err
@@ -61,6 +67,46 @@ func (s *Service) GetUpcomingHungarian() ([]Competition, error) {
 		}
 		return competitions, nil
 	})
+	if err != nil {
+		return nil, err
+	}
+
+	competitions := slices.Clone(listed)
+	s.addAcceptedCounts(competitions, time.Now())
+	return competitions, nil
+}
+
+func (s *Service) addAcceptedCounts(competitions []Competition, now time.Time) {
+	var wg sync.WaitGroup
+	for i := range competitions {
+		competition := &competitions[i]
+		if !registrationOpen(*competition, now) {
+			continue
+		}
+		wg.Go(func() {
+			count, err := cachedFor(s, s.registered, "registered:"+competition.ID, registrationCountTTL, func() (int, error) {
+				return s.repo.GetRegistrationCount(competition.ID)
+			})
+			if err != nil {
+				log.Printf("competition: a %s nevezési létszáma nem kérhető le: %v", competition.ID, err)
+				return
+			}
+			competition.AcceptedCount = &count
+		})
+	}
+	wg.Wait()
+}
+
+func registrationOpen(competition Competition, now time.Time) bool {
+	opens, err := time.Parse(time.RFC3339, competition.RegistrationOpen)
+	if err != nil {
+		return false
+	}
+	closes, err := time.Parse(time.RFC3339, competition.RegistrationClose)
+	if err != nil {
+		return false
+	}
+	return !now.Before(opens) && now.Before(closes)
 }
 
 func (s *Service) GetCompetition(competitionID string) (Competition, error) {
@@ -87,6 +133,10 @@ func toCompetition(c wcaCompetition) Competition {
 		Country:   countryName(c.CountryISO2),
 		URL:       c.URL,
 		EventIDs:  c.EventIDs,
+
+		RegistrationOpen:  c.RegistrationOpen,
+		RegistrationClose: c.RegistrationClose,
+		CompetitorLimit:   c.CompetitorLimit,
 	}
 }
 
@@ -146,10 +196,14 @@ func (s *Service) GetCompetitors(competitionID string) ([]Competitor, error) {
 }
 
 func cached[T any](s *Service, cache map[string]cacheEntry[T], key string, fetch func() (T, error)) (T, error) {
+	return cachedFor(s, cache, key, upstreamCacheTTL, fetch)
+}
+
+func cachedFor[T any](s *Service, cache map[string]cacheEntry[T], key string, ttl time.Duration, fetch func() (T, error)) (T, error) {
 	s.mu.Lock()
 	entry, ok := cache[key]
 	s.mu.Unlock()
-	if ok && time.Since(entry.at) < upstreamCacheTTL {
+	if ok && time.Since(entry.at) < ttl {
 		return entry.value, nil
 	}
 
@@ -182,6 +236,7 @@ func (s *Service) sweepLocked() {
 	sweep(s.competitions, now)
 	sweep(s.psychSheets, now)
 	sweep(s.competitors, now)
+	sweep(s.registered, now)
 }
 
 func sweep[T any](cache map[string]cacheEntry[T], now time.Time) {
