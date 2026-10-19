@@ -31,6 +31,7 @@ type Repository interface {
 	GetUpcomingByCountry(countryISO2 string) ([]wcaCompetition, error)
 	GetPsychSheet(competitionID, eventID string) (wcaPsychSheet, error)
 	GetWCIF(competitionID string) (wcaWCIF, error)
+	GetRegistrationCount(competitionID string) (int, error)
 }
 
 type WCARepository struct {
@@ -92,6 +93,14 @@ func (r *WCARepository) GetWCIF(competitionID string) (wcaWCIF, error) {
 	var wcif wcaWCIF
 	err := r.getJSON(fmt.Sprintf("%s/%s/wcif/public", r.baseURL, url.PathEscape(competitionID)), &wcif)
 	return wcif, err
+}
+
+func (r *WCARepository) GetRegistrationCount(competitionID string) (int, error) {
+	var registrations []wcaRegistration
+	if err := r.getJSON(fmt.Sprintf("%s/%s/registrations", r.baseURL, url.PathEscape(competitionID)), &registrations); err != nil {
+		return 0, err
+	}
+	return len(registrations), nil
 }
 
 func (r *WCARepository) getJSON(reqURL string, out any) error {

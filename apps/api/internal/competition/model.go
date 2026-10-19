@@ -9,17 +9,29 @@ type Competition struct {
 	Country   string   `json:"country"`
 	URL       string   `json:"url"`
 	EventIDs  []string `json:"eventIds"`
+
+	RegistrationOpen  string `json:"registrationOpen"`
+	RegistrationClose string `json:"registrationClose"`
+	CompetitorLimit   *int   `json:"competitorLimit"`
+	AcceptedCount     *int   `json:"acceptedCount"`
 }
 
 type wcaCompetition struct {
-	ID          string   `json:"id"`
-	Name        string   `json:"name"`
-	StartDate   string   `json:"start_date"`
-	EndDate     string   `json:"end_date"`
-	City        string   `json:"city"`
-	CountryISO2 string   `json:"country_iso2"`
-	URL         string   `json:"url"`
-	EventIDs    []string `json:"event_ids"`
+	ID                string   `json:"id"`
+	Name              string   `json:"name"`
+	StartDate         string   `json:"start_date"`
+	EndDate           string   `json:"end_date"`
+	City              string   `json:"city"`
+	CountryISO2       string   `json:"country_iso2"`
+	URL               string   `json:"url"`
+	EventIDs          []string `json:"event_ids"`
+	RegistrationOpen  string   `json:"registration_open"`
+	RegistrationClose string   `json:"registration_close"`
+	CompetitorLimit   *int     `json:"competitor_limit"`
+}
+
+type wcaRegistration struct {
+	ID int `json:"id"`
 }
 
 type PsychSheetEntry struct {

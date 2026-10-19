@@ -4,9 +4,9 @@ import UnofficialSection from "./components/sections/UnofficialSection";
 import OtherSection from "./components/sections/OtherSection";
 
 export const metadata: Metadata = {
-  title: "Eszközök",
+  title: "Programok",
   description:
-    "Versenyekhez és versenysorozatokhoz kapcsolódó alkalmazások, alternatív rangsorok és statisztikák.",
+    "Hazai versenysorozatok saját pontszámítással, valamint közösségi játékok a versenyek köré.",
 };
 
 export default function Tools() {
@@ -14,8 +14,8 @@ export default function Tools() {
     <div className="px-5 py-12 sm:px-8 sm:py-16 lg:px-12">
       <div className="mx-auto w-full max-w-6xl">
         <PageHeader
-          title="Eszközök"
-          description="Itt találod azokat az alkalmazásokat és aloldalakat, amelyek versenyekhez és versenysorozatokhoz kapcsolódnak: eredmények feldolgozása, összesítése és alternatív rangsorok. Egy részük speciális pontszámításra vagy összetett statisztikákra épül, amelyek a WCA hivatalos helyezésein túlmutatva adnak részletesebb képet a versenyzők teljesítményéről."
+          title="Programok"
+          description="A WCA-versenyeken túl: hazai versenysorozatok és különleges versenyformák saját pontszámítással, valamint közösségi játékok, amelyekkel a versenyeket nézőként is követheted."
         />
 
         <div className="mt-12 flex flex-col gap-14">
