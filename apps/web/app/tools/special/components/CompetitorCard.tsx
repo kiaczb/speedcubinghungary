@@ -2,8 +2,10 @@
 
 import { useRef, useState } from "react";
 import { FaExclamationTriangle } from "react-icons/fa";
+import "@cubing/icons";
 import Card from "@/app/components/Cards/Card";
 import { controlClass } from "@/app/components/ui/Field";
+import { eventName } from "@/app/lib/events";
 import { formatTimeInput, parseTimeInput } from "@/app/lib/time";
 import { DNF, DNS, formatAttemptResult, formatCentiseconds } from "../lib/time";
 import type { Competitor, CompetitorAttempt, CompetitorRound } from "../types";
@@ -244,7 +246,19 @@ const CompetitorCard = ({
                 className="border-b border-line last:border-0"
               >
                 <td className="tabular whitespace-nowrap px-2 py-2 font-mono text-sm font-medium text-foreground">
-                  {round.roundWcifId}
+                  <span
+                    className="inline-flex items-center gap-1.5"
+                    title={eventName(round.eventId)}
+                  >
+                    <span
+                      aria-hidden
+                      className={`cubing-icon event-${round.eventId} text-lg leading-none text-foreground`}
+                    />
+                    <span className="sr-only">{round.roundWcifId}</span>
+                    <span className="text-xs text-subtle-foreground">
+                      {round.roundNumber}
+                    </span>
+                  </span>
                 </td>
 
                 {round.attempts.map((attempt) =>
