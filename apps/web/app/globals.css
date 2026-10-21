@@ -44,41 +44,9 @@
   --shadow-tint-strong: rgb(16 24 40 / 0.1);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --color-brand-red: #e8536b;
-    --color-brand-red-strong: #f0798d;
-    --color-brand-green: #24bd76;
-    --color-brand-green-strong: #3dd48d;
-
-    --color-canvas: #0e1013;
-    --color-surface: #16191e;
-    --color-surface-muted: #1f242b;
-    --color-surface-inverse: #08090c;
-    --color-line: #262b33;
-    --color-line-strong: #363d47;
-
-    --color-background: #0e1013;
-    --color-foreground: #e9ebee;
-    --color-ink-hover: #ffffff;
-    --color-muted-foreground: #9ba4b0;
-    --color-subtle-foreground: #6e7783;
-
-    --shadow-tint-soft: rgb(0 0 0 / 0.4);
-    --shadow-tint: rgb(0 0 0 / 0.5);
-    --shadow-tint-strong: rgb(0 0 0 / 0.62);
-  }
-}
-
 @layer base {
   :root {
     color-scheme: light;
-  }
-
-  @media (prefers-color-scheme: dark) {
-    :root {
-      color-scheme: dark;
-    }
   }
 
   h1,
