@@ -28,16 +28,16 @@ export function medalForRank(rank: number): Medal | null {
 
 const MEDAL_STYLES: Record<Medal, { accent: string; text: string }> = {
   gold: {
-    accent: "bg-[#d4af37] dark:bg-[#e8c766]",
-    text: "text-[#9a7c1f] dark:text-[#e8c766]",
+    accent: "bg-[#d4af37]",
+    text: "text-[#9a7c1f]",
   },
   silver: {
-    accent: "bg-[#9aa0a8] dark:bg-[#c2c8d0]",
-    text: "text-[#71767d] dark:text-[#c2c8d0]",
+    accent: "bg-[#9aa0a8]",
+    text: "text-[#71767d]",
   },
   bronze: {
-    accent: "bg-[#b0752f] dark:bg-[#d4915a]",
-    text: "text-[#8a5a22] dark:text-[#d4915a]",
+    accent: "bg-[#b0752f]",
+    text: "text-[#8a5a22]",
   },
 };
 

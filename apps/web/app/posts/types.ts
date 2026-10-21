@@ -11,27 +11,27 @@ export const badgeMap = {
   news: {
     label: "Hír",
     color:
-      "bg-sky-700 text-white ring-sky-600/20 dark:bg-sky-950 dark:text-white dark:ring-sky-400",
+      "bg-sky-700 text-white ring-sky-600/20",
   },
   event: {
     label: "Esemény",
     color:
-      "bg-emerald-700 text-white ring-emerald-600/20 dark:bg-emerald-950 dark:text-white dark:ring-emerald-400",
+      "bg-emerald-700 text-white ring-emerald-600/20",
   },
   competition: {
     label: "Verseny",
     color:
-      "bg-rose-700 text-white ring-rose-600/20 dark:bg-rose-950 dark:text-white dark:ring-rose-400",
+      "bg-rose-700 text-white ring-rose-600/20",
   },
   announcement: {
     label: "Közlemény",
     color:
-      "bg-amber-700 text-white ring-amber-600/25 dark:bg-amber-950 dark:text-white dark:ring-amber-400",
+      "bg-amber-700 text-white ring-amber-600/25",
   },
   report: {
     label: "Heti riport",
     color:
-      "bg-violet-700 text-white ring-violet-600/20 dark:bg-violet-950 dark:text-white dark:ring-violet-400",
+      "bg-violet-700 text-white ring-violet-600/20",
   },
 } as const;
 

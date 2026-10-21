@@ -324,30 +324,24 @@ Other Go conventions observed:
   from the right, so typing `16:05.00` passes through `1:60.50`, and rejecting
   that would make whole minute ranges untypeable). Add nav/contact entries in
   `site.ts`, not per-component.
-- **Dark mode is implemented and follows the OS** (`prefers-color-scheme`; no
-  toggle, no class strategy, so no JS and no hydration flash). It works by
-  **redefining the design tokens** in a `@media (prefers-color-scheme: dark)`
-  block in `globals.css` — so `bg-surface`, `text-foreground`, `border-line`
-  etc. flip on their own and most components needed no change. Rules to keep:
-  - **`dark:` is only for hardcoded colors** a token can't reach (`bg-white` on
-    the navbar/hero, the badge tints in `posts/types.ts`, the modal scrim).
-    Don't add `dark:` next to a token utility — the token already handles it.
-  - **`--color-surface-inverse` stays dark in BOTH themes.** It's the feature-band
-    colour (footer, news band, "next competition" card). That's why the many
-    `text-white` classes sitting on it are correct in both themes and must not be
-    "fixed".
-  - **`bg-foreground` must pair with `text-background`, never `text-white`** —
-    `foreground` inverts to near-white in dark, so `text-white` becomes invisible.
-  - ⚠️ **Tailwind v4 inlines `--shadow-*` values into the utility at build time**,
-    so overriding `--shadow-card` in the dark block does nothing. The shadow
-    tokens therefore reference `var(--shadow-tint*)` custom properties, and *those*
-    get redefined for dark. Keep that indirection if you touch the shadows.
+- **There is no dark mode right now — removed on purpose (2026-10), light
+  only.** The owner will probably bring it back, so don't add `dark:` classes
+  or a `prefers-color-scheme` block in passing. The last version (OS-driven,
+  tokens redefined in a `@media (prefers-color-scheme: dark)` block, `dark:`
+  only for hardcoded colours) is in git history before that removal. What was
+  kept so it is easy to restore, and is still correct in light mode:
+  - **`--color-surface-inverse` is the dark feature-band colour** (footer, news
+    band, "next competition" card) — the `text-white` on it is correct.
+  - **`bg-foreground` pairs with `text-background`, not `text-white`.**
+  - ⚠️ **Tailwind v4 inlines `--shadow-*` values into the utility at build
+    time**, so the shadow tokens reference `var(--shadow-tint*)` custom
+    properties (in `:root`) — that indirection is what lets a theme override
+    them. Keep it.
   - The logo (`SpeedcubingFullAnimatedSVG`) draws its letters and black cube
-    pieces with `fill="currentColor"` under `text-foreground`, so it turns white
-    in dark mode. The red/green tiles stay brand-coloured. It no longer takes a
-    `textColor` prop.
-  - `color-scheme` is set per theme so native controls (scrollbars, `<select>`
-    dropdown, file input, checkboxes) match.
+    pieces with `fill="currentColor"` under `text-foreground`; it no longer
+    takes a `textColor` prop.
+  - `:root` sets `color-scheme: light`, so native controls stay light even on
+    a dark OS.
 - **Server Components fetch data server-side** (e.g. `app/posts/page.tsx`
   `async` component with `fetch(..., { cache: 'no-store' })`); interactive pieces
   are `"use client"` components.
@@ -1433,8 +1427,8 @@ on every page load** (~100 KB × 10–12 legs) and scored them client-side. Now:
 - The WCA results are **cached in Postgres** (`allrounder_results`, §7) and the
   scoring runs in Go. The page is a **Server Component** doing one fetch.
 - `next-intl` (hu/en), `heap-js`, `next-themes` and `react-loading-skeleton` were
-  **dropped**: the site is Hungarian-only, the scoring left the browser, and dark
-  mode comes from the design tokens. Only `@cubing/icons` came along.
+  **dropped**: the site is Hungarian-only, the scoring left the browser, and theming
+  comes from the design tokens. Only `@cubing/icons` came along.
 
 ### ⚠️ There are TWO scoring implementations, and that is deliberate
 
