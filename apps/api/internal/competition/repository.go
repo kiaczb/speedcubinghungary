@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 )
 
@@ -26,12 +27,18 @@ var errUpstreamBusy = errors.New("too many concurrent WCA API requests")
 
 var ErrNotFound = errors.New("not found on the WCA API")
 
+var ErrRateLimited = errors.New("rate limited by the WCA API")
+
 type Repository interface {
 	GetCompetition(competitionID string) (wcaCompetition, error)
 	GetUpcomingByCountry(countryISO2 string) ([]wcaCompetition, error)
 	GetPsychSheet(competitionID, eventID string) (wcaPsychSheet, error)
 	GetWCIF(competitionID string) (wcaWCIF, error)
 	GetRegistrationCount(competitionID string) (int, error)
+	GetPersons(wcaIDs []string) ([]wcaPersonSummary, error)
+	GetPersonCompetitions(wcaID string) ([]wcaCompetition, error)
+	GetResults(competitionID string) ([]wcaResult, error)
+	SearchCompetitions(params url.Values) ([]wcaCompetition, error)
 }
 
 type WCARepository struct {
@@ -103,6 +110,38 @@ func (r *WCARepository) GetRegistrationCount(competitionID string) (int, error) 
 	return len(registrations), nil
 }
 
+func (r *WCARepository) GetPersons(wcaIDs []string) ([]wcaPersonSummary, error) {
+	q := url.Values{}
+	q.Set("wca_ids", strings.Join(wcaIDs, ","))
+	q.Set("per_page", fmt.Sprintf("%d", len(wcaIDs)))
+
+	var persons []wcaPersonSummary
+	err := r.getJSON(fmt.Sprintf("%s/persons?%s", r.apiRoot(), q.Encode()), &persons)
+	return persons, err
+}
+
+func (r *WCARepository) GetPersonCompetitions(wcaID string) ([]wcaCompetition, error) {
+	var competitions []wcaCompetition
+	err := r.getJSON(fmt.Sprintf("%s/persons/%s/competitions", r.apiRoot(), url.PathEscape(wcaID)), &competitions)
+	return competitions, err
+}
+
+func (r *WCARepository) GetResults(competitionID string) ([]wcaResult, error) {
+	var results []wcaResult
+	err := r.getJSON(fmt.Sprintf("%s/%s/results", r.baseURL, url.PathEscape(competitionID)), &results)
+	return results, err
+}
+
+func (r *WCARepository) SearchCompetitions(params url.Values) ([]wcaCompetition, error) {
+	var competitions []wcaCompetition
+	err := r.getJSON(fmt.Sprintf("%s?%s", r.baseURL, params.Encode()), &competitions)
+	return competitions, err
+}
+
+func (r *WCARepository) apiRoot() string {
+	return strings.TrimSuffix(r.baseURL, "/competitions")
+}
+
 func (r *WCARepository) getJSON(reqURL string, out any) error {
 	select {
 	case r.slots <- struct{}{}:
@@ -120,6 +159,8 @@ func (r *WCARepository) getJSON(reqURL string, out any) error {
 	switch {
 	case resp.StatusCode == http.StatusNotFound:
 		return ErrNotFound
+	case resp.StatusCode == http.StatusTooManyRequests:
+		return ErrRateLimited
 	case resp.StatusCode != http.StatusOK:
 		return fmt.Errorf("WCA API returned status %d", resp.StatusCode)
 	}

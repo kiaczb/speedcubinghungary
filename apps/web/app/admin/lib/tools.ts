@@ -48,9 +48,9 @@ export const ADMIN_TOOLS: AdminTool[] = [
     id: "stats",
     title: "Statisztikák",
     description:
-      "Versenyzői rekordok és versenyzési adatok áttekintése egy helyen.",
+      "Egy verseny statisztikái előtte (nevezők), közben (WCA Live) és utána (hivatalos eredmények): visszatérők, évfordulók, mérföldkövek, rekordok.",
     href: "/admin/stats",
     icon: FaChartBar,
-    status: "coming-soon",
+    status: "active",
   },
 ];

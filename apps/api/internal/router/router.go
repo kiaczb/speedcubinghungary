@@ -10,6 +10,7 @@ import (
 	"speedcubinghungary/internal/post"
 	"speedcubinghungary/internal/prediction"
 	"speedcubinghungary/internal/special"
+	"speedcubinghungary/internal/stats"
 	"speedcubinghungary/internal/types"
 
 	"github.com/go-chi/chi/v5"
@@ -25,6 +26,7 @@ func New(
 	authHandler *auth.Handler,
 	specialHandler *special.Handler,
 	allrounderHandler *allrounder.Handler,
+	statsHandler *stats.Handler,
 ) *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(middleware.SecurityHeaders)
@@ -83,6 +85,9 @@ func New(
 			r.Post("/allrounder/refresh", allrounderHandler.Refresh)
 
 			r.Put("/special/results/{liveResultId}/attempts/{attemptNumber}/elapsed", specialHandler.RecordElapsed)
+
+			r.Get("/stats/competitions", statsHandler.SearchCompetitions)
+			r.Get("/stats/competitions/{id}", statsHandler.GetReport)
 		})
 	})
 

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import PageHeader from "../components/ui/PageHeader";
 import AdminGate from "./components/AdminGate";
+import AdminToolGrid from "./components/AdminToolGrid";
 
 export const metadata: Metadata = {
   title: "Admin",
@@ -18,7 +19,9 @@ export default function AdminPage() {
         />
 
         <div className="mt-12">
-          <AdminGate />
+          <AdminGate>
+            <AdminToolGrid />
+          </AdminGate>
         </div>
       </div>
     </div>

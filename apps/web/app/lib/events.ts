@@ -16,6 +16,7 @@ const EVENT_NAMES: Record<string, string> = {
   "444bf": "4x4x4 vakon",
   "555bf": "5x5x5 vakon",
   "333mbf": "3x3x3 többkockás vakon",
+  "333mbo": "3x3x3 többkockás vakon (régi)",
 };
 
 export function eventName(eventId: string): string {
