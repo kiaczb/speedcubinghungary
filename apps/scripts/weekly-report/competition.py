@@ -12,7 +12,6 @@ def GetCompetitionsWithHungarians(date):
         return []
 
 def GetCompetitions(date):
-    """A `date` és a mai nap között kezdődő versenyek (WCA API objektumok)."""
     competitions = []
     pageCount = 1
     end = False
@@ -23,7 +22,6 @@ def GetCompetitions(date):
             print("Error")
             end = True
         competitionData = response.json()
-        # A lapozás végén a WCA API üres listát ad.
         if not competitionData:
             end = True
         competitions += competitionData

@@ -13,19 +13,12 @@ type Config struct {
 	WCAClientID     string
 	WCAClientSecret string
 	WCARedirectURI  string
-	// UploadDir a feltöltött képek könyvtára; ide egy named volume van csatolva
-	// (lásd infra/docker-compose.yml), hogy a fájlok túléljék az újraépítést.
-	UploadDir  string
-	WCALiveURL string
+	UploadDir       string
+	WCALiveURL      string
 }
 
 func Load() (*Config, error) {
 	cfg := &Config{
-		// ⚠️ DEPLOYMENT és FRONTEND_URL szándékosan DEFAULT NÉLKÜL töltődik: a
-		// DEPLOYMENT szabja meg az auth cookie `Secure` flagjét, a FRONTEND_URL a
-		// CORS origint és a login utáni átirányítás célját. Default mellett egy
-		// prodban hiányzó DEPLOYMENT nem leállást, hanem némán Secure nélküli
-		// sütit eredményezne.
 		Deployment:      os.Getenv("DEPLOYMENT"),
 		FrontendURL:     os.Getenv("FRONTEND_URL"),
 		DatabaseURL:     os.Getenv("DATABASE_URL"),
@@ -66,8 +59,6 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("missing required environment variables: %v\n\nPlease check your .env file or environment setup", missing)
 	}
 
-	// Egy elgépelt "produciton" nem üres, tehát a fenti ellenőrzésen átcsúszna,
-	// és némán fejlesztői módként viselkedne.
 	switch c.Deployment {
 	case "development", "test", "production":
 	default:

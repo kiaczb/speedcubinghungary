@@ -3,9 +3,6 @@ import { UpcomingCompetition } from "@/app/calendar/types";
 import { serverJson } from "@/app/lib/api";
 import { formatDateRange } from "@/app/lib/date";
 
-// A saját /competitions/upcoming végpontunkon át, nem közvetlenül a WCA-tól:
-// ott van a WCA-hívás egyetlen helye (lapozás, gyorsítótár, párhuzamossági
-// korlát), és így ugyanazt mutatjuk, amit a naptár.
 async function getNextCompetition(): Promise<UpcomingCompetition | null> {
   const competitions = await serverJson<UpcomingCompetition[]>(
     "/competitions/upcoming",

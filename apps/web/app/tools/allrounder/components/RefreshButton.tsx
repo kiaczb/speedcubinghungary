@@ -11,14 +11,6 @@ type RefreshButtonProps = {
   year: number;
 };
 
-/**
- * Az évad újratöltése a WCA API-ról, a gyorsítótár lejáratát megkerülve.
- * Akkor kell, ha egy állomás eredménye a WCA-nál utólag módosult, vagy épp
- * most töltötték fel — magától a lekérdezés csak órák múlva ismétlődne.
- *
- * Csak adminnak jelenik meg, mert forgalmat generál a WCA felé; a jogosultságot
- * a backend külön is ellenőrzi (a kliensoldali rejtés csak kényelmi).
- */
 const RefreshButton = ({ year }: RefreshButtonProps) => {
   const { isAdmin } = useUser();
   const router = useRouter();

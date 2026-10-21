@@ -15,11 +15,9 @@ type Props = {
 type PodiumPicks = Record<string, [string, string, string]>;
 type ExtraAnswers = Record<string, string>;
 
-
 const PredictionForm = ({ prediction, isOpen }: Props) => {
   const [podiumPicks, setPodiumPicks] = useState<PodiumPicks>({});
   const [extraAnswers, setExtraAnswers] = useState<ExtraAnswers>({});
-
 
   const hasPersonQuestion = prediction.extraQuestions.some(
     (question) => question.type === "person",
@@ -47,9 +45,6 @@ const PredictionForm = ({ prediction, isOpen }: Props) => {
   };
 
   return (
-    // ⚠️ A preventDefault nem hagyható el: enélkül a gomb — vagy egy Enter
-    // bármelyik mezőben — natív GET submitot indít, ami újratölti az oldalt, és
-    // a kitöltött tipp elveszik.
     <form
       onSubmit={(event) => event.preventDefault()}
       className="mt-8 flex flex-col gap-10"
@@ -106,9 +101,6 @@ const PredictionForm = ({ prediction, isOpen }: Props) => {
         </section>
       )}
 
-      {/* A tippleadás backendje még nincs megépítve (CLAUDE.md §21), ezért a
-          gomb addig letiltva marad, és ezt ki is mondjuk — különben valaki
-          végigtölti az űrlapot abban a hitben, hogy leadhatja. */}
       <div className="flex flex-col items-end gap-2 border-t border-line pt-6">
         <Button type="submit" disabled>
           {isOpen ? "Tipp leadása" : "A tippelés lezárult"}

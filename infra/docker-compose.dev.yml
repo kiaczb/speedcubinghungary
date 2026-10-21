@@ -1,41 +1,29 @@
-# Development overrides: hot reload, source bind mounts, exposed DB port.
-#   docker compose -f infra/docker-compose.yml -f infra/docker-compose.dev.yml --env-file .env.dev up
-#
-# Source is bind-mounted so file changes trigger hot reload (air / next dev)
-# with no image rebuild required.
-
 services:
   db:
-    # Expose the DB to the host for local tools (psql, DBeaver, ...).
     ports:
       - "${DB_PORT_HOST:-5432}:5432"
 
   api:
     build:
       target: dev
-    # Published to the host so the browser/tools can hit it directly at
-    # localhost (no Caddy in dev). In test/prod only Caddy reaches it.
     ports:
       - "${API_PORT:-8080}:8080"
     volumes:
-      - ../apps/api:/app # live source for air
-      - ../db/migrations:/migrations # golang-migrate source
-      - go_mod_cache:/go/pkg/mod # persist module cache across restarts
-    # air (poll mode, see .air.toml) rebuilds the binary on change.
+      - ../apps/api:/app
+      - ../db/migrations:/migrations
+      - go_mod_cache:/go/pkg/mod
 
   web:
     build:
       target: dev
     environment:
-      # Polling is required for hot reload over Docker bind mounts on Windows/WSL.
       HOSTNAME: 0.0.0.0
       WATCHPACK_POLLING: "true"
-    # Published to the host for localhost dev (no Caddy in dev).
     ports:
       - "${WEB_PORT:-3000}:3000"
     volumes:
-      - ../apps/web:/app # live source for next dev
-      - web_node_modules:/app/node_modules # keep node_modules inside the container
+      - ../apps/web:/app
+      - web_node_modules:/app/node_modules
 
 volumes:
   go_mod_cache:

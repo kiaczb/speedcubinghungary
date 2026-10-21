@@ -14,22 +14,21 @@ import (
 	"speedcubinghungary/internal/post"
 	"speedcubinghungary/internal/prediction"
 	"speedcubinghungary/internal/special"
+	"speedcubinghungary/internal/stats"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// A feltöltött képeket a valódi típusukkal kell kiszolgálni: a JSON
-// middleware csak a JSON-t visszaadó route-okon fut, a fájlszerveren nem.
 func TestUploadsAreNotServedAsJSON(t *testing.T) {
 	uploadDir := t.TempDir()
 	png := []byte("\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR")
 	require.NoError(t, os.WriteFile(filepath.Join(uploadDir, "kep.png"), png, 0o644))
 
 	cfg := &config.Config{Deployment: "development", FrontendURL: "http://localhost:3000", UploadDir: uploadDir}
-	r := New(cfg,
+	r := New(cfg, func(next http.Handler) http.Handler { return next },
 		post.NewHandler(nil, uploadDir), competition.NewHandler(nil), prediction.NewHandler(nil),
-		auth.NewHandler(nil, cfg), special.NewHandler(nil), allrounder.NewHandler(nil),
+		auth.NewHandler(nil, cfg), special.NewHandler(nil), allrounder.NewHandler(nil), stats.NewHandler(nil),
 	)
 
 	recorder := httptest.NewRecorder()
@@ -38,4 +37,18 @@ func TestUploadsAreNotServedAsJSON(t *testing.T) {
 	require.Equal(t, http.StatusOK, recorder.Code)
 	assert.Equal(t, "image/png", recorder.Header().Get("Content-Type"))
 	assert.Equal(t, "nosniff", recorder.Header().Get("X-Content-Type-Options"))
+}
+
+func TestStatsRoutesAreAdminOnly(t *testing.T) {
+	cfg := &config.Config{Deployment: "development", FrontendURL: "http://localhost:3000", UploadDir: t.TempDir()}
+	r := New(cfg, func(next http.Handler) http.Handler { return next },
+		post.NewHandler(nil, cfg.UploadDir), competition.NewHandler(nil), prediction.NewHandler(nil),
+		auth.NewHandler(nil, cfg), special.NewHandler(nil), allrounder.NewHandler(nil), stats.NewHandler(nil),
+	)
+
+	for _, path := range []string{"/stats/competitions", "/stats/competitions/HungarianOpen2026"} {
+		recorder := httptest.NewRecorder()
+		r.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, path, nil))
+		assert.Equal(t, http.StatusUnauthorized, recorder.Code, path)
+	}
 }

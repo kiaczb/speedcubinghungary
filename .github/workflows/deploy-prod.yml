@@ -1,6 +1,5 @@
 name: Deploy PROD
 
-# Build + test, then deploy to the production server. Runs on push to `main`.
 on:
   push:
     branches: [main]
@@ -18,7 +17,6 @@ jobs:
     name: Deploy to production server
     needs: ci
     runs-on: ubuntu-latest
-    # Add Required reviewers protection to this environment to gate prod deploys.
     environment: production
     steps:
       - name: Deploy over SSH
@@ -39,7 +37,6 @@ jobs:
             git reset --hard origin/main
 
             echo "==> Building & starting production stack"
-            # `up` never removes named volumes, so the database is never wiped.
             docker compose -f infra/docker-compose.yml -f infra/docker-compose.prod.yml --env-file .env.prod up -d --build
 
             echo "==> Pruning dangling images"

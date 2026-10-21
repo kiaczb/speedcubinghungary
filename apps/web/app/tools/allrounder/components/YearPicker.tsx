@@ -9,14 +9,6 @@ type YearPickerProps = {
   availableYears: number[];
 };
 
-/**
- * Évadválasztó. A kiválasztott évad az URL-ben él (`?year=`), így az oldal
- * megosztható és újratöltésre is megmarad — a `page.tsx` onnan olvassa.
- *
- * A `value` helyi állapot, hogy a legördülő azonnal a választott évet mutassa,
- * miközben a szerver oldal még töltődik. A `page.tsx` az évadra kulcsolva
- * rendereli a komponenst, ezért egy vissza-navigáció friss állapottal indul.
- */
 const YearPicker = ({ selectedYear, availableYears }: YearPickerProps) => {
   const router = useRouter();
   const [value, setValue] = useState(String(selectedYear));

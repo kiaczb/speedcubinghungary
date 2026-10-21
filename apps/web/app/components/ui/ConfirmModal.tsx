@@ -10,7 +10,6 @@ type Props = {
   onClose: () => void;
 };
 
-/** Törlés-megerősítés. Sikeres `onConfirm` után magától bezárul. */
 export default function ConfirmModal({
   title,
   description,
@@ -45,8 +44,6 @@ export default function ConfirmModal({
         <h2 className="text-lg font-bold text-foreground">
           {title}
         </h2>
-        {/* div, nem p: a description ReactNode, és blokkelem egy <p>-ben
-            érvénytelen HTML (a böngésző szétbontja, a React hidratálás elbukik). */}
         <div className="mt-2 text-sm leading-relaxed text-muted-foreground">
           {description}
         </div>

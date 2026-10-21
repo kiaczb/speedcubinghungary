@@ -1,6 +1,5 @@
 import React from "react";
 
-/** Közös input/textarea/select osztályok. Add át a vezérlő `className`-jének. */
 export const controlClass =
   "w-full rounded-control border border-line bg-surface px-3.5 py-2.5 text-sm text-foreground " +
   "placeholder:text-subtle-foreground " +
@@ -9,7 +8,6 @@ export const controlClass =
 
 type FieldProps = {
   label: string;
-  /** A vezérlő `id`-ja — ezzel köti össze a címkét és a mezőt. */
   htmlFor: string;
   hint?: React.ReactNode;
   optional?: boolean;

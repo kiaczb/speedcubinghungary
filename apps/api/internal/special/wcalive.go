@@ -9,7 +9,6 @@ import (
 	"speedcubinghungary/internal/wcalive"
 )
 
-// LiveClient a közös WCA Live kliens a Special saját lekérdezéseivel.
 type LiveClient struct {
 	*wcalive.Client
 }

@@ -6,57 +6,27 @@ import (
 	"encoding/hex"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
 
-// A WCA OAuth folyamat CSRF-védelme.
-//
-// Az OAuth `state` paraméter NEM csak "hova térjünk vissza" adat: ez a folyamat
-// CSRF-tokenje. Enélkül egy támadó a SAJÁT WCA-fiókjához tartozó `code`-ot
-// játszhatja be az áldozat böngészőjébe (login CSRF), és az áldozat onnantól a
-// támadó fiókjában dolgozik anélkül, hogy észrevenné.
-//
-// Ezért a folyamat a BACKENDEN indul (GET /login): itt generálunk egy véletlen
-// nonce-ot, sütibe tesszük, és CSAK a nonce-ot küldjük ki `state`-ként. A
-// visszatéréskor a kettőnek egyeznie kell.
-//
-// A visszairányítási útvonal szándékosan a SÜTIBEN utazik, nem a `state`-ben:
-// a `state` a felhasználói ügynökön keresztül fordul meg, tehát a támadó
-// tetszőlegesre írhatja. A süti HttpOnly és mi állítottuk ki, így az útvonal
-// forrása végig a miénk marad.
-
 const (
-	// stateCookieName a nonce + visszairányítási útvonal rövid életű sütije.
 	stateCookieName = "oauth_state"
 
-	// stateTTL: ennyi ideje van a felhasználónak befejezni a WCA-s bejelentkezést.
+	grantStateCookieName = "wca_grant_state"
+
 	stateTTL = 10 * time.Minute
 
-	// stateNonceBytes a nonce hossza bájtban (hex-ként kétszer ennyi karakter).
 	stateNonceBytes = 32
 )
 
-// newStateNonce kriptográfiailag erős véletlen nonce-ot ad. Go 1.24 óta a
-// rand.Read sosem tér vissza hibával: hiba esetén a program leáll, tehát
-// kitalálható nonce-szal nem indulhat el a folyamat.
 func newStateNonce() string {
 	buf := make([]byte, stateNonceBytes)
 	rand.Read(buf)
 	return hex.EncodeToString(buf)
 }
 
-// setStateCookie kiállítja a nonce + útvonal sütit.
-//
-// ⚠️ SameSite=Lax (nem Strict): a WCA-tól visszaérkező átirányítás egy
-// KERESZT-OLDALI, felső szintű navigáció, amire a böngésző a Strict sütit NEM
-// küldené el — a bejelentkezés minden alkalommal elbukna. A Lax pont ezt az
-// esetet (top-level GET) engedi át.
-//
-// ⚠️ Path="/" (nem "/login"): test/prod alatt a Caddy a `WEB_DOMAIN/api` prefixet
-// levágja, tehát a böngésző által látott útvonal `/api/login/callback`, míg az API
-// `/login/callback`-et lát. Egy `/login`-ra szűkített süti ezért dev alatt működne,
-// prodban viszont sosem érkezne vissza.
 func setStateCookie(w http.ResponseWriter, nonce, redirectPath string, secure bool) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     stateCookieName,
@@ -69,8 +39,6 @@ func setStateCookie(w http.ResponseWriter, nonce, redirectPath string, secure bo
 	})
 }
 
-// clearStateCookie törli a state sütit. Az attribútumoknak egyezniük kell a
-// kiállításkor használtakkal, különben a böngésző nem ugyanazt a sütit törli.
 func clearStateCookie(w http.ResponseWriter, secure bool) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     stateCookieName,
@@ -83,11 +51,6 @@ func clearStateCookie(w http.ResponseWriter, secure bool) {
 	})
 }
 
-// verifyState összeveti a WCA-tól visszakapott `state`-et a sütivel, és
-// visszaadja a sütiben tárolt visszairányítási útvonalat.
-//
-// Az összehasonlítás konstans idejű: a nonce titok, a `state` pedig támadó által
-// vezérelt bemenet.
 func verifyState(r *http.Request, state string) (string, bool) {
 	cookie, err := r.Cookie(stateCookieName)
 	if err != nil || cookie.Value == "" || state == "" {
@@ -103,27 +66,9 @@ func verifyState(r *http.Request, state string) (string, bool) {
 		return "", false
 	}
 
-	// A süti a miénk, de az útvonalat a kiállításkor és itt is szanitáljuk —
-	// egy elrontott /login ág így sem tud nyílt átirányítást okozni.
 	return sanitizeRedirectPath(redirectPath), true
 }
 
-// sanitizeRedirectPath a bejelentkezés utáni visszairányítás célját szűri.
-// Kizárólag a saját oldalunkon belüli, egyszerű útvonalat engedünk át; minden
-// más "/"-re esik vissza.
-//
-// Amit ki kell zárni:
-//   - abszolút URL ("https://evil.example") → nyílt átirányítás,
-//   - protokoll-relatív útvonal ("//evil.example") → ugyanaz,
-//   - visszaperjeles változat ("/\evil.example", "/\/evil.example") → egyes
-//     böngészők a "\"-t "/"-ként normalizálják, tehát ez is protokoll-relatívvá
-//     válhat,
-//   - vezérlőkarakterek (CR/LF) → válaszfejléc-injektálás a Location fejlécben.
-//
-// Ezért nem tiltólistázunk, hanem ENGEDÉLYEZŐ listát használunk: a karakter vagy
-// szerepel az URL-útvonalakban szokásos, biztonságos halmazban, vagy az egész
-// útvonalat eldobjuk. Ez egyúttal a sütibe írhatóságot is garantálja (a szóköz,
-// a vessző, a pontosvessző és az idézőjel a süti-értékben is tilos).
 func sanitizeRedirectPath(path string) string {
 	const fallback = "/"
 
@@ -137,8 +82,6 @@ func sanitizeRedirectPath(path string) string {
 		}
 	}
 
-	// Végső ellenőrzés a szabványos parserrel: csak relatív, host nélküli,
-	// séma nélküli útvonal maradhat.
 	parsed, err := url.Parse(path)
 	if err != nil || parsed.IsAbs() || parsed.Host != "" {
 		return fallback
@@ -147,9 +90,6 @@ func sanitizeRedirectPath(path string) string {
 	return path
 }
 
-// isSafePathRune: az alkalmazás útvonalaiban (pl. "/posts/<uuid>",
-// "/tools/special?competition=Foo2026") előforduló karakterek. Szándékosan NEM
-// tartalmazza a "\", a szóköz, a ",", a ";" és a '"' karaktereket.
 func isSafePathRune(r rune) bool {
 	switch {
 	case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
@@ -157,4 +97,59 @@ func isSafePathRune(r rune) bool {
 	}
 
 	return strings.ContainsRune("-._~/%?&=@+:$!*'()#", r)
+}
+
+type grantState struct {
+	userID       int
+	redirectPath string
+}
+
+func setGrantStateCookie(w http.ResponseWriter, nonce string, userID int, redirectPath string, secure bool) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     grantStateCookieName,
+		Value:    nonce + ":" + strconv.Itoa(userID) + ":" + redirectPath,
+		HttpOnly: true,
+		Secure:   secure,
+		SameSite: http.SameSiteLaxMode,
+		Path:     "/",
+		MaxAge:   int(stateTTL.Seconds()),
+	})
+}
+
+func clearGrantStateCookie(w http.ResponseWriter, secure bool) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     grantStateCookieName,
+		Value:    "",
+		HttpOnly: true,
+		Secure:   secure,
+		SameSite: http.SameSiteLaxMode,
+		Path:     "/",
+		MaxAge:   -1,
+	})
+}
+
+func verifyGrantState(r *http.Request, state string) (grantState, bool) {
+	cookie, err := r.Cookie(grantStateCookieName)
+	if err != nil || cookie.Value == "" || state == "" {
+		return grantState{}, false
+	}
+
+	nonce, rest, found := strings.Cut(cookie.Value, ":")
+	if !found || nonce == "" {
+		return grantState{}, false
+	}
+	rawUserID, redirectPath, found := strings.Cut(rest, ":")
+	if !found {
+		return grantState{}, false
+	}
+	userID, err := strconv.Atoi(rawUserID)
+	if err != nil || userID <= 0 {
+		return grantState{}, false
+	}
+
+	if subtle.ConstantTimeCompare([]byte(nonce), []byte(state)) != 1 {
+		return grantState{}, false
+	}
+
+	return grantState{userID: userID, redirectPath: sanitizeRedirectPath(redirectPath)}, true
 }

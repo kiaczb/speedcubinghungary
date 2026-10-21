@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// WCA_LIVE_SMOKE=HungarianAllRounder62026 go test ./internal/allrounder -run Smoke -v
 func TestSmokeLive_AgainstRealWCALive(t *testing.T) {
 	competitionWCAID := os.Getenv("WCA_LIVE_SMOKE")
 	if competitionWCAID == "" {

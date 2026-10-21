@@ -144,8 +144,6 @@ const SpecialView = () => {
   ) => {
     if (!competitionId) return;
 
-    // A mentés hibája SZÁNDÉKOSAN felszáll a hívó cellához: az jelzi a
-    // rögzítőnek, hogy a beírt idő nincs elmentve (lásd CompetitorCard).
     await clientFetch(
       `/special/results/${liveResultId}/attempts/${attemptNumber}/elapsed`,
       {
@@ -154,9 +152,6 @@ const SpecialView = () => {
       },
     );
 
-    // A visszaolvasás hibája viszont NEM mentési hiba — a mentés ekkor már
-    // megtörtént. Ha ezt is felengednénk, a cella mentetlennek jelölné a már
-    // elmentett időt. Az SSE (vagy a tartalék poll) úgyis frissít.
     try {
       setReport(await fetchReport(competitionId, selectedRound));
     } catch (error) {

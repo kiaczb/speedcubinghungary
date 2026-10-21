@@ -12,7 +12,6 @@ type Props = {
   className?: string;
 };
 
-
 const TimeInput = ({
   value,
   onChange,
@@ -21,9 +20,6 @@ const TimeInput = ({
   id,
   className = controlClass,
 }: Props) => {
-  // A formázó engedi a köztes `1:75.00`-féle állapotot (lásd lib/time.ts), ezért
-  // az érvényességet külön jelezzük — a szöveges magyarázat a mező alatti
-  // hintben van (ExtraQuestionField), itt a keret és az aria-invalid.
   const invalid = value !== "" && parseTimeInput(value) === null;
 
   return (
@@ -34,7 +30,6 @@ const TimeInput = ({
       value={value}
       aria-invalid={invalid}
       onChange={(event) => {
-        // Elutasított bevitelnél (null) a mező az ELŐZŐ értéken marad.
         const formatted = formatTimeInput(event.target.value);
         if (formatted !== null) onChange(formatted);
       }}

@@ -8,10 +8,12 @@ import (
 	"speedcubinghungary/internal/competition"
 	"speedcubinghungary/internal/config"
 	"speedcubinghungary/internal/db"
+	"speedcubinghungary/internal/middleware"
 	"speedcubinghungary/internal/post"
 	"speedcubinghungary/internal/prediction"
 	"speedcubinghungary/internal/router"
 	"speedcubinghungary/internal/special"
+	"speedcubinghungary/internal/stats"
 	"speedcubinghungary/internal/wcalive"
 
 	"github.com/golang-migrate/migrate/v4"
@@ -39,7 +41,6 @@ func main() {
 		log.Fatal("Migration run error:", err)
 	}
 
-	// Budapest Special
 	specialLive := special.NewLiveClient(cfg.WCALiveURL)
 	specialBroadcaster := wcalive.NewBroadcaster()
 	specialTracker := special.NewTracker(specialLive, wcalive.NewSocketClient(cfg.WCALiveURL), specialBroadcaster)
@@ -47,7 +48,6 @@ func main() {
 		special.NewService(special.NewPostgresRepository(dbConn), specialLive, specialTracker, specialBroadcaster),
 	)
 
-	// Hungarian All-Rounder
 	allrounderLive := allrounder.NewLiveClient(cfg.WCALiveURL)
 	allrounderBroadcaster := wcalive.NewBroadcaster()
 	allrounderTracker := allrounder.NewLiveTracker(allrounderLive, wcalive.NewSocketClient(cfg.WCALiveURL), allrounderBroadcaster)
@@ -64,15 +64,19 @@ func main() {
 	competitionService := competition.NewService(competition.NewWCARepository())
 	competitionHandler := competition.NewHandler(competitionService)
 
-	// A tippverseny a versenyadatokat a competition service-en keresztül kéri le.
 	predictionHandler := prediction.NewHandler(prediction.NewService(
 		prediction.NewPostgresRepository(dbConn),
 		competitionService,
 	))
 
-	authHandler := auth.NewHandler(auth.NewService(auth.NewPostgresRepository(dbConn), cfg), cfg)
+	authService := auth.NewService(auth.NewPostgresRepository(dbConn), cfg)
 
-	r := router.New(cfg, postHandler, competitionHandler, predictionHandler, authHandler, specialHandler, allrounderHandler)
+	statsHandler := stats.NewHandler(stats.NewService(competitionService, stats.NewLiveRepository(cfg.WCALiveURL), authService))
+
+	authHandler := auth.NewHandler(authService, cfg)
+	authMiddleware := middleware.AuthMiddlewareWithConfig(cfg, authService)
+
+	r := router.New(cfg, authMiddleware, postHandler, competitionHandler, predictionHandler, authHandler, specialHandler, allrounderHandler, statsHandler)
 
 	log.Printf("Server started on :8080 (mode: %s)", cfg.Deployment)
 	log.Fatal(http.ListenAndServe("0.0.0.0:8080", r))

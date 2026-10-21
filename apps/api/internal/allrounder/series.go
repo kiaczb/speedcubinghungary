@@ -5,38 +5,20 @@ import (
 	"time"
 )
 
-// A versenysorozat konfigurációja. Ez a `utils/competitionIds.ts` átemelése az
-// allrounderpoints projektből — szándékosan KÓDBAN marad, nem adatbázisban:
-// évadonként egyszer változik, és a pontozási szabályokkal együtt egy helyen
-// átlátható. Új állomás felvétele: vedd fel a `Competitions` listába, a
-// sorrend a táblázat oszlopsorrendje is egyben.
-//
-// A DB-ben csak a WCA-tól letöltött eredmény él (lásd repository.go).
-
-// SeriesCompetition a sorozat egy állomása: a WCA versenyazonosító és a
-// táblázatban megjelenő rövid név.
 type SeriesCompetition struct {
 	CompetitionWCAID string `json:"competitionWcaId"`
 	Label            string `json:"label"`
 }
 
-// Series egy évad teljes szabályrendszere.
 type Series struct {
-	Year         int
-	Competitions []SeriesCompetition
-	// PointsTable az 1., 2., … helyezésért járó pont. A hossza egyben azt is
-	// megadja, hány helyezett kap pontot versenyszámonként.
-	PointsTable []int
-	// CountingResults: az évad végén versenyzőnként ennyi legjobb versenyszám
-	// pontja számít bele az összesbe.
+	Year            int
+	Competitions    []SeriesCompetition
+	PointsTable     []int
 	CountingResults int
-	// PodiumCount: az évad végén ennyi helyezettet díjazunk. Csak megjelenítés.
-	PodiumCount   int
-	LegacyScoring bool
+	PodiumCount     int
+	LegacyScoring   bool
 }
 
-// standardPointsTable az 1–20. helyezésért járó pont. Mindhárom eddigi évad
-// ugyanezt használta.
 var standardPointsTable = []int{
 	50, 43, 38, 34, 30, 27, 24, 21, 18, 16, 14, 12, 10, 8, 6, 5, 4, 3, 2, 1,
 }
@@ -102,7 +84,6 @@ var seriesByYear = map[int]Series{
 	},
 }
 
-// AvailableYears a választható évadok, a legfrissebbel az elején.
 func AvailableYears() []int {
 	years := make([]int, 0, len(seriesByYear))
 	for year := range seriesByYear {
@@ -113,9 +94,6 @@ func AvailableYears() []int {
 	return years
 }
 
-// ResolveSeries a kért évadot adja vissza. Ismeretlen vagy hiányzó évnél az
-// alapértelmezettre esik vissza (`?year=` nélküli megnyitás és elgépelt év így
-// ugyanazt adja) — ugyanaz a viselkedés, mint az eredeti oldalon.
 func ResolveSeries(year int) Series {
 	if series, ok := seriesByYear[year]; ok {
 		return series
@@ -123,7 +101,6 @@ func ResolveSeries(year int) Series {
 	return seriesByYear[defaultYear()]
 }
 
-// defaultYear a folyó év, ha van hozzá évad; különben a legfrissebb évad.
 func defaultYear() int {
 	current := time.Now().Year()
 	if _, ok := seriesByYear[current]; ok {
@@ -133,7 +110,6 @@ func defaultYear() int {
 	return AvailableYears()[0]
 }
 
-// competitionIDs a sorozat versenyazonosítói, a konfigurációs sorrendben.
 func (s Series) competitionIDs() []string {
 	ids := make([]string, 0, len(s.Competitions))
 	for _, competition := range s.Competitions {

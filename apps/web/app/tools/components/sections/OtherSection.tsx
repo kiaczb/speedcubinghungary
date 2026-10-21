@@ -5,13 +5,12 @@ import ToolCard from "../ToolCard";
 const OtherSection = () => {
   return (
     <section>
-      <h2 className="text-xl font-bold text-foreground">Egyéb</h2>
+      <h2 className="text-xl font-bold text-foreground">Közösség</h2>
       <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-        Közösségi eszközök a versenyek köré.
+        Játékok és szavazások a versenyek köré.
       </p>
 
       <div className="mt-6 grid grid-cols-1 items-stretch gap-5 md:grid-cols-2">
-        {/* TODO: ideiglenes leírások — cseréld le a véglegesre. */}
         <ToolCard
           title="Szavazás"
           links={[

@@ -32,9 +32,6 @@ export default async function PostPage({ params }: PageProps) {
   const imageUrls = postImageUrls(post.image_paths);
   const badge = badgeMap[post.tag];
 
-  // A riport posztok tartalma strukturált JSON — dedikált komponens rendereli.
-  // Törött/régi JSON esetén a markdown-renderelőre esik vissza, hogy sose
-  // dőljön el az oldal.
   const report = post.tag === "report" ? parseWeeklyReport(post.content) : null;
 
   return (

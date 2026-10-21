@@ -55,6 +55,7 @@ speedcubinghungary/
 │   │       ├── allrounder/  # Hungarian All-Rounder: cached WCA results + live leg + scoring
 │   │       ├── special/     # Budapest Special: live WCA Live results + recorded DNF times
 │   │       ├── wcalive/     # shared WCA Live transport (GraphQL, Phoenix socket, broadcaster)
+│   │       ├── stats/       # admin competition statistics (before/during/after), see §22
 │   │       ├── middleware/  # JSON content-type, JWT auth, RBAC
 │   │       ├── httperr/     # hiba → HTTP válasz (5xx szövege naplóba, nem a kliensnek)
 │   │       ├── config/      # env var loading + validation (fail-fast)
@@ -125,7 +126,7 @@ as parameters and only registers routes.
 
 | Layer     | Stack |
 | --------- | ----- |
-| Frontend  | Next.js **16.2.7** (App Router, Turbopack default), React **19.2.4**, TypeScript 5, Tailwind CSS **v4** (`@tailwindcss/postcss`), `react-icons`, `@cubing/icons` (WCA event icon font, ~13 KB, imported only by `/tools/allrounder`). Node 22. |
+| Frontend  | Next.js **16.2.7** (App Router, Turbopack default), React **19.2.4**, TypeScript 5, Tailwind CSS **v4** (`@tailwindcss/postcss`), `react-icons`, `@cubing/icons` (WCA event icon font, ~13 KB, imported only by the `/tools/allrounder`, `/tools/special` and `/tools/prediction` client components). Node 22. |
 | Backend   | Go **1.25.5**, `go-chi/chi/v5` (router), `go-chi/cors`, `golang-jwt/jwt/v5`, `golang-migrate/migrate/v4`, `jackc/pgx/v5` (via `stdlib` driver) + `lib/pq` (for `pq.Array`), `google/uuid`, `coder/websocket` (WCA Live subscriptions). Tests: `stretchr/testify` + `DATA-DOG/go-sqlmock`. |
 | Scripts   | Python 3.11+ (weekly-report), Jinja-style HTML templates, SMTP email. `requirements.txt` at `apps/scripts/weekly-report/`. |
 | Data      | PostgreSQL **17**. |
@@ -222,9 +223,10 @@ Every feature is a package under `internal/<feature>/` with the same four files:
    Decode request, call service, encode JSON response / `http.Error`. `NewHandler(service)`.
 
 Wiring is manual constructor injection in `cmd/server/main.go` — `repo → service →
-handler`, one block per feature, then the finished handlers are passed into
-`router.New(cfg, postHandler, competitionHandler, predictionHandler, authHandler,
-specialHandler, allrounderHandler)`, which only registers routes.
+handler`, one block per feature, then the finished handlers (and the finished
+auth middleware) are passed into
+`router.New(cfg, authMiddleware, postHandler, competitionHandler, predictionHandler,
+authHandler, specialHandler, allrounderHandler, statsHandler)`, which only registers routes.
 **There is no DI framework; follow this manual pattern.**
 
 Other Go conventions observed:
@@ -239,8 +241,11 @@ Other Go conventions observed:
   of its sentinels means what.
 - Enums are string types in `internal/types` (`Role`, `PostTag`) with `UPPER_SNAKE`
   const names and lowercase string values.
-- Comments and some identifiers are **in Hungarian** (e.g. `// kell a cookie-hoz`).
-  This is normal here; match the surrounding language when editing a file.
+- **The source carries no comments** (removed deliberately, 2026-09). The only
+  exceptions are tool directives: `eslint-disable-*`, shebangs and the
+  Dockerfile `# syntax=` line. The *why* behind non-obvious decisions lives in
+  this file, not in the code. Some identifiers and test names are **in
+  Hungarian** — that's normal here.
 - Nullable DB columns use `sql.NullString` then copy into the struct.
 - `roles` is stored as JSONB and marshaled/unmarshaled manually with `encoding/json`.
 
@@ -309,7 +314,8 @@ Other Go conventions observed:
   the runtime's zone and a Server Component runs in the container's UTC while a
   client component runs on the visitor's machine; near midnight the same date
   rendered as two different days. Add a new shape here rather than writing
-  another `toLocaleDateString` in a component), `time.ts` (WCA-style digit-only time entry, shared by
+  another `toLocaleDateString` in a component; `formatIsoDate` gives the
+  Budapest `YYYY-MM-DD` for comparing against WCA dates), `time.ts` (WCA-style digit-only time entry, shared by
   the prediction form and the Special DNF cell: `formatTimeInput()` formats
   while typing and returns `null` for a keystroke it refuses — the caller
   keeps the previous value; `parseTimeInput()` is the **only** validity check
@@ -450,7 +456,13 @@ see §20; the single cover image is backfilled into a one-element array) and
 `prediction_question_type` — a free-text extra question) and
 `000015_users_require_wca_id` (renames any blank-`wca_id` row left behind by the
 auth bug described in §9, then adds `CHECK (btrim(wca_id) <> '')` so that state
-cannot recur at the storage layer).
+cannot recur at the storage layer) and `000016_add_user_session_version`
+(`users.session_version INT NOT NULL DEFAULT 0` — server-side revocation of the
+12-hour session, see §9) and `000017_add_wca_grants` (the admin's encrypted WCA
+`manage_competitions` tokens, see §9). ⚠️ The `feature/learn*` branches also
+use `000017`–`000019`; **renumber them past the last develop migration before
+merging** — golang-migrate fails on a duplicate version, and a lower number
+than the DB's current version is silently never applied.
 Applied automatically on API startup via
 `migrate.New("file:///migrations", cfg.DatabaseURL)` (the prod image bakes
 `db/migrations` to `/migrations`).
@@ -472,7 +484,14 @@ posts(id UUID PK, title TEXT, tag post_tag, content TEXT,
 users(id SERIAL PK, wca_id VARCHAR(50) UNIQUE, name, email,
       avatar_url TEXT NULL,   -- 000004: WCA profilkép URL-je (nullable)
       roles JSONB default '[]', competition_count INT, delegated_count INT,
+      session_version INT NOT NULL DEFAULT 0,  -- 000016: kijelentkezés = +1 (§9)
       created_at, updated_at)
+
+-- 000017: az admin WCA-engedélye (§9). A tokenek AES-GCM-mel titkosítva, a
+-- kulcs a JWT_SECRET-ből származik, a user_id hitelesített kiegészítő adat.
+wca_grants(user_id INT PK → users(id) ON DELETE CASCADE, scope TEXT,
+        access_token BYTEA, refresh_token BYTEA, expires_at TIMESTAMPTZ,
+        granted_at, updated_at)
 
 records(region VARCHAR, event_id VARCHAR, single INT, average INT,
         PRIMARY KEY (region, event_id))
@@ -564,9 +583,9 @@ admin route sits in one `Auth + RBAC(admin)` group.
 | PUT  | `/posts/{id}` | JWT + `admin` | `post.UpdatePost` (multipart; the **required** `image_order` describes the whole resulting gallery, see §20; 404 if the id doesn't exist) |
 | GET  | `/uploads/*` | public | static file server over `cfg.UploadDir` (post images) |
 | DELETE | `/posts` | JWT + `admin` | `post.DeletePosts` (body `{ids:[]}`; also deletes the posts' image files from the volume, see §20) |
-| GET  | `/competitions/upcoming` | public | `competition.GetUpcoming` (HU only; DTO includes `eventIds` — the WCA API's `event_ids` passed straight through, no extra request) |
+| GET  | `/competitions/upcoming` | public | `competition.GetUpcoming` (HU only; DTO includes `eventIds` — the WCA API's `event_ids` passed straight through, no extra request — plus `registrationOpen`/`registrationClose` (RFC3339, UTC), `competitorLimit` (null = no limit) and `acceptedCount`. ⚠️ `acceptedCount` is fetched **only for competitions whose registration is open right now** (WCA `/competitions/{id}/registrations` — that endpoint lists exactly the accepted competitors, verified equal to the WCIF's accepted + competing count, at ~18 KB instead of the WCIF's ~330 KB), in parallel. ⚠️ **The count has its own 1-minute cache (`registered`, `registrationCountTTL`), and "is registration open?" is decided per request, not when the list was cached.** The first version filled the count inside the 15-minute list cache, which missed the opening minutes entirely (the list was cached just before opening time) and would have shown a 15-minute-old "még N hely" — measured: All-Rounder 9 2026 took 10 of its 20 places in the first 6 minutes. The cached list itself never carries a count; `GetUpcomingHungarian` clones it before filling. It is `null` outside the open window **and** when that request fails — a failed count is logged, never fatal to the list) |
 | GET  | `/competitions/{id}/psych-sheet/{eventId}` | public | `competition.GetPsychSheet` — proxy of the WCA psych sheet (PR-ranked start list) for one event: `[{name, wcaId, position}]`, `position` 0 = no PR yet, `wcaId` empty for newcomers. Ids validated against `^[A-Za-z0-9]{1,64}$` (400), an id the WCA doesn't know 404, upstream failure 502. **Cached 15 min + singleflight**, expired entries swept, see §21 |
-| GET  | `/competitions/{id}/competitors` | public | `competition.GetCompetitors` — every accepted, competing registrant from the public WCIF, sorted by name: `[{name, wcaId}]`. (The WCA `/registrations` endpoint only carries user ids, no names — that's why WCIF.) Same validation/caching as above |
+| GET  | `/competitions/{id}/competitors` | public | `competition.GetCompetitors` — every accepted, competing registrant from the public WCIF, sorted by name: `[{name, wcaId}]`. (The WCA `/registrations` endpoint only carries user ids, no names — that's why WCIF.) Derived from `GetRegistrations`, the **one** cached WCIF parse (~500 KB) that the stats page shares, so a competition's WCIF is downloaded once per 15 min |
 | GET  | `/predictions` | public | `prediction.GetContests` — every tippverseny, `competitionName`/`City`/`Country`/`StartDate` enriched live from `competition.Service.GetUpcomingHungarian` (not stored, see §21). `status` is computed from `predictionDeadline`, never `"evaluated"` yet |
 | POST | `/predictions` | JWT + `admin` | `prediction.CreateContest` (JSON body `{competitionId, predictionDeadline (RFC3339), podiumEventIds[], extraQuestions: [{prompt, type: "person"\|"time"\|"number"\|"text"}]}`; 400 on a past deadline, an empty/duplicated/malformed `podiumEventIds` (max 20), or an invalid/blank question (max 20, prompt ≤ 300 chars, stored trimmed). Records the admin in `created_by`. Every validation error wraps `prediction.ErrValidation`, which is the one thing the handler checks for 400 — add new rules as `validationError`, not to a status chain) |
 | DELETE | `/predictions/{id}` | JWT + `admin` | `prediction.DeleteContest` — deletes the contest row; `prediction_podium_events`/`prediction_extra_questions` cascade via their FK (`ON DELETE CASCADE`), no transaction needed. 404 if the id doesn't exist, 400 if it isn't a UUID |
@@ -574,12 +593,16 @@ admin route sits in one `Auth + RBAC(admin)` group.
 | POST | `/allrounder/refresh` | JWT + `admin` | `allrounder.Refresh` — re-fetches the season from the WCA API ignoring the cache TTLs. Admin-only because it generates upstream traffic |
 | GET  | `/allrounder/stream` | public | `allrounder.StreamUpdates` (**SSE**: data-less `update` event whenever the running leg changes on WCA Live; `?year=` optional). Opens successfully even when no leg is running. An open stream is what keeps the WCA Live subscription alive (§19) |
 | GET  | `/login` | public | `auth.Login` — starts the WCA OAuth flow: issues the CSRF nonce cookie and redirects to WCA. Takes `?redirect=<path>` (sanitized). **This is the only login entry point**; the browser never builds the authorize URL (§9) |
-| GET  | `/login/callback` | public | `auth.LoginCallback` (WCA OAuth redirect target; verifies `state` against the nonce cookie before exchanging the code) |
+| GET  | `/login/callback` | public | `auth.LoginCallback` (WCA OAuth redirect target; verifies `state` against the nonce cookie before exchanging the code). **Also completes the admin WCA grant** when the `wca_grant_state` cookie matches (§9) — the WCA app has one registered redirect URI |
+| GET  | `/wca/authorize` | JWT + `admin` | `auth.AuthorizeWCA` — starts the `manage_competitions` grant (redirect, so outside the JSON group). Takes `?redirect=<path>` |
+| DELETE | `/wca/grant` | JWT + `admin` | `auth.RevokeWCA` — deletes the stored grant (204) |
 | GET  | `/me` | JWT | `auth.Me` |
 | POST | `/logout` | JWT | `auth.Logout` |
 | GET  | `/special/competitions` | public | `special.GetCompetitions` — the competition picker. `?query=` searches WCA Live by **name** (any country); without it, the **Hungarian** competitions of the last 60 days plus the upcoming ones. Sorted ongoing → upcoming → past |
 | GET  | `/special/report` | public | `special.GetReport` (per-competitor view, assembled from **live** WCA Live results + our recorded DNF times). **`?competition=<wcaId>` is required** (400 without it). Optional `?round=N` narrows to the Nth round of **every** event (1 → `333-r1`, `222-r1`, …); invalid values 400, WCA Live unreachable 502, watch capacity exhausted 503 |
 | GET  | `/special/stream` | public | `special.StreamUpdates` (**SSE**: `update` event on every change of `?competition=<wcaId>`, required). An open stream is also what keeps *that competition's* WCA Live subscription alive (§18) |
+| GET  | `/stats/competitions` | JWT + `admin` | `stats.SearchCompetitions` — the picker: without `?query=` the Hungarian competitions from a year ago onwards (WCA API, `country_iso2=HU`), with it a WCA name search (any country). 15 min cache |
+| GET  | `/stats/competitions/{id}` | JWT + `admin` | `stats.GetReport` — one competition's statistics, see §22. 400 invalid id, 404 unknown to the WCA, 502 upstream |
 | PUT  | `/special/results/{liveResultId}/attempts/{attemptNumber}/elapsed` | JWT + `admin` | `special.RecordElapsed` (body `{competitionWcaId, elapsedCs, note}`; `elapsedCs: null` **deletes** the entry). Keyed by WCA Live ids, not our own — there is no row for an un-timed DNF |
 
 **Reading `/special/*` is public; only recording a DNF duration is admin.** The
@@ -621,9 +644,10 @@ Flow:
 4. `auth.LoginCallback` **verifies `state` against the cookie before touching the
    code**, exchanges the code for a WCA access token, calls WCA `/me`, **upserts**
    the user (including the WCA `avatar.url` → `users.avatar_url`), mints an HS256
-   JWT (`middleware.UserClaims`: user_id, wca_id, name, avatarURL, roles; iat/nbf
-   + 1-hour exp), and sets it as cookie `auth`. `/me` echoes the claim's `avatarURL`.
-5. Cookie is `HttpOnly`, `SameSite=Strict`, `Path=/`, `MaxAge=3600`,
+   JWT (`middleware.UserClaims`: user_id, wca_id, name, avatarURL, roles,
+   session_version; iat/nbf + **12-hour** exp, fixed from login — no sliding
+   renewal), and sets it as cookie `auth`. `/me` echoes the claim's `avatarURL`.
+5. Cookie is `HttpOnly`, `SameSite=Strict`, `Path=/`, `MaxAge` = the token lifetime,
    `Secure` unless `DEPLOYMENT=development`. Then redirects to `FRONTEND_URL` +
    the path **taken from the cookie**. Any failure (bad state, missing code,
    upstream error) logs server-side and redirects to `FRONTEND_URL/?login=failed`
@@ -653,13 +677,42 @@ that pin each one):
 - **Clear the state cookie BEFORE writing the response.** Every branch ends in
   `http.Redirect`, which calls `WriteHeader`; a `defer`-red `SetCookie` would
   silently never reach the browser.
-- **`scope` is `public email`.** The WCA token is used for exactly one `/me` call
-  and then dropped. `manage_competitions` was removed — don't restore it without
-  an actual endpoint that needs it.
+- **The login `scope` stays `public email`.** That token is used for exactly one
+  `/me` call and then dropped. `manage_competitions` is **not** part of the login
+  — ordinary visitors must not be asked for competition-management rights.
+
+### The admin WCA grant (`manage_competitions`)
+
+Admins authorize it separately (`grant.go`, `/wca/authorize` → the same
+`/login/callback`), and the tokens are **stored** so other admin modules can call
+the WCA as that admin later. First user: the stats page's ages (§22). Rules:
+
+- ⚠️ **The callback can't see the `auth` cookie** — it is `SameSite=Strict` and
+  the return from WCA is a cross-site navigation. So the admin's `user_id` travels
+  in the `wca_grant_state` cookie (`<nonce>:<userID>:<path>`, HttpOnly, Lax,
+  `Path=/`, set while the admin *was* authenticated). The callback checks the
+  grant cookie first and falls back to the normal login state.
+- **Ownership is enforced in SQL, atomically:** `SaveGrant` inserts only `WHERE
+  id = $1 AND wca_id = $2 AND roles @> '["admin"]'` — `$2` is the WCA ID from
+  WCA `/me` for the new token. Granting with another WCA account, or as a
+  non-admin, saves nothing (`ErrGrantOwnerMismatch` → `?wca=failed`).
+  `GetGrant` repeats the admin check, so a demoted admin's token is unusable.
+- **Encrypted at rest:** AES-256-GCM, key = SHA-256(label + `JWT_SECRET`), the
+  `user_id` as additional data (a row copied to another user can't be opened).
+  Deriving from `JWT_SECRET` was deliberate — a new required env var would
+  have crashed the first staging/prod deploy until set by hand. Rotating
+  `JWT_SECRET` simply makes admins grant again.
+- **`WCAAccessToken(ctx, userID)`** is the one way to get a usable token: it
+  refreshes a minute before expiry (WCA tokens live ~2 h) under a mutex, saves
+  a rotated refresh token, and on a **4xx from the refresh** deletes the grant
+  and returns `ErrNoGrant` (revoked on the WCA side → grant again).
+- The token never reaches the browser, and data fetched with it is cached per
+  user (§22).
 
 Authorization:
-- `middleware.AuthMiddlewareWithConfig(cfg)` reads the `auth` cookie, validates the
-  JWT, and puts `*UserClaims` in request context. Retrieve with
+- `middleware.AuthMiddlewareWithConfig(cfg, sessions)` reads the `auth` cookie,
+  validates the JWT, **checks it against the database**, and puts `*UserClaims`
+  in request context. Retrieve with
   `middleware.GetUserFromContext(r)`. It rejects non-HMAC algs **twice** (the
   manual `SigningMethodHMAC` check plus `jwt.WithValidMethods`), and passes
   `jwt.WithExpirationRequired()` — golang-jwt treats a token with **no** `exp` as
@@ -671,6 +724,32 @@ Authorization:
   second, identical `auth.UserClaims`, where a mismatched `json` tag silently
   dropped a field across the round trip (this happened once with `avatarURL`).
   Don't reintroduce a second copy.
+- ⚠️ **The token is checked against the DB on every authenticated request —
+  deliberately.** The session is 12 hours, and a stateless JWT that long has two
+  holes: logout only deletes the cookie (a copied token keeps working), and a
+  revoked admin stays admin until expiry. So the middleware calls
+  `SessionStore.GetSession(userID)` (one PK lookup on `users`). `auth.Service`
+  implements it (delegating to its repository), and `main.go` builds the
+  finished middleware from it and passes **that** to `router.New` — the router
+  receives only finished pieces (handlers, middleware), never a repository or
+  service, and the middleware goes through the service layer like everything
+  else:
+  - `users.session_version` (migration `000016`) must equal the token's
+    `session_version`, else 401. `POST /logout` increments it
+    (`RevokeSessions`), which **logs the user out on every device**. If that
+    update fails, the cookie is still cleared but the response is 500, so the
+    client knows the token was not revoked.
+  - **Roles are taken from the DB, not the token** — `claims.Roles` is
+    overwritten, so removing `admin` takes effect on the next request. Don't
+    read authorization from the token's own `roles` anywhere.
+  - A deleted user (`ErrSessionNotFound`) is 401; a DB error is 500 via
+    `httperr` (the `pq:` text is logged, not sent).
+  This trades the "no DB lookup" property of JWTs for immediate revocation;
+  that was a conscious choice (one API that owns the DB, and only `/me`,
+  `/logout` and admin actions are authenticated). The considered alternative —
+  1-hour access token + 12-hour refresh token, DB hit only on refresh — was
+  rejected as more frontend complexity (401-retry in `clientFetch`, refresh
+  races, `EventSource`) for weaker revocation (up to 1 hour lag).
 
 ---
 
@@ -807,8 +886,71 @@ nav links in `app/lib/site.ts` if needed. **Read the Next 16 docs first** (§3 w
   participant counts/answer submission are not built yet; `participantCount`
   is hardcoded to 0 and `status` only ever reports `open`/`closed` (never
   `evaluated`, though the frontend type still has that state for later).
-- `/results`, `/rankings`, `/guide`, `/team`, `/registration` are linked from
-  `QuickToolsSection` but **no such routes exist yet** (they 404).
+- ~~`/results`, `/rankings`, `/guide`, `/team`, `/registration` linked from
+  `QuickToolsSection` (404)~~ — **resolved**: that section was replaced by
+  the live "Mi történik?" tiles (see below).
+- **The nav is grouped by topic** (`NAV_ITEMS` in `app/lib/site.ts`):
+  Versenyek ▾ (All-Rounder, Special) · Közösség ▾ · Hírek · Egyesület ▾.
+  **Versenynaptár is deliberately not in the nav** — it's reached from the
+  home page (hero button, upcoming card, "Fedezd fel") and the footer, which
+  is why `NAV_LINKS` prepends it to the flattened list. A group is
+  `{label, links}`, a direct link is `{href, label}`. On desktop a group opens
+  on **mouse hover** (the panel uses `pt-2` instead of `mt-2` so the pointer
+  doesn't leave the hover area on the way down); touch and keyboard open it
+  with a tap/Enter, which is why hover is keyed on `pointerType === "mouse"`.
+  The dropdown shows labels + a small icon (`icon` on every `NavLink`) only —
+  descriptions were tried and made it too big. On mobile the groups are a
+  tap-to-toggle accordion (one open at a time, `grid-rows-[0fr→1fr]`
+  animation, `inert` while closed). `NAV_LINKS` is derived from it (flat) for the footer. Add new pages
+  (e.g. `/learn` when it ships) as an entry there, not in `Navbar.tsx`.
+  The home page order is Hero → highlight tiles → Hírek → Rólunk → Versenyzés.
+- **The highlight tiles (`HighlightsSection` + `Sections/Main/Highlights/`)** are a
+  bento of **live-data tiles**, not a link grid (the old six-card
+  `QuickToolsSection` just repeated the nav and was removed). Three tiles:
+  - **All-Rounder** (large, left): season progress as one segment per leg,
+    top 8 on desktop / top 5 below `lg` (the extra rows are `hidden lg:flex`
+    so the tile fills the height of the two stacked right-hand tiles), live
+    badge + the provisional-points notice when a leg is live.
+  - **`FeaturedTile`** (top right) is **dynamic**: the nearest *open*
+    Tippverseny if there is one, else the latest `report` post
+    (`ReportTile`: record count, top 3 records ranked WR → CR → NR, first
+    achieved milestone), else the Tippverseny fallback copy. The weekly job
+    only ever emits `WR`/`CR`/`NR` badges (`config.py` `badges`) and sends
+    **raw** event ids/types (`"333"`, `"single"`) — the tile maps them through
+    `eventName()`; anything else is filtered out, not shown. The
+    rule behind it: a tile must show something fresh most weeks — an
+    occasional feature only takes the slot while it is live.
+  - **`UpcomingCompetitionsTile`** (bottom right): the next 3 competitions
+    with their **registration state** (`app/calendar/lib/registration.ts`:
+    upcoming → "Nevezés nyílik", open → "még N hely · zárul", full →
+    "Betelt · várólista", closed). Rows link out to the WCA page (where you
+    register), so this tile uses `Tile`'s `linkWholeCard={false}` variant —
+    only the "Versenynaptár" CTA is an internal link (no nested anchors).
+  **Tile headers are a plain `title` (`text-lg font-semibold`) + optional
+  `meta` on the right** (date, "8 / 10 forduló", a status badge). The first
+  version had an icon in a bordered box + a mono uppercase tracked label per
+  tile; the owner found that read as generic/AI-generated, so it was removed.
+  Don't bring back icon boxes or eyebrow labels on the tiles. **The section
+  heading is a plain "Aktuális" + today's date** (`formatLongDateWithWeekday`,
+  Budapest) over a thin rule, newspaper-masthead style. History: it was
+  "MOST / Mi történik?" + a subtitle listing the tile titles (too
+  template-like), then no heading at all (the tiles looked like they were
+  dropped there at random). The date is what makes it more than a label — it
+  says the tiles are today's data. Top padding is `pt-12 sm:pt-16`, tighter
+  than the other sections, since this heading is small.
+  A Special tile existed briefly and was **removed on purpose** — the
+  Special runs about once a year, so the tile was static copy 364 days out of
+  365. Don't add it back as a permanent tile.
+  ⚠️ **Each tile is its own async Server Component in its own `<Suspense>`**,
+  so one slow upstream can't hold back the whole home page. Every tile has a
+  no-data fallback, so an unreachable API leaves copy + link, not a hole.
+- The `/tools` page ("Programok", formerly "Eszközök") **is no longer in the
+  nav** — its pages are reachable directly from the Versenyek/Közösség groups.
+  The page itself still exists. Sections:
+  "Versenysorozatok és versenyformák" (Special, All-Rounder) and "Közösség"
+  (Tippverseny, Szavazás — the latter is still a `#events` placeholder). The
+  **URLs deliberately stay `/tools/*`**: Special/All-Rounder links are shared
+  (`?competition=`, `?year=`), so a rename would need redirects.
 - ~~The Hungarian All-Rounder tool card links out to `allrounderpoints.vercel.app`~~
   — **resolved**: the app is integrated at `/tools/allrounder`, see §19.
 - ~~`auth/service.go` / `auth/handler.go` bypass the `config` struct and read env
@@ -940,7 +1082,7 @@ nav links in `app/lib/site.ts` if needed. **Read the Next 16 docs first** (§3 w
 - Enums live in `internal/types` as string types.
 - Frontend: server component fetches → passes props to client components; auth via
   `useUser()`; two API base URLs (server vs browser).
-- Hungarian is used freely in comments and UI copy.
+- Hungarian is used freely in UI copy and test names; the code has no comments.
 
 ---
 
@@ -1641,6 +1783,79 @@ valószínűleg saját táblát/service-réteget igényel, hasonlóan ahhoz, aho
 allrounder is külön választja a "series config kódban" (§19) és a "letöltött
 eredmény DB-ben" felelősséget.
 
+## 22. Statisztikák (`internal/stats` + `/admin/stats`)
+
+Admin-only page with one competition's statistics, in three phases that come
+from three different sources. `phaseFor`: results posted (`results_posted_at`)
+→ **after**; today (Budapest) ≥ start date → **during**; else **before**.
+Sections accumulate rather than replace — after the competition the page
+still shows the field and the WCA Live PRs, ordered by what matters for the
+phase.
+
+| Phase | Source | Notes |
+| --- | --- | --- |
+| before (+ always) | public WCIF (`GetRegistrations`) + persons batch (`GetPersonSummaries`) | field, events, countries, world rankings, NR holders present, veterans, anniversaries, milestones, career medals/records |
+| before (+ always) | per-person competition history (`GetPersonCompetitions`) | comebacks, first competition in this country, busiest this year — **background job** |
+| during / after | WCA Live (`stats.LiveRepository`, own queries, one per round) | rounds progress, DNF rate, records, **PR counts** (only WCA Live tags PRs), per-event bests; 1 min cache |
+| after | WCA API `/competitions/{id}/results` | winners (final round), official records, medal tables, solves/DNF/solving time |
+
+Rules and verified facts:
+
+- **Every WCA API call goes through `competition.Service`/`WCARepository`**, so
+  the shared 6-in-flight semaphore (§14) bounds the stats page too. `stats`
+  depends on it through the narrow `CompetitionSource` interface (same pattern
+  as `prediction.CompetitionLookup`). Don't give `stats` its own HTTP client.
+- **Caches** (in memory, `competition.Service`): WCIF/registrations, results,
+  search 15 min; person summaries and histories **24 h per person**. ⚠️
+  `sweep` takes a per-map TTL — with the old single 15-min sweep the 24-hour
+  person entries were silently thrown away (pinned by a test). Persistence in
+  Postgres is planned later; nothing here is stored yet.
+- **The persons batch** (`/persons?wca_ids=…`) takes ~130 ids in one request
+  (~4 s); we chunk by 100. It gives `competition_count`, medals, record counts
+  and total solves — but **no competition dates**.
+- **History is the expensive part:** `/persons/{id}/competitions` is the only
+  source of dates, ~1–3 s per person. It lists **only competitions with
+  results** (verified: 233 = distinct competitions in that person's results),
+  so organizer/delegate-only appearances don't skew comebacks. The job
+  (`historyTracker`): 3 workers, 429 → 30 s backoff, max 3 attempts, failed
+  people retried after 5 min, state per competition pruned after 24 h. The
+  frontend polls every 4 s while `history.status === "running"`. Measured:
+  127 people in ~1–2 min, no 429.
+- **Comeback = gap since the person's *last* competition before this one**, not
+  their first (owner's definition: started 2010, last competed 2014 → 2014
+  counts). Shown from 1 year up.
+- **WCA ID year = year of the first competition** — that's what veterans and
+  anniversaries (5/10/15/20/25/30 years) use.
+- **Ages (youngest/oldest, average, median) need the admin WCA
+  grant (§9):** birthdates are only in the **private** WCIF
+  (`/competitions/{id}/wcif` with the admin's token), and the WCA serves it
+  **only to that competition's organizers and delegates** — anyone else gets 403
+  → `ages.status = "forbidden"`. Without a grant the status is `"no-grant"`
+  and the page shows the authorize button. Matched by `wcaUserId` (newcomers
+  have no WCA ID). **Only ages leave the API, never birthdates**; nothing is
+  stored. Cached 15 min per **user + competition** (403 too — the history
+  poll hits the report every 4 s), but the token is fetched **before** the
+  cache is read, so a revoked grant hides ages immediately.
+- **Milestones:** `competition_count` only counts competitions with posted
+  results, so before/during the n-th is `count + 1`, after it is `count`.
+  Milestones are every 50th competition (50, 100, 150, …).
+- **Result formatting is in Go** (`stats.FormatResult`): centiseconds, FMC
+  moves / average ÷100, MBLD decoded (`8/9 52:31`), and `333mbo` (legacy multi
+  blind) which uses the new encoding below 10⁹ and the old `1SSAATTTTT` above.
+- **"Today" is Budapest time** via `time.LoadLocation("Europe/Budapest")`, and
+  `stats` imports `time/tzdata` because the prod `alpine` image has no tzdata.
+- WCA Live round results come with `singleRecordTag`/`averageRecordTag`
+  (`PR`/`NR`/…); a record also counts as a PR. Data stays on WCA Live after the
+  competition, which is why "after" still has a WCA Live section.
+- Frontend: client-side (the admin cookie is needed, so `clientJson`, not
+  `serverJson`), `?competition=` in the URL like the Special page, wrapped in
+  `AdminGate` — which now takes `children` (the admin index passes
+  `AdminToolGrid`). The report view is keyed by competition, so switching
+  competitions resets its state without an effect. Bars are single-series
+  (`BarList`), every value also printed as text.
+- Smoke test against the real WCA (opt-in):
+  `STATS_SMOKE=HungarianOpen2026 STATS_SMOKE_HISTORY=1 go test ./internal/stats -run Smoke -v -timeout 10m`
+
 ## Instructions for Claude
 
 When working in this repo:
@@ -1653,7 +1868,7 @@ When working in this repo:
    differs from training data. See `apps/web/AGENTS.md`.
 3. **Minimize unnecessary refactoring.** Don't rename constructors, unify JSON
    casing, or replace raw SQL with an ORM unless asked. Match the neighboring
-   file's style — including Hungarian comments/copy.
+   file's style — including Hungarian copy. Don't add comments to the code.
 4. **Keep changes focused and localized.** Touch the feature package (and its
    router wiring) you're changing; avoid cross-cutting sweeps.
 5. **Prefer consistency over cleverness.** Copy the closest existing example rather

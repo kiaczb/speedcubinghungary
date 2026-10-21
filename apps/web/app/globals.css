@@ -238,8 +238,6 @@
     scroll-behavior: auto;
   }
 
-  /* A logó darabjai opacity-0-ról animálódnak láthatóra, ezért itt NEM lehet
-     `animation: none` — az örökre eltüntetné őket. */
   .rotating-group,
   .offset-top,
   .offset-right,

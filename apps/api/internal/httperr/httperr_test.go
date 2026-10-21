@@ -13,10 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// ⚠️ Ez a csomag egyetlen dolgot garantál: 5xx-nél a hiba szövege NEM megy ki
-// a kliensnek. A korábbi `http.Error(w, err.Error(), 500)` minták egy nyers
-// `pq:` hibával a séma tábla- és oszlopneveit, egy `*url.Error`-ral a belső
-// upstream címeket írták ki a böngészőnek.
 func TestWrite_HidesServerErrorsFromTheClient(t *testing.T) {
 	var logged strings.Builder
 	log.SetOutput(&logged)
@@ -44,8 +40,6 @@ func TestWrite_HidesServerErrorsFromTheClient(t *testing.T) {
 	assert.Contains(t, logged.String(), "/posts/42", "a naplóban ott a kérés útvonala is")
 }
 
-// 4xx a hívó hibája, és a saját sentinel hibáink írják le — ezek szövege
-// szándékosan kimegy, különben a kliens nem tudja, mit rontott el.
 func TestWrite_PassesClientErrorsThrough(t *testing.T) {
 	recorder := httptest.NewRecorder()
 

@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"testing"
+	"time"
 
 	"speedcubinghungary/internal/config"
 	"speedcubinghungary/internal/middleware"
@@ -30,6 +31,32 @@ func (m *MockRepo) Upsert(user *User) (*User, error) {
 	return userRet.(*User), args.Error(1)
 }
 
+func (m *MockRepo) GetSession(ctx context.Context, userID int) (middleware.Session, error) {
+	args := m.Called(userID)
+	return args.Get(0).(middleware.Session), args.Error(1)
+}
+
+func (m *MockRepo) RevokeSessions(ctx context.Context, userID int) error {
+	return m.Called(userID).Error(0)
+}
+
+func (m *MockRepo) SaveGrant(ctx context.Context, grant WCAGrant, wcaID string) error {
+	return m.Called(grant, wcaID).Error(0)
+}
+
+func (m *MockRepo) GetGrant(ctx context.Context, userID int) (WCAGrant, error) {
+	args := m.Called(userID)
+	return args.Get(0).(WCAGrant), args.Error(1)
+}
+
+func (m *MockRepo) UpdateGrant(ctx context.Context, grant WCAGrant) error {
+	return m.Called(grant).Error(0)
+}
+
+func (m *MockRepo) DeleteGrant(ctx context.Context, userID int) error {
+	return m.Called(userID).Error(0)
+}
+
 const testJWTSecret = "test-secret-that-is-at-least-32-chars-long"
 
 func testConfig() *config.Config {
@@ -43,8 +70,6 @@ func testConfig() *config.Config {
 	}
 }
 
-// newTestService egy service-t ad, aminek a WCA végpontjai a megadott
-// teszt-szerverekre mutatnak.
 func newTestService(repo Repository, tokenURL, meURL string) *service {
 	return &service{
 		repo:         repo,
@@ -58,7 +83,6 @@ func newTestService(repo Repository, tokenURL, meURL string) *service {
 
 func TestService_LoginCallback(t *testing.T) {
 	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// A beváltás form-kódolt POST, a config értékeivel.
 		assert.Equal(t, http.MethodPost, r.Method)
 		assert.NoError(t, r.ParseForm())
 		assert.Equal(t, "test-client-id", r.Form.Get("client_id"))
@@ -91,7 +115,9 @@ func TestService_LoginCallback(t *testing.T) {
 		Name:      "John Doe",
 		Email:     "john@example.com",
 		AvatarURL: "https://example.com/avatar.png",
-		Roles:     []types.Role{types.ROLE_ADMIN}, // meglévő admin szerepkör
+		Roles:     []types.Role{types.ROLE_ADMIN},
+
+		SessionVersion: 4,
 	}
 
 	mockRepo := new(MockRepo)
@@ -103,8 +129,6 @@ func TestService_LoginCallback(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotEmpty(t, token)
 
-	// A tokent a middleware claims-ével olvassuk vissza — ez a valódi útvonal:
-	// az aláírás és a visszaolvasás UGYANAZT a struktúrát használja.
 	parsed, err := jwt.ParseWithClaims(token, &middleware.UserClaims{}, func(*jwt.Token) (any, error) {
 		return []byte(testJWTSecret), nil
 	}, jwt.WithValidMethods([]string{"HS256"}), jwt.WithExpirationRequired())
@@ -116,17 +140,35 @@ func TestService_LoginCallback(t *testing.T) {
 	assert.Equal(t, existingUser.AvatarURL, claims.AvatarURL)
 	assert.Contains(t, claims.Roles, types.ROLE_ADMIN)
 	assert.NotNil(t, claims.ExpiresAt, "a token lejárat nélkül örök életű munkamenet lenne")
+	assert.Equal(t, 4, claims.SessionVersion, "a verzió nélkül a kijelentkezés nem érvénytelenítené a tokent")
+	assert.WithinDuration(t, time.Now().Add(12*time.Hour), claims.ExpiresAt.Time, time.Minute)
 
 	mockRepo.AssertExpectations(t)
 }
 
-// ⚠️ EZ A TESZT ŐRZI A LEGSÚLYOSABB JAVÍTOTT HIBÁT.
-//
-// Korábban a WCA válaszainak állapotkódja nem volt ellenőrizve: egy hibás
-// `code`-ra a WCA 4xx-et adott, a hibatörzs "sikeresen" dekódolódott üres
-// mezőkkel, a folyamat végigfutott, és a végén ÉRVÉNYES JWT keletkezett egy
-// üres wca_id-jű felhasználóra. Vagyis bárki bejelentkezhetett hitelesítés
-// nélkül. A teszt azt rögzíti, hogy egyik ág sem érhet el a DB-ig.
+func TestService_IsTheSessionStoreOfTheAuthMiddleware(t *testing.T) {
+	mockRepo := new(MockRepo)
+	stored := middleware.Session{Version: 2, Roles: []types.Role{types.ROLE_ADMIN}}
+	mockRepo.On("GetSession", 7).Return(stored, nil)
+
+	var sessions middleware.SessionStore = newTestService(mockRepo, "", "")
+	session, err := sessions.GetSession(context.Background(), 7)
+
+	assert.NoError(t, err)
+	assert.Equal(t, stored, session)
+	mockRepo.AssertExpectations(t)
+}
+
+func TestService_LogoutRevokesTheUsersSessions(t *testing.T) {
+	mockRepo := new(MockRepo)
+	mockRepo.On("RevokeSessions", 7).Return(nil)
+
+	err := newTestService(mockRepo, "", "").Logout(context.Background(), 7)
+
+	assert.NoError(t, err)
+	mockRepo.AssertExpectations(t)
+}
+
 func TestService_LoginCallback_RejectsFailedUpstream(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -183,8 +225,6 @@ func TestService_LoginCallback_RejectsFailedUpstream(t *testing.T) {
 			}))
 			defer meServer.Close()
 
-			// A mockra SEMMILYEN hívást nem regisztrálunk: ha a service mégis
-			// felvenné a felhasználót, a testify azonnal elbukik.
 			mockRepo := new(MockRepo)
 			svc := newTestService(mockRepo, tokenServer.URL, meServer.URL)
 
@@ -208,12 +248,8 @@ func TestService_AuthorizeURL(t *testing.T) {
 	assert.Equal(t, "test-client-id", query.Get("client_id"))
 	assert.Equal(t, "code", query.Get("response_type"))
 	assert.Equal(t, "nonce-123", query.Get("state"))
-	// A redirect_uri UGYANAZ a config érték, amit a beváltásnál is küldünk.
 	assert.Equal(t, "http://localhost:8080/login/callback", query.Get("redirect_uri"))
 
-	// A WCA access tokent egyetlen /me hívásra használjuk — írási/verseny-
-	// kezelési jogot nem kérünk. A `manage_competitions` visszakerülése
-	// jogosultság-túllépés lenne.
 	assert.Equal(t, "public email", query.Get("scope"))
 	assert.NotContains(t, query.Get("scope"), "manage_competitions")
 }

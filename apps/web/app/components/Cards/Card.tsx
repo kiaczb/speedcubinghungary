@@ -10,7 +10,6 @@ const PADDINGS: Record<CardPadding, string> = {
 
 type CardProps = {
   padding?: CardPadding;
-  /** Hoverre megemeli a kártyát — csak kattintható kártyákon használd. */
   interactive?: boolean;
   className?: string;
   children: React.ReactNode;

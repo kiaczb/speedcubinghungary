@@ -13,11 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// ⚠️ A WCA API kb. 15 párhuzamos kérés után 429-et ad. Egy tippverseny-oldal
-// versenyszámonként kér egy psych sheetet, és a singleflight csak AZONOS
-// kulcsokat von össze — hideg cache mellett egy tucat különböző versenyszám
-// egyszerre ment ki. A korlátnak a kimenő oldalon kell ülnie, mert ott
-// független attól, ki és honnan kérdez.
 func TestWCARepository_BoundsConcurrentUpstreamRequests(t *testing.T) {
 	var inFlight, peak atomic.Int32
 
@@ -55,7 +50,6 @@ func TestWCARepository_BoundsConcurrentUpstreamRequests(t *testing.T) {
 		"egyszerre legfeljebb maxConcurrentUpstream kérés lehet úton a WCA felé")
 }
 
-// A túl nagy válasz nem kerülhet teljes egészében a memóriába.
 func TestWCARepository_CapsTheResponseBody(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `{"persons":[`)
@@ -72,9 +66,6 @@ func TestWCARepository_CapsTheResponseBody(t *testing.T) {
 	assert.Error(t, err, "a korlát fölötti választ nem szabad dekódolni")
 }
 
-// A GetCompetition bármely dátumú versenyt visszaad ID szerint; a WCA 404-e
-// saját sentinel hibává válik, hogy a hívó meg tudja különböztetni a nem
-// létező versenyt a WCA kiesésétől.
 func TestWCARepository_GetCompetition(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/BudapestOpen2025" {
@@ -94,4 +85,34 @@ func TestWCARepository_GetCompetition(t *testing.T) {
 
 	_, err = repo.GetCompetition("NemLetezo2099")
 	assert.ErrorIs(t, err, ErrNotFound)
+}
+
+func TestWCARepository_PrivateWCIFSendsTheTokenOnlyThere(t *testing.T) {
+	var mu sync.Mutex
+	headers := map[string]string{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		headers[r.URL.Path] = r.Header.Get("Authorization")
+		mu.Unlock()
+		if r.URL.Path == "/Tiltott2026/wcif" {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		fmt.Fprint(w, `{"persons":[]}`)
+	}))
+	t.Cleanup(server.Close)
+
+	repo := newWCARepository(server.URL)
+
+	_, err := repo.GetPrivateWCIF("Sajat2026", "titkos-token")
+	require.NoError(t, err)
+	_, err = repo.GetPrivateWCIF("Tiltott2026", "titkos-token")
+	assert.ErrorIs(t, err, ErrForbidden, "nem szervezőként/delegáltként a WCA 403-at ad")
+	_, err = repo.GetWCIF("Sajat2026")
+	require.NoError(t, err)
+
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Equal(t, "Bearer titkos-token", headers["/Sajat2026/wcif"])
+	assert.Empty(t, headers["/Sajat2026/wcif/public"], "a nyilvános kérésekbe nem kerülhet token")
 }

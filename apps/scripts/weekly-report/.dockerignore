@@ -1,12 +1,9 @@
-# Keep secrets and build cruft out of the image. Config is provided at runtime
-# via the environment (compose --env-file), never baked in.
 .env
 .venv
 venv/
 __pycache__/
 *.pyc
 *.pyo
-# Tesztek és teszteszközök nem kellenek a futtató image-be.
 test_*.py
 requirements-dev.txt
 .pytest_cache/

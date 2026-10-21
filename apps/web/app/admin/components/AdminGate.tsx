@@ -1,13 +1,11 @@
 "use client";
+import type { ReactNode } from "react";
 import { FaLock, FaSpinner, FaUserShield } from "react-icons/fa";
 import { useUser } from "@/app/components/UserProvider";
 import Button from "@/app/components/ui/Button";
 import StateMessage from "@/app/components/ui/StateMessage";
-import AdminToolGrid from "./AdminToolGrid";
 
-// Kliensoldali kapu: a szerepkör csak a `/me` válaszából derül ki, ezért a
-// tartalom csak akkor renderelődik, ha az megérkezett és admint jelez.
-export default function AdminGate() {
+export default function AdminGate({ children }: { children: ReactNode }) {
   const { user, isAdmin, isLoading } = useUser();
 
   if (isLoading) {
@@ -48,5 +46,5 @@ export default function AdminGate() {
     );
   }
 
-  return <AdminToolGrid />;
+  return children;
 }

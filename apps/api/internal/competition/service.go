@@ -2,7 +2,10 @@ package competition
 
 import (
 	"errors"
+	"log"
+	"net/url"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -11,25 +14,28 @@ import (
 	"golang.org/x/sync/singleflight"
 )
 
-// countryNames maps ISO 3166-1 alpha-2 codes to human-readable country names.
 var countryNames = map[string]string{
 	"HU": "Hungary",
 }
 
-// idPattern matches a WCA competition or event id. Both end up directly in
-// the upstream request path (GetPsychSheet, GetWCIF), so they are validated
-// before use rather than trusted from the client.
 var idPattern = regexp.MustCompile(`^[A-Za-z0-9]{1,64}$`)
 
-// ErrInvalidID is returned when a client-supplied competition or event id
-// fails idPattern.
+var wcaIDPattern = regexp.MustCompile(`^\d{4}[A-Z]{4}\d{2}$`)
+
 var ErrInvalidID = errors.New("invalid id")
 
-// upstreamCacheTTL bounds how long a psych sheet / registrant list is served
-// from memory. The WCA API rate-limits bursts at roughly 15 requests, and a
-// prediction page with a dozen podium events would exceed that on every load
-// without this cache.
+var ErrInvalidQuery = errors.New("invalid search query")
+
 const upstreamCacheTTL = 15 * time.Minute
+
+const registrationCountTTL = time.Minute
+
+const (
+	personDataTTL        = 24 * time.Hour
+	personBatchSize      = 100
+	searchLookback       = 365 * 24 * time.Hour
+	maxSearchQueryLength = 100
+)
 
 type cacheEntry[T any] struct {
 	value T
@@ -39,52 +45,85 @@ type cacheEntry[T any] struct {
 type Service struct {
 	repo Repository
 
-	mu           sync.Mutex
-	upcoming     map[string]cacheEntry[[]Competition]
-	competitions map[string]cacheEntry[Competition]
-	psychSheets  map[string]cacheEntry[[]PsychSheetEntry]
-	competitors  map[string]cacheEntry[[]Competitor]
-	// flight collapses concurrent misses for the same key into one upstream
-	// request — React StrictMode alone doubles every fetch in development.
-	flight singleflight.Group
-	// nextSweep is when the caches are next swept for expired entries.
-	nextSweep time.Time
+	mu            sync.Mutex
+	upcoming      map[string]cacheEntry[[]Competition]
+	competitions  map[string]cacheEntry[Competition]
+	psychSheets   map[string]cacheEntry[[]PsychSheetEntry]
+	registrations map[string]cacheEntry[Registrations]
+	registered    map[string]cacheEntry[int]
+	persons       map[string]cacheEntry[PersonSummary]
+	histories     map[string]cacheEntry[[]PersonCompetition]
+	results       map[string]cacheEntry[[]Result]
+	searches      map[string]cacheEntry[[]Competition]
+	flight        singleflight.Group
+	nextSweep     time.Time
 }
 
 func NewService(repo Repository) *Service {
 	return &Service{
-		repo:         repo,
-		upcoming:     make(map[string]cacheEntry[[]Competition]),
-		competitions: make(map[string]cacheEntry[Competition]),
-		psychSheets:  make(map[string]cacheEntry[[]PsychSheetEntry]),
-		competitors:  make(map[string]cacheEntry[[]Competitor]),
+		repo:          repo,
+		upcoming:      make(map[string]cacheEntry[[]Competition]),
+		competitions:  make(map[string]cacheEntry[Competition]),
+		psychSheets:   make(map[string]cacheEntry[[]PsychSheetEntry]),
+		registrations: make(map[string]cacheEntry[Registrations]),
+		registered:    make(map[string]cacheEntry[int]),
+		persons:       make(map[string]cacheEntry[PersonSummary]),
+		histories:     make(map[string]cacheEntry[[]PersonCompetition]),
+		results:       make(map[string]cacheEntry[[]Result]),
+		searches:      make(map[string]cacheEntry[[]Competition]),
 	}
 }
 
-// GetUpcomingHungarian returns the simplified list of upcoming Hungarian
-// competitions, already sorted by start date by the upstream API. Cached like
-// the rest: it walks every page of the WCA listing (two requests at least),
-// and the home page, the calendar and the prediction modal all read it.
 func (s *Service) GetUpcomingHungarian() ([]Competition, error) {
-	return cached(s, s.upcoming, "upcoming:HU", func() ([]Competition, error) {
+	listed, err := cached(s, s.upcoming, "upcoming:HU", func() ([]Competition, error) {
 		raw, err := s.repo.GetUpcomingByCountry("HU")
 		if err != nil {
 			return nil, err
 		}
-
-		competitions := make([]Competition, 0, len(raw))
-		for _, c := range raw {
-			competitions = append(competitions, toCompetition(c))
-		}
-		return competitions, nil
+		return toCompetitions(raw), nil
 	})
+	if err != nil {
+		return nil, err
+	}
+
+	competitions := slices.Clone(listed)
+	s.addAcceptedCounts(competitions, time.Now())
+	return competitions, nil
 }
 
-// GetCompetition returns one competition by id, whatever its date. Use this —
-// not GetUpcomingHungarian — to describe a competition you already know the id
-// of: the upcoming list drops a competition once it is over, which is exactly
-// when a prediction contest about it is most interesting. ErrNotFound means
-// the WCA does not know the id.
+func (s *Service) addAcceptedCounts(competitions []Competition, now time.Time) {
+	var wg sync.WaitGroup
+	for i := range competitions {
+		competition := &competitions[i]
+		if !registrationOpen(*competition, now) {
+			continue
+		}
+		wg.Go(func() {
+			count, err := cachedFor(s, s.registered, "registered:"+competition.ID, registrationCountTTL, func() (int, error) {
+				return s.repo.GetRegistrationCount(competition.ID)
+			})
+			if err != nil {
+				log.Printf("competition: a %s nevezési létszáma nem kérhető le: %v", competition.ID, err)
+				return
+			}
+			competition.AcceptedCount = &count
+		})
+	}
+	wg.Wait()
+}
+
+func registrationOpen(competition Competition, now time.Time) bool {
+	opens, err := time.Parse(time.RFC3339, competition.RegistrationOpen)
+	if err != nil {
+		return false
+	}
+	closes, err := time.Parse(time.RFC3339, competition.RegistrationClose)
+	if err != nil {
+		return false
+	}
+	return !now.Before(opens) && now.Before(closes)
+}
+
 func (s *Service) GetCompetition(competitionID string) (Competition, error) {
 	if !idPattern.MatchString(competitionID) {
 		return Competition{}, ErrInvalidID
@@ -99,21 +138,60 @@ func (s *Service) GetCompetition(competitionID string) (Competition, error) {
 	})
 }
 
+func (s *Service) SearchCompetitions(query string) ([]Competition, error) {
+	query = strings.TrimSpace(query)
+	if len(query) > maxSearchQueryLength {
+		return nil, ErrInvalidQuery
+	}
+
+	return cached(s, s.searches, "search:"+strings.ToLower(query), func() ([]Competition, error) {
+		params := url.Values{}
+		if query == "" {
+			params.Set("country_iso2", "HU")
+			params.Set("start", time.Now().Add(-searchLookback).Format("2006-01-02"))
+			params.Set("sort", "start_date")
+			params.Set("per_page", "100")
+		} else {
+			params.Set("q", query)
+			params.Set("sort", "-start_date")
+			params.Set("per_page", "25")
+		}
+
+		raw, err := s.repo.SearchCompetitions(params)
+		if err != nil {
+			return nil, err
+		}
+		return toCompetitions(raw), nil
+	})
+}
+
+func toCompetitions(raw []wcaCompetition) []Competition {
+	competitions := make([]Competition, 0, len(raw))
+	for _, c := range raw {
+		competitions = append(competitions, toCompetition(c))
+	}
+	return competitions
+}
+
 func toCompetition(c wcaCompetition) Competition {
 	return Competition{
-		ID:        c.ID,
-		Name:      c.Name,
-		StartDate: c.StartDate,
-		EndDate:   c.EndDate,
-		City:      c.City,
-		Country:   countryName(c.CountryISO2),
-		URL:       c.URL,
-		EventIDs:  c.EventIDs,
+		ID:          c.ID,
+		Name:        c.Name,
+		StartDate:   c.StartDate,
+		EndDate:     c.EndDate,
+		City:        c.City,
+		Country:     countryName(c.CountryISO2),
+		CountryISO2: c.CountryISO2,
+		URL:         c.URL,
+		EventIDs:    c.EventIDs,
+
+		RegistrationOpen:  c.RegistrationOpen,
+		RegistrationClose: c.RegistrationClose,
+		CompetitorLimit:   c.CompetitorLimit,
+		ResultsPostedAt:   c.ResultsPostedAt,
 	}
 }
 
-// countryName resolves an ISO2 code to a readable name, falling back to the
-// code itself when it is not known.
 func countryName(iso2 string) string {
 	if name, ok := countryNames[iso2]; ok {
 		return name
@@ -121,8 +199,6 @@ func countryName(iso2 string) string {
 	return iso2
 }
 
-// GetPsychSheet returns the psych-sheet (PR-ranked start list) for one event
-// of one competition, ordered by position.
 func (s *Service) GetPsychSheet(competitionID, eventID string) ([]PsychSheetEntry, error) {
 	if !idPattern.MatchString(competitionID) || !idPattern.MatchString(eventID) {
 		return nil, ErrInvalidID
@@ -146,42 +222,199 @@ func (s *Service) GetPsychSheet(competitionID, eventID string) ([]PsychSheetEntr
 	})
 }
 
-// GetCompetitors returns every accepted, competing registrant of a
-// competition, sorted by name. Sourced from the public WCIF because the
-// /registrations endpoint only carries user ids, not names.
 func (s *Service) GetCompetitors(competitionID string) ([]Competitor, error) {
-	if !idPattern.MatchString(competitionID) {
-		return nil, ErrInvalidID
+	registrations, err := s.GetRegistrations(competitionID)
+	if err != nil {
+		return nil, err
 	}
 
-	return cached(s, s.competitors, "competitors:"+competitionID, func() ([]Competitor, error) {
+	competitors := make([]Competitor, 0, len(registrations.Registrants))
+	for _, r := range registrations.Registrants {
+		competitors = append(competitors, Competitor{Name: r.Name, WCAID: r.WCAID})
+	}
+	sort.Slice(competitors, func(i, j int) bool {
+		return strings.ToLower(competitors[i].Name) < strings.ToLower(competitors[j].Name)
+	})
+	return competitors, nil
+}
+
+func (s *Service) GetRegistrations(competitionID string) (Registrations, error) {
+	if !idPattern.MatchString(competitionID) {
+		return Registrations{}, ErrInvalidID
+	}
+
+	return cached(s, s.registrations, "registrations:"+competitionID, func() (Registrations, error) {
 		wcif, err := s.repo.GetWCIF(competitionID)
 		if err != nil {
-			return nil, err
+			return Registrations{}, err
 		}
 
-		competitors := make([]Competitor, 0, len(wcif.Persons))
+		registrations := Registrations{
+			EventIDs:    make([]string, 0, len(wcif.Events)),
+			Registrants: make([]Registrant, 0, len(wcif.Persons)),
+		}
+		for _, e := range wcif.Events {
+			registrations.EventIDs = append(registrations.EventIDs, e.ID)
+		}
 		for _, p := range wcif.Persons {
 			if p.Registration == nil || p.Registration.Status != "accepted" || !p.Registration.IsCompeting {
 				continue
 			}
-			competitors = append(competitors, Competitor{Name: p.Name, WCAID: p.WCAID})
+			registrations.Registrants = append(registrations.Registrants, Registrant{
+				WCAUserID:     p.WCAUserID,
+				Name:          p.Name,
+				WCAID:         p.WCAID,
+				CountryISO2:   p.CountryISO2,
+				Gender:        p.Gender,
+				Roles:         p.Roles,
+				EventIDs:      p.Registration.EventIDs,
+				PersonalBests: p.PersonalBests,
+			})
 		}
-		sort.Slice(competitors, func(i, j int) bool {
-			return strings.ToLower(competitors[i].Name) < strings.ToLower(competitors[j].Name)
-		})
-		return competitors, nil
+		return registrations, nil
 	})
 }
 
-// cached serves key from cache while it is fresh, otherwise runs fetch once
-// for all concurrent callers and stores the result. Failures are not cached,
-// so a transient upstream error is retried on the next request.
+func (s *Service) GetBirthdates(competitionID, accessToken string) (map[int]string, error) {
+	if !idPattern.MatchString(competitionID) {
+		return nil, ErrInvalidID
+	}
+
+	wcif, err := s.repo.GetPrivateWCIF(competitionID, accessToken)
+	if err != nil {
+		return nil, err
+	}
+
+	birthdates := make(map[int]string, len(wcif.Persons))
+	for _, p := range wcif.Persons {
+		if p.Registration == nil || p.Registration.Status != "accepted" || !p.Registration.IsCompeting || p.Birthdate == "" {
+			continue
+		}
+		birthdates[p.WCAUserID] = p.Birthdate
+	}
+	return birthdates, nil
+}
+
+func (s *Service) GetPersonSummaries(wcaIDs []string) (map[string]PersonSummary, error) {
+	summaries := make(map[string]PersonSummary, len(wcaIDs))
+	missing := make([]string, 0)
+	seen := make(map[string]bool, len(wcaIDs))
+
+	now := time.Now()
+	s.mu.Lock()
+	for _, id := range wcaIDs {
+		if seen[id] || !wcaIDPattern.MatchString(id) {
+			continue
+		}
+		seen[id] = true
+		if entry, ok := s.persons[id]; ok && now.Sub(entry.at) < personDataTTL {
+			summaries[id] = entry.value
+			continue
+		}
+		missing = append(missing, id)
+	}
+	s.mu.Unlock()
+
+	for start := 0; start < len(missing); start += personBatchSize {
+		chunk := missing[start:min(start+personBatchSize, len(missing))]
+		raw, err := s.repo.GetPersons(chunk)
+		if err != nil {
+			return summaries, err
+		}
+
+		s.mu.Lock()
+		s.sweepLocked()
+		for _, p := range raw {
+			summary := PersonSummary{
+				WCAID:            p.Person.WCAID,
+				CompetitionCount: p.CompetitionCount,
+				Medals:           p.Medals,
+				Records:          p.Records,
+				TotalSolves:      p.TotalSolves,
+			}
+			s.persons[summary.WCAID] = cacheEntry[PersonSummary]{value: summary, at: time.Now()}
+			summaries[summary.WCAID] = summary
+		}
+		s.mu.Unlock()
+	}
+	return summaries, nil
+}
+
+func (s *Service) GetPersonCompetitions(wcaID string) ([]PersonCompetition, error) {
+	if !wcaIDPattern.MatchString(wcaID) {
+		return nil, ErrInvalidID
+	}
+
+	return cachedFor(s, s.histories, "history:"+wcaID, personDataTTL, func() ([]PersonCompetition, error) {
+		raw, err := s.repo.GetPersonCompetitions(wcaID)
+		if err != nil {
+			return nil, err
+		}
+
+		competitions := make([]PersonCompetition, 0, len(raw))
+		for _, c := range raw {
+			competitions = append(competitions, PersonCompetition{
+				ID:          c.ID,
+				Name:        c.Name,
+				StartDate:   c.StartDate,
+				EndDate:     c.EndDate,
+				CountryISO2: c.CountryISO2,
+			})
+		}
+		sort.SliceStable(competitions, func(i, j int) bool {
+			return competitions[i].StartDate < competitions[j].StartDate
+		})
+		return competitions, nil
+	})
+}
+
+func (s *Service) GetResults(competitionID string) ([]Result, error) {
+	if !idPattern.MatchString(competitionID) {
+		return nil, ErrInvalidID
+	}
+
+	return cached(s, s.results, "results:"+competitionID, func() ([]Result, error) {
+		raw, err := s.repo.GetResults(competitionID)
+		if err != nil {
+			return nil, err
+		}
+
+		results := make([]Result, 0, len(raw))
+		for _, r := range raw {
+			results = append(results, Result{
+				WCAID:         r.WCAID,
+				Name:          r.Name,
+				CountryISO2:   r.CountryISO2,
+				EventID:       r.EventID,
+				RoundTypeID:   r.RoundTypeID,
+				Pos:           r.Pos,
+				Best:          r.Best,
+				Average:       r.Average,
+				Attempts:      r.Attempts,
+				SingleRecord:  stringValue(r.RegionalSingleRecord),
+				AverageRecord: stringValue(r.RegionalAverageRecord),
+			})
+		}
+		return results, nil
+	})
+}
+
+func stringValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
 func cached[T any](s *Service, cache map[string]cacheEntry[T], key string, fetch func() (T, error)) (T, error) {
+	return cachedFor(s, cache, key, upstreamCacheTTL, fetch)
+}
+
+func cachedFor[T any](s *Service, cache map[string]cacheEntry[T], key string, ttl time.Duration, fetch func() (T, error)) (T, error) {
 	s.mu.Lock()
 	entry, ok := cache[key]
 	s.mu.Unlock()
-	if ok && time.Since(entry.at) < upstreamCacheTTL {
+	if ok && time.Since(entry.at) < ttl {
 		return entry.value, nil
 	}
 
@@ -203,9 +436,6 @@ func cached[T any](s *Service, cache map[string]cacheEntry[T], key string, fetch
 	return value.(T), nil
 }
 
-// sweepLocked drops expired entries from every cache, at most once per TTL.
-// The keys are client-supplied ids, so without it every id anyone ever asked
-// about would stay in memory for the life of the process.
 func (s *Service) sweepLocked() {
 	now := time.Now()
 	if now.Before(s.nextSweep) {
@@ -213,15 +443,20 @@ func (s *Service) sweepLocked() {
 	}
 	s.nextSweep = now.Add(upstreamCacheTTL)
 
-	sweep(s.upcoming, now)
-	sweep(s.competitions, now)
-	sweep(s.psychSheets, now)
-	sweep(s.competitors, now)
+	sweep(s.upcoming, now, upstreamCacheTTL)
+	sweep(s.competitions, now, upstreamCacheTTL)
+	sweep(s.psychSheets, now, upstreamCacheTTL)
+	sweep(s.registrations, now, upstreamCacheTTL)
+	sweep(s.registered, now, upstreamCacheTTL)
+	sweep(s.results, now, upstreamCacheTTL)
+	sweep(s.searches, now, upstreamCacheTTL)
+	sweep(s.persons, now, personDataTTL)
+	sweep(s.histories, now, personDataTTL)
 }
 
-func sweep[T any](cache map[string]cacheEntry[T], now time.Time) {
+func sweep[T any](cache map[string]cacheEntry[T], now time.Time, ttl time.Duration) {
 	for key, entry := range cache {
-		if now.Sub(entry.at) >= upstreamCacheTTL {
+		if now.Sub(entry.at) >= ttl {
 			delete(cache, key)
 		}
 	}

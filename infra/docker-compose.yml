@@ -1,21 +1,7 @@
-# Base stack shared by every environment.
-# Always combine with exactly one environment override + its env file:
-#
-#   dev  : docker compose -f infra/docker-compose.yml -f infra/docker-compose.dev.yml  --env-file .env.dev  up
-#   test : docker compose -f infra/docker-compose.yml -f infra/docker-compose.test.yml --env-file .env.test up -d --build
-#   prod : docker compose -f infra/docker-compose.yml -f infra/docker-compose.prod.yml --env-file .env.prod up -d --build
-#
-# This base file defines structure only — all values come from the --env-file.
-# With no build target selected it builds the final (production) image stages;
-# docker-compose.dev.yml switches the api/web builds to their `dev` stages.
-
 services:
   db:
     image: postgres:17
     environment:
-      # The postgres image needs its own POSTGRES_* names for first-run init;
-      # sourced from the same DB_* values the api/weekly-report use, so there is
-      # one place (DB_USER/DB_PASSWORD/DB_NAME in the env file) to change.
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${DB_NAME}
@@ -43,16 +29,9 @@ services:
       WCA_REDIRECT_URI: ${WCA_REDIRECT_URI}
       DATABASE_URL: ${DATABASE_URL}
       JWT_SECRET: ${JWT_SECRET}
-      # Optional — empty falls back to the public WCA Live instance.
       WCA_LIVE_URL: ${WCA_LIVE_URL:-}
     volumes:
-      # Uploaded post images. A named volume so they survive image rebuilds and
-      # `up --build` deploys. Mounted at /data/uploads (NOT /app/uploads) because
-      # the dev override bind-mounts the source tree over /app, which would
-      # shadow it. Matches config.UploadDir's default.
       - uploads_data:/data/uploads
-    # No host port published here: in test/prod only Caddy reaches the api over
-    # the internal network. The dev override re-publishes it for localhost work.
     networks: [appnet]
 
   web:
@@ -65,21 +44,8 @@ services:
       NODE_ENV: ${NODE_ENV}
       SERVER_API_URL: ${SERVER_API_URL}
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
-    # No host port published here either; Caddy fronts it in test/prod and the
-    # dev override re-publishes it for localhost work.
     networks: [appnet]
 
-  # Weekly-report email job. Not part of the always-on stack — it lives behind
-  # the `jobs` profile so a normal `up` never starts it. Run it on demand with
-  # the same --env-file model as the other services:
-  #
-  #   docker compose -f infra/docker-compose.yml -f infra/docker-compose.test.yml \
-  #     --env-file .env.test --profile jobs run --rm weekly-report
-  #
-  # It reads the SHARED db over the internal network (DB_HOST=db) and sends mail
-  # to EMAIL_TO — point that at a fixed test inbox outside production. The EMAIL_*
-  # vars default to empty so the main stack stays warning-free; the job validates
-  # them fail-fast at runtime (config.py) when actually invoked.
   weekly-report:
     build:
       context: ../apps/scripts/weekly-report
@@ -101,9 +67,6 @@ services:
     restart: "no"
     networks: [appnet]
 
-  # Reverse proxy / automatic HTTPS (Let's Encrypt). Only runs where the
-  # `proxy` profile is enabled (test/prod set COMPOSE_PROFILES=proxy in their
-  # env file); dev never activates it and keeps using plain http://localhost.
   caddy:
     image: caddy:2-alpine
     profiles: [proxy]
@@ -111,8 +74,6 @@ services:
       - web
       - api
     environment:
-      # Defaults keep dev quiet (Caddy isn't started there); test/prod set these.
-      # Single domain: the API is path-routed under WEB_DOMAIN/api (see Caddyfile).
       WEB_DOMAIN: ${WEB_DOMAIN:-}
       ACME_EMAIL: ${ACME_EMAIL:-}
     ports:

@@ -35,7 +35,6 @@ type createContestRequest struct {
 	ExtraQuestions     []NewExtraQuestion `json:"extraQuestions"`
 }
 
-// CreateContest handles POST /predictions.
 func (h *Handler) CreateContest(w http.ResponseWriter, r *http.Request) {
 	user := middleware.GetUserFromContext(r)
 	if user == nil {
@@ -63,7 +62,6 @@ func (h *Handler) CreateContest(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusCreated)
 }
 
-// DeleteContest handles DELETE /predictions/{id}.
 func (h *Handler) DeleteContest(w http.ResponseWriter, r *http.Request) {
 	if err := h.service.DeleteContest(chi.URLParam(r, "id")); err != nil {
 		httperr.Write(w, r, errorStatus(err), err)

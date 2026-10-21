@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -44,7 +45,6 @@ func signHS256(t *testing.T, claims UserClaims, secret string) string {
 	return token
 }
 
-// requestWithToken egy kérés az `auth` sütivel.
 func requestWithToken(token string) *http.Request {
 	req := httptest.NewRequest(http.MethodGet, "/me", nil)
 	if token != "" {
@@ -53,8 +53,24 @@ func requestWithToken(token string) *http.Request {
 	return req
 }
 
-// run lefuttatja a middleware-t; a visszaadott claims nil, ha a kérés elbukott.
+type stubSessions struct {
+	session Session
+	err     error
+}
+
+func (s stubSessions) GetSession(context.Context, int) (Session, error) {
+	return s.session, s.err
+}
+
+func currentSession() stubSessions {
+	return stubSessions{session: Session{Version: 0, Roles: []types.Role{types.ROLE_USER}}}
+}
+
 func run(cfg *config.Config, req *http.Request) (*httptest.ResponseRecorder, *UserClaims) {
+	return runWith(cfg, currentSession(), req)
+}
+
+func runWith(cfg *config.Config, sessions SessionStore, req *http.Request) (*httptest.ResponseRecorder, *UserClaims) {
 	var seen *UserClaims
 
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -63,9 +79,48 @@ func run(cfg *config.Config, req *http.Request) (*httptest.ResponseRecorder, *Us
 	})
 
 	w := httptest.NewRecorder()
-	AuthMiddlewareWithConfig(cfg)(next).ServeHTTP(w, req)
+	AuthMiddlewareWithConfig(cfg, sessions)(next).ServeHTTP(w, req)
 
 	return w, seen
+}
+
+func TestAuthMiddleware_RolesComeFromTheDatabaseNotTheToken(t *testing.T) {
+	claims := validClaims()
+	claims.Roles = []types.Role{types.ROLE_USER, types.ROLE_ADMIN}
+
+	w, seen := runWith(testCfg(), currentSession(), requestWithToken(signHS256(t, claims, testSecret)))
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, []types.Role{types.ROLE_USER}, seen.Roles,
+		"az elvett admin jog azonnal hat, nem csak a 12 órás token lejártakor")
+}
+
+func TestAuthMiddleware_RejectsRevokedOrUnknownSessions(t *testing.T) {
+	token := signHS256(t, validClaims(), testSecret)
+
+	tests := []struct {
+		name     string
+		sessions stubSessions
+		expected int
+	}{
+		{
+			name:     "kijelentkezés után nagyobb a verzió",
+			sessions: stubSessions{session: Session{Version: 1, Roles: []types.Role{types.ROLE_USER}}},
+			expected: http.StatusUnauthorized,
+		},
+		{name: "törölt felhasználó", sessions: stubSessions{err: ErrSessionNotFound}, expected: http.StatusUnauthorized},
+		{name: "adatbázishiba", sessions: stubSessions{err: errors.New("pq: connection refused")}, expected: http.StatusInternalServerError},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w, seen := runWith(testCfg(), tt.sessions, requestWithToken(token))
+
+			assert.Equal(t, tt.expected, w.Code)
+			assert.Nil(t, seen, "a védett handler nem futhatott le")
+			assert.NotContains(t, w.Body.String(), "pq:", "a belső hiba szövege nem jut ki")
+		})
+	}
 }
 
 func TestAuthMiddleware_ValidToken(t *testing.T) {
@@ -82,13 +137,9 @@ func TestAuthMiddleware_Rejects(t *testing.T) {
 	expired := validClaims()
 	expired.ExpiresAt = jwt.NewNumericDate(time.Now().Add(-time.Minute))
 
-	// ⚠️ A golang-jwt alapértelmezésben ÉRVÉNYESNEK veszi az `exp` nélküli
-	// tokent — az örök életű munkamenet lenne. A middleware ezért
-	// WithExpirationRequired-del parse-ol.
 	noExpiry := validClaims()
 	noExpiry.ExpiresAt = nil
 
-	// Jövőbeli `nbf`: a token még nem lépett életbe.
 	notYetValid := validClaims()
 	notYetValid.NotBefore = jwt.NewNumericDate(time.Now().Add(time.Hour))
 
@@ -115,8 +166,6 @@ func TestAuthMiddleware_Rejects(t *testing.T) {
 	}
 }
 
-// ⚠️ ALG-CONFUSION. A "none" algoritmusú token aláírás nélkül érkezik; ha a
-// könyvtár elfogadná, bárki gyárthatna tetszőleges (akár admin) claimset.
 func TestAuthMiddleware_RejectsNoneAlgorithm(t *testing.T) {
 	claims := validClaims()
 	claims.Roles = []types.Role{types.ROLE_ADMIN}
@@ -131,9 +180,6 @@ func TestAuthMiddleware_RejectsNoneAlgorithm(t *testing.T) {
 	assert.Nil(t, seen)
 }
 
-// ⚠️ ALG-CONFUSION, a másik irány: RS256-tal aláírt token. Ha a middleware nem
-// szűkítené HMAC-re, a könyvtár a HMAC titkot RSA PUBLIKUS kulcsként
-// értelmezhetné — klasszikus token-hamisítási út.
 func TestAuthMiddleware_RejectsRSAToken(t *testing.T) {
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
@@ -193,7 +239,6 @@ func TestRBACMiddleware(t *testing.T) {
 	}
 }
 
-// requestWithClaims a context-be teszi a claimset, ahogy az auth middleware tenné.
 func requestWithClaims(req *http.Request, claims *UserClaims) (*http.Request, *UserClaims) {
 	return req.WithContext(context.WithValue(req.Context(), userContextKey, claims)), claims
 }

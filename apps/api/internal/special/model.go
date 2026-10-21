@@ -15,8 +15,6 @@ type Competition struct {
 	CountryISO2       string `json:"countryIso2,omitempty"`
 }
 
-// RecordedTime egy DNF-kísérlet emberileg rögzített tényleges ideje. A jegyzet,
-// a rögzítő és az időpont csak auditnak kerül a DB-be, a riport nem használja.
 type RecordedTime struct {
 	LiveResultID  int
 	AttemptNumber int

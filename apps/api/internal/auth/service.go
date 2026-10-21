@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"speedcubinghungary/internal/config"
@@ -17,31 +18,28 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// A WCA OAuth végpontjai. Nem env-változók: a WCA egyetlen ismert példány, a
-// tesztek pedig a service mezőit írják felül (lásd service_test.go).
 const (
 	wcaAuthorizeURL = "https://www.worldcubeassociation.org/oauth/authorize"
 	wcaTokenURL     = "https://www.worldcubeassociation.org/oauth/token"
 	wcaMeURL        = "https://www.worldcubeassociation.org/api/v0/me"
 
-	// wcaScopes: CSAK a bejelentkezéshez szükséges jogok — a WCA access tokent
-	// egyetlen /me hívásra használjuk, majd eldobjuk. Bővebb scope-ot (pl.
-	// `manage_competitions`) csak akkor kérj, ha van is ilyen hívás.
 	wcaScopes = "public email"
 
-	// tokenLifetime a saját JWT-nk élettartama; a cookie MaxAge-e ehhez igazodik.
-	tokenLifetime = time.Hour
+	tokenLifetime = 12 * time.Hour
 
 	upstreamTimeout = 10 * time.Second
-	maxUpstreamBody = 1 << 20 // 1 MiB
+	maxUpstreamBody = 1 << 20
 )
 
 type Service interface {
-	// AuthorizeURL a WCA bejelentkező oldalának URL-je a megadott CSRF nonce-szal.
 	AuthorizeURL(state string) string
-	// LoginCallback beváltja a WCA authorization code-ot, felveszi/frissíti a
-	// felhasználót, és visszaadja a saját JWT-nket.
 	LoginCallback(ctx context.Context, code string) (string, error)
+	Logout(ctx context.Context, userID int) error
+	GetSession(ctx context.Context, userID int) (middleware.Session, error)
+	GrantAuthorizeURL(state string) string
+	CompleteGrant(ctx context.Context, userID int, code string) error
+	WCAAccessToken(ctx context.Context, userID int) (string, error)
+	RevokeGrant(ctx context.Context, userID int) error
 }
 
 type service struct {
@@ -51,6 +49,8 @@ type service struct {
 	authorizeURL string
 	tokenURL     string
 	meURL        string
+
+	grantMu sync.Mutex
 }
 
 func NewService(repo Repository, cfg *config.Config) Service {
@@ -65,18 +65,20 @@ func NewService(repo Repository, cfg *config.Config) Service {
 }
 
 func (s *service) AuthorizeURL(state string) string {
+	return s.buildAuthorizeURL(state, wcaScopes)
+}
+
+func (s *service) buildAuthorizeURL(state, scopes string) string {
 	query := url.Values{}
 	query.Set("client_id", s.cfg.WCAClientID)
-	// Egyeznie kell a token-beváltáskor küldöttel, különben a WCA elutasítja.
 	query.Set("redirect_uri", s.cfg.WCARedirectURI)
 	query.Set("response_type", "code")
-	query.Set("scope", wcaScopes)
+	query.Set("scope", scopes)
 	query.Set("state", state)
 
 	return s.authorizeURL + "?" + query.Encode()
 }
 
-// wcaUser a WCA /api/v0/me válaszának általunk használt része.
 type wcaUser struct {
 	ID     int    `json:"id"`
 	WCAID  string `json:"wca_id"`
@@ -88,12 +90,12 @@ type wcaUser struct {
 }
 
 func (s *service) LoginCallback(ctx context.Context, code string) (string, error) {
-	accessToken, err := s.exchangeCode(ctx, code)
+	tokens, err := s.exchangeCode(ctx, code)
 	if err != nil {
 		return "", err
 	}
 
-	wca, err := s.fetchMe(ctx, accessToken)
+	wca, err := s.fetchMe(ctx, tokens.AccessToken)
 	if err != nil {
 		return "", err
 	}
@@ -103,7 +105,7 @@ func (s *service) LoginCallback(ctx context.Context, code string) (string, error
 		Name:      wca.Name,
 		Email:     wca.Email,
 		AvatarURL: wca.Avatar.URL,
-		Roles:     []types.Role{types.ROLE_USER}, // Csak új usernél számít (lásd repository.Upsert)
+		Roles:     []types.Role{types.ROLE_USER},
 	})
 	if err != nil {
 		return "", err
@@ -112,52 +114,63 @@ func (s *service) LoginCallback(ctx context.Context, code string) (string, error
 	return s.signToken(user)
 }
 
-// exchangeCode az authorization code-ot WCA access tokenre váltja.
-func (s *service) exchangeCode(ctx context.Context, code string) (string, error) {
+type tokenResponse struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	ExpiresIn    int    `json:"expires_in"`
+	Scope        string `json:"scope"`
+}
+
+type tokenStatusError struct {
+	status int
+}
+
+func (e *tokenStatusError) Error() string {
+	return fmt.Sprintf("WCA token endpoint returned status %d", e.status)
+}
+
+func (s *service) exchangeCode(ctx context.Context, code string) (*tokenResponse, error) {
 	form := url.Values{}
-	form.Set("client_id", s.cfg.WCAClientID)
-	form.Set("client_secret", s.cfg.WCAClientSecret)
 	form.Set("grant_type", "authorization_code")
 	form.Set("code", code)
 	form.Set("redirect_uri", s.cfg.WCARedirectURI)
+	return s.requestToken(ctx, form)
+}
+
+func (s *service) requestToken(ctx context.Context, form url.Values) (*tokenResponse, error) {
+	form.Set("client_id", s.cfg.WCAClientID)
+	form.Set("client_secret", s.cfg.WCAClientSecret)
 
 	req, err := http.NewRequestWithContext(
 		ctx, http.MethodPost, s.tokenURL, strings.NewReader(form.Encode()),
 	)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("WCA token exchange failed: %w", err)
+		return nil, fmt.Errorf("WCA token request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
-	// ⚠️ EZ A LÉPÉS NEM HAGYHATÓ KI. Enélkül egy 4xx válasz törzse is simán
-	// dekódolódik (csak minden mező üres marad), a folyamat végigfut, és a végén
-	// ÉRVÉNYES munkamenet-sütit állítanánk ki egy olyan kérésre, ami sosem járt a
-	// WCA-nál — azaz bárki bejelentkezhetne egy kitalált `code`-dal.
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("WCA token exchange returned status %d", resp.StatusCode)
+		return nil, &tokenStatusError{status: resp.StatusCode}
 	}
 
-	var tokenResp struct {
-		AccessToken string `json:"access_token"`
-	}
-	if err := decodeJSON(resp.Body, &tokenResp); err != nil {
-		return "", fmt.Errorf("WCA token response is not valid JSON: %w", err)
+	var tokens tokenResponse
+	if err := decodeJSON(resp.Body, &tokens); err != nil {
+		return nil, fmt.Errorf("WCA token response is not valid JSON: %w", err)
 	}
 
-	if tokenResp.AccessToken == "" {
-		return "", fmt.Errorf("WCA token response contained no access_token")
+	if tokens.AccessToken == "" {
+		return nil, fmt.Errorf("WCA token response contained no access_token")
 	}
 
-	return tokenResp.AccessToken, nil
+	return &tokens, nil
 }
 
-// fetchMe lekéri a bejelentkezett WCA felhasználó adatait.
 func (s *service) fetchMe(ctx context.Context, accessToken string) (*wcaUser, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.meURL, nil)
 	if err != nil {
@@ -171,8 +184,6 @@ func (s *service) fetchMe(ctx context.Context, accessToken string) (*wcaUser, er
 	}
 	defer resp.Body.Close()
 
-	// Ugyanaz az indok, mint a token-beváltásnál: egy 401-es JSON törzs is
-	// "sikeresen" dekódolódna, csak üres felhasználót adna.
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("WCA /me returned status %d", resp.StatusCode)
 	}
@@ -184,28 +195,23 @@ func (s *service) fetchMe(ctx context.Context, accessToken string) (*wcaUser, er
 		return nil, fmt.Errorf("WCA /me response is not valid JSON: %w", err)
 	}
 
-	// A felhasználó azonosítója a wca_id — ez a users tábla UNIQUE kulcsa és a
-	// jogosultságok hordozója. Üres értékkel NEM hozunk létre/keresünk sort:
-	// abból egyetlen, mindenki által osztott "szellemfelhasználó" lenne.
 	if strings.TrimSpace(body.Me.WCAID) == "" {
-		// Van WCA-fiók wca_id nélkül (aki még sosem versenyzett), ezért ez nem
-		// feltétlenül támadás — de bejelentkezni sem tud nálunk.
 		return nil, fmt.Errorf("the WCA account has no WCA ID")
 	}
 
 	return &body.Me, nil
 }
 
-// signToken kiállítja a saját JWT-nket a felhasználóra.
 func (s *service) signToken(user *User) (string, error) {
 	now := time.Now()
 
 	claims := middleware.UserClaims{
-		UserID:    user.ID,
-		WCAID:     user.WCAID,
-		Name:      user.Name,
-		AvatarURL: user.AvatarURL,
-		Roles:     user.Roles,
+		UserID:         user.ID,
+		WCAID:          user.WCAID,
+		Name:           user.Name,
+		AvatarURL:      user.AvatarURL,
+		Roles:          user.Roles,
+		SessionVersion: user.SessionVersion,
 		RegisteredClaims: jwt.RegisteredClaims{
 			IssuedAt:  jwt.NewNumericDate(now),
 			NotBefore: jwt.NewNumericDate(now),
@@ -218,7 +224,14 @@ func (s *service) signToken(user *User) (string, error) {
 	return token.SignedString([]byte(s.cfg.JWTSecret))
 }
 
-// decodeJSON korlátozott méretű JSON-t olvas be.
 func decodeJSON(body io.Reader, out any) error {
 	return json.NewDecoder(io.LimitReader(body, maxUpstreamBody)).Decode(out)
+}
+
+func (s *service) Logout(ctx context.Context, userID int) error {
+	return s.repo.RevokeSessions(ctx, userID)
+}
+
+func (s *service) GetSession(ctx context.Context, userID int) (middleware.Session, error) {
+	return s.repo.GetSession(ctx, userID)
 }

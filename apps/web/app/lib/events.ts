@@ -1,7 +1,3 @@
-/**
- * WCA versenyszám-azonosító → magyar név, a WCA saját sorrendjében. Közös az
- * összes tool számára — ne másold le egy toolba.
- */
 const EVENT_NAMES: Record<string, string> = {
   "222": "2x2x2",
   "333": "3x3x3",
@@ -20,9 +16,9 @@ const EVENT_NAMES: Record<string, string> = {
   "444bf": "4x4x4 vakon",
   "555bf": "5x5x5 vakon",
   "333mbf": "3x3x3 többkockás vakon",
+  "333mbo": "3x3x3 többkockás vakon (régi)",
 };
 
-/** Ismeretlen azonosítóra önmagát adja vissza — a WCA bővítheti a listát. */
 export function eventName(eventId: string): string {
   return EVENT_NAMES[eventId] ?? eventId;
 }

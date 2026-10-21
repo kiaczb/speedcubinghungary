@@ -352,12 +352,6 @@ func TestSocketClient_Unsubscribe(t *testing.T) {
 	assert.Equal(t, []string{"round:2"}, client.Subscriptions())
 }
 
-// ⚠️ A kulcs helyi törlése NEM lemondás. Az Unsubscribe korábban csak a saját
-// specs map-jéből vette ki a kulcsot, a WCA Live viszont mit sem tudott róla, és
-// a kapcsolat végéig tovább küldte az adott kör roundUpdated eseményeit. Ez a
-// `special`-ben azt jelentette, hogy egy rég elhagyott verseny köreinek forgalma
-// addig terhelte a socketet, amíg legalább EGY másik verseny nézője nyitva
-// tartotta a kapcsolatot.
 func TestSocketClient_UnsubscribeTellsWCALive(t *testing.T) {
 	fake := newFakeLiveSocket(t)
 	client := NewSocketClient(fake.baseURL())
@@ -387,8 +381,6 @@ func TestSocketClient_UnsubscribeTellsWCALive(t *testing.T) {
 	assert.Len(t, queries, 2, "a lemondás nem indít újra feliratkozást")
 }
 
-// A lemondás után érkező eseményt el KELL dobni: a topic→kulcs leképezés
-// megszűnik, így az upstream késlekedő keretei nem jutnak el a feature-höz.
 func TestSocketClient_DropsEventsAfterUnsubscribe(t *testing.T) {
 	const topic = "__absinthe__:doc:global:7"
 
@@ -426,8 +418,6 @@ func TestSocketClient_DropsEventsAfterUnsubscribe(t *testing.T) {
 			case eventUnsubscribe:
 				fake.reply(ctx, conn, msg, map[string]any{"subscriptionId": topic})
 
-				// Egy még úton lévő esemény a lemondás UTÁN — pont ez az, amit
-				// a kliensnek el kell dobnia.
 				_ = fake.push(ctx, conn, topic, map[string]any{
 					"roundUpdated": map[string]any{"id": "7"},
 				})
@@ -446,8 +436,6 @@ func TestSocketClient_DropsEventsAfterUnsubscribe(t *testing.T) {
 	client.Subscribe("round:7", testSubscriptionDoc, map[string]any{"id": "7"})
 	go client.Run(ctx)
 
-	// Előbb meg kell várni a feliratkozás visszaigazolását: enélkül nincs
-	// subscriptionId, amit le lehetne mondani (és nem is lenne mit).
 	waitForSignal(t, subscribed, "a feliratkozás nem ért ki")
 
 	client.Unsubscribe("round:7")

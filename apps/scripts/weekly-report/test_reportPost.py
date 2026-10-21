@@ -1,15 +1,3 @@
-"""A heti riport → Post publikálás tesztjei.
-
-Futtatás:
-    cd apps/scripts/weekly-report
-    pip install -r requirements-dev.txt
-    python -m pytest
-
-Az itteni logika DB nélkül tesztelhető: az idempotencia-kulcs számítása és a
-sablonrenderelés tiszta függvények (a tényleges INSERT-et a Postgres UNIQUE
-megszorítása védi, lásd db/migrations/000003).
-"""
-
 import json
 from datetime import date, datetime, timedelta
 from types import SimpleNamespace
@@ -20,15 +8,13 @@ from reportData import BuildReportData
 from reportPost import BuildTitle, RenderPostContent, WeekStart
 
 
-# --- Idempotencia-kulcs (a hét hétfője) ---------------------------------------
-
 @pytest.mark.parametrize(
     "today,expected_monday",
     [
-        (date(2026, 7, 20), date(2026, 7, 20)),  # hétfő
-        (date(2026, 7, 24), date(2026, 7, 20)),  # péntek
-        (date(2026, 7, 26), date(2026, 7, 20)),  # vasárnap
-        (date(2026, 7, 27), date(2026, 7, 27)),  # a következő hét hétfője
+        (date(2026, 7, 20), date(2026, 7, 20)),
+        (date(2026, 7, 24), date(2026, 7, 20)),
+        (date(2026, 7, 26), date(2026, 7, 20)),
+        (date(2026, 7, 27), date(2026, 7, 27)),
     ],
 )
 def test_week_start_returns_monday(today, expected_monday):
@@ -36,9 +22,6 @@ def test_week_start_returns_monday(today, expected_monday):
 
 
 def test_same_week_yields_same_key():
-    """Ez a tényleges idempotencia-garancia: a héten belül bármikor futva
-    ugyanaz a kulcs keletkezik, így a második INSERT ütközik és nem hoz létre
-    újabb posztot."""
     days = [date(2026, 7, 20), date(2026, 7, 22), date(2026, 7, 26)]
 
     assert {WeekStart(d) for d in days} == {date(2026, 7, 20)}
@@ -49,10 +32,8 @@ def test_consecutive_weeks_yield_different_keys():
 
 
 def test_build_title_shows_the_actual_queried_period():
-    """A cím a TÉNYLEGES lekérdezett ablakot mutassa (gördülő 7 nap), ne a
-    naptári hetet — különben olyan napokat állítana, amikre nincs is adat."""
-    period_end = datetime(2026, 7, 24)  # péntek
-    period_start = period_end - timedelta(weeks=1)  # előző péntek
+    period_end = datetime(2026, 7, 24)
+    period_start = period_end - timedelta(weeks=1)
 
     title = BuildTitle(period_start, period_end)
 
@@ -61,18 +42,14 @@ def test_build_title_shows_the_actual_queried_period():
 
 
 def test_build_title_does_not_claim_the_calendar_week():
-    """Regresszió: a cím korábban a naptári hetet (hétfő-vasárnap) írta ki, ami
-    egy pénteki futásnál a jövőbe is belógott."""
-    period_end = datetime(2026, 7, 24)  # péntek; a naptári hét vasárnapja 07. 26.
+    period_end = datetime(2026, 7, 24)
     period_start = period_end - timedelta(weeks=1)
 
     title = BuildTitle(period_start, period_end)
 
-    assert "2026. 07. 26." not in title  # a jövőbeli vasárnap nem jelenhet meg
-    assert "2026. 07. 20." not in title  # a naptári hét hétfője sem
+    assert "2026. 07. 26." not in title
+    assert "2026. 07. 20." not in title
 
-
-# --- JSON payload renderelés --------------------------------------------------
 
 def _competition(name="Miskolc Open 2026", iso="HU", competitors=None):
     return SimpleNamespace(
@@ -93,12 +70,11 @@ def _competitor(name="Teszt Elek", records=None):
 
 
 def test_render_content_is_valid_json():
-    """A riport content JSON (a frontend WeeklyReportView komponense rendereli)."""
     content = RenderPostContent(
         {"competitions": [], "count_competitors": [], "delegate_milestones": []}
     )
 
-    payload = json.loads(content)  # nem dobhat
+    payload = json.loads(content)
     assert payload == {
         "competitions": [],
         "competitorMilestones": [],
@@ -141,8 +117,6 @@ def test_render_content_includes_results_and_milestones():
 
 
 def test_every_competitor_included_even_without_records():
-    """A user kérése: MINDEN versenyző jelenjen meg, ne csak a rekordosok. A
-    rekord nélküli versenyző neve is bekerül, üres results-szal."""
     content = RenderPostContent({
         "competitions": [
             _competition(competitors=[
@@ -158,15 +132,11 @@ def test_every_competitor_included_even_without_records():
     names = [c["name"] for c in competitors]
 
     assert names == ["Rekorder", "Nincs rekordja"]
-    assert competitors[0]["results"]  # a rekordosnak van eredménye
-    assert competitors[1]["results"] == []  # a rekord nélkülinek üres, de ott a neve
+    assert competitors[0]["results"]
+    assert competitors[1]["results"] == []
 
-
-# --- BuildReportData: nincs szűrés, minden versenyző marad --------------------
 
 def test_build_report_data_keeps_all_competitors(monkeypatch):
-    """A BuildReportData ne szűrjön rekordra — a rekord nélküli versenyzők is
-    maradjanak (a mérföldkő-lekérdezéseket kimockoljuk, hogy ne hívjanak DB-t)."""
     import reportData
 
     monkeypatch.setattr(reportData, "GetImportantCompetitors", lambda: [])
@@ -180,7 +150,6 @@ def test_build_report_data_keeps_all_competitors(monkeypatch):
     data = BuildReportData([comp])
 
     assert data["competitions"] == [comp]
-    # A versenyzőlista érintetlen — semmit nem szűrtünk ki.
     assert [c.CompetitorName for c in data["competitions"][0].CompetitorWithRecords] == [
         "Rekorder",
         "Nincs rekordja",

@@ -1,4 +1,2 @@
-# Fejlesztői/teszt függőségek. A futtató Docker image csak a requirements.txt-t
-# telepíti, hogy ne hízzon a teszteszközökkel.
 -r requirements.txt
 pytest==8.3.4

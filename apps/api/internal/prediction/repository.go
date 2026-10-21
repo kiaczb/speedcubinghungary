@@ -9,18 +9,13 @@ import (
 	"github.com/lib/pq"
 )
 
-// contestRow a prediction_contests tábla nyers sora — a WCA-tól jövő
-// verseny-metaadatokat (név, város, dátum) NEM tartalmazza, azokat a
-// service tölti fel a competition csomagból (lásd service.go).
 type contestRow struct {
 	ID                 string
 	CompetitionWCAID   string
 	PredictionDeadline time.Time
-	// CreatedBy a létrehozó admin users.id-ja — csak íráskor töltjük.
-	CreatedBy int
+	CreatedBy          int
 }
 
-// extraQuestionRow a prediction_extra_questions tábla nyers sora.
 type extraQuestionRow struct {
 	ID        string
 	ContestID string
@@ -68,8 +63,6 @@ func (r *PostgresRepository) GetAll() ([]contestRow, error) {
 	return contests, rows.Err()
 }
 
-// GetPodiumEvents lekéri a megadott tippversenyek dobogó-versenyszámait,
-// tippverseny id szerint csoportosítva.
 func (r *PostgresRepository) GetPodiumEvents(contestIDs []string) (map[string][]string, error) {
 	result := make(map[string][]string, len(contestIDs))
 	if len(contestIDs) == 0 {
@@ -97,8 +90,6 @@ func (r *PostgresRepository) GetPodiumEvents(contestIDs []string) (map[string][]
 	return result, rows.Err()
 }
 
-// GetExtraQuestions lekéri a megadott tippversenyek extra kérdéseit,
-// tippverseny id szerint csoportosítva, megjelenítési sorrendben.
 func (r *PostgresRepository) GetExtraQuestions(contestIDs []string) (map[string][]extraQuestionRow, error) {
 	result := make(map[string][]extraQuestionRow, len(contestIDs))
 	if len(contestIDs) == 0 {
@@ -127,9 +118,6 @@ func (r *PostgresRepository) GetExtraQuestions(contestIDs []string) (map[string]
 	return result, rows.Err()
 }
 
-// Create egy tippversenyt hoz létre a dobogó-versenyszámaival és az extra
-// kérdéseivel együtt, egy tranzakcióban — a három tábla együtt ír le egy
-// konzisztens tippversenyt, félig beírt állapot ne maradhasson.
 func (r *PostgresRepository) Create(row contestRow, podiumEventIDs []string, questions []extraQuestionRow) error {
 	tx, err := r.db.Begin()
 	if err != nil {
@@ -166,9 +154,6 @@ func (r *PostgresRepository) Create(row contestRow, podiumEventIDs []string, que
 	return tx.Commit()
 }
 
-// Delete törli a tippversenyt. A dobogó-versenyszámok és az extra kérdések
-// sorai a `prediction_podium_events`/`prediction_extra_questions` FK-jának
-// ON DELETE CASCADE-je miatt vele együtt törlődnek — nem kell tranzakció.
 func (r *PostgresRepository) Delete(id string) error {
 	res, err := r.db.Exec(`
 		DELETE FROM prediction_contests

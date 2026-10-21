@@ -28,7 +28,6 @@ const NewsCard: React.FC<NewsCardProps> = ({ post, imageUrl }) => {
       >
         <div className="relative aspect-video overflow-hidden bg-surface-muted">
           {imageUrl ? (
-            /* Sima img: a kép domainje környezetenként más — így nem kell remotePatterns. */
             /* eslint-disable-next-line @next/next/no-img-element */
             <img
               src={imageUrl}
@@ -41,7 +40,7 @@ const NewsCard: React.FC<NewsCardProps> = ({ post, imageUrl }) => {
           <Badge
             label={badge.label}
             color={badge.color}
-            className="absolute left-3 top-3 bg-white/90 backdrop-blur-sm dark:bg-surface/90"
+            className="absolute left-3 top-3 shadow-sm"
           />
         </div>
 

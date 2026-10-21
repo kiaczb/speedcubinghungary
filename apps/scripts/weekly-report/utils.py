@@ -8,7 +8,7 @@ def ConvertResult(time, category):
 
     if category == "333fm" and time < 100:
         return time
-    if time >= 100000: #It means it's mbld
+    if time >= 100000:
         missed = time % 100
         formattedTime = FormatSeconds_mm_ss(int(str(time)[2:7])).split(".")[0]
         point = 99-int(str(time)[:2])
@@ -28,7 +28,6 @@ def ConvertDate(fromDate, toDate):
 def FlagEmoji(country_iso):
     if not country_iso or len(country_iso) != 2:
         return country_iso
-    # Átalakítja a HU-t 🇭🇺 emoji karakterré
     return "".join(chr(127397 + ord(c.upper())) for c in country_iso)
 
 def ReverseHungarianName(name):

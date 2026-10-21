@@ -1,15 +1,3 @@
-/**
- * Dátumformázás — egy helyen, magyar nyelven, MAGYAR IDŐZÓNÁBAN.
- *
- * ⚠️ Az időzóna rögzítése nem kozmetika. A `toLocaleDateString` a FUTTATÓ
- * környezet zónáját használja: a Server Componentek a konténerben (UTC), a
- * client komponensek a látogató gépén futnak, így ugyanaz a dátum két különböző
- * napnak látszhat, és éjfél közelében hidratálási eltérést okoz.
- *
- * Ha új megjelenítési alak kell, ide vegyél fel egy függvényt; ne írj a
- * komponensbe újabb `toLocaleDateString`-et.
- */
-
 const LOCALE = "hu-HU";
 const TIME_ZONE = "Europe/Budapest";
 
@@ -42,58 +30,69 @@ const DATE_TIME = formatter({
   minute: "2-digit",
 });
 const TIMESTAMP = formatter({ dateStyle: "short", timeStyle: "short" });
+const DAY_MONTH = formatter({ month: "short", day: "numeric" });
+const ISO_DATE = new Intl.DateTimeFormat("en-CA", {
+  timeZone: TIME_ZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+const DAY_MONTH_TIME = formatter({
+  month: "short",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+});
 
-/**
- * Érvénytelen dátumon az Intl RangeError-t DOB (a `toLocaleDateString` csak
- * "Invalid Date"-et adott vissza). Egy hibás API-mező ne döntsön ki egy
- * oldalt — üres szöveget adunk helyette.
- */
 function format(intl: Intl.DateTimeFormat, value: DateInput): string {
   const date = value instanceof Date ? value : new Date(value);
   return Number.isNaN(date.getTime()) ? "" : intl.format(date);
 }
 
-/** `2026. szeptember 24.` — a részletező felületek alapértelmezése. */
 export function formatLongDate(value: DateInput): string {
   return format(LONG_DATE, value);
 }
 
-/** `2026. szeptember 24., csütörtök` */
 export function formatLongDateWithWeekday(value: DateInput): string {
   return format(LONG_DATE_WITH_WEEKDAY, value);
 }
 
-/** `2026. 09. 24.` — listákhoz, ahol a dátum másodlagos. */
 export function formatShortDate(value: DateInput): string {
   return format(SHORT_DATE, value);
 }
 
-/** `2026. szeptember` — a naptár fejléce. */
 export function formatMonthLabel(value: DateInput): string {
   return format(MONTH_LABEL, value);
 }
 
-/** `SZEPT` — a versenykártya dátumjelvényének felső sora. */
 export function formatMonthBadge(value: DateInput): string {
   return format(MONTH_ABBREVIATION, value).replace(".", "").toUpperCase();
 }
 
-/** `24` — a versenykártya dátumjelvényének alsó sora. */
 export function formatDayOfMonth(value: DateInput): string {
   return format(DAY_OF_MONTH, value);
 }
 
-/** `2026. szeptember 24. 18:00` — határidőkhöz, ahol az óra is számít. */
 export function formatDateTime(value: DateInput): string {
   return format(DATE_TIME, value);
 }
 
-/** `2026. 09. 24. 18:00` — gépi időbélyeghez (pl. „frissítve"). */
 export function formatTimestamp(value: DateInput): string {
   return format(TIMESTAMP, value);
 }
 
-/** `2026. szeptember 24. – 2026. szeptember 25.`, egynapos versenynél egy dátum. */
+export function formatDayMonth(value: DateInput): string {
+  return format(DAY_MONTH, value);
+}
+
+export function formatDayMonthTime(value: DateInput): string {
+  return format(DAY_MONTH_TIME, value);
+}
+
+export function formatIsoDate(value: DateInput): string {
+  return format(ISO_DATE, value);
+}
+
 export function formatDateRange(start: DateInput, end: DateInput): string {
   const from = formatLongDate(start);
   const to = formatLongDate(end);

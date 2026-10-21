@@ -33,8 +33,6 @@ func (s *stubRepository) Delete(id string) error {
 	return nil
 }
 
-// stubLookup csak azokat a versenyeket ismeri, amik a mapben vannak — minden
-// mást a WCA ErrNotFound-ja szerint utasít el, vagy a megadott hibával.
 type stubLookup struct {
 	known map[string]competition.Competition
 	err   error
@@ -51,10 +49,6 @@ func (s stubLookup) GetCompetition(id string) (competition.Competition, error) {
 	return comp, nil
 }
 
-// ⚠️ A tippverseny a versenyt ID szerint kérdezi le. Korábban a KÖZELGŐ
-// versenyek listájából töltötte a nevet — ami a versenyt a vége után kiejti,
-// így a tippverseny pont az eredményhirdetéskor maradt név, dátum és helyszín
-// nélkül. Itt a lookup egy már lezajlott versenyt is ismer.
 func TestGetContests_DescribesACompetitionThatIsAlreadyOver(t *testing.T) {
 	repo := &stubRepository{rows: []contestRow{{
 		ID:                 "c1",
@@ -77,8 +71,6 @@ func TestGetContests_DescribesACompetitionThatIsAlreadyOver(t *testing.T) {
 	assert.Equal(t, "2025-03-01", contests[0].CompetitionStartDate)
 }
 
-// Egy WCA-kiesés nem ürítheti ki a listát: a tippverseny ott marad, a
-// verseny azonosítójával mint névvel.
 func TestGetContests_FallsBackToTheIDWhenTheLookupFails(t *testing.T) {
 	repo := &stubRepository{rows: []contestRow{{ID: "c1", CompetitionWCAID: "Valami2026"}}}
 
@@ -89,8 +81,6 @@ func TestGetContests_FallsBackToTheIDWhenTheLookupFails(t *testing.T) {
 	assert.Equal(t, "Valami2026", contests[0].CompetitionName)
 }
 
-// A prediction_contests.id UUID: egy nem UUID azonosító korábban lejutott a
-// Postgresig, és típushibaként 500-at adott.
 func TestDeleteContest_RejectsANonUUIDBeforeTheDatabase(t *testing.T) {
 	repo := &stubRepository{}
 
@@ -100,8 +90,6 @@ func TestDeleteContest_RejectsANonUUIDBeforeTheDatabase(t *testing.T) {
 	assert.Empty(t, repo.deletedID, "az adatbázisig el sem juthat")
 }
 
-// A created_by oszlopot korábban semmi nem töltötte; a prompt levágva kerül
-// tárolásra, hogy a felületen ne legyenek láthatatlan szóközök.
 func TestCreateContest_RecordsTheCreatorAndTrimsPrompts(t *testing.T) {
 	repo := &capturingRepository{}
 

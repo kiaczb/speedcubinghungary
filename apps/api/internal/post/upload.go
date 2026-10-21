@@ -13,15 +13,10 @@ import (
 )
 
 const (
-	// MaxImageSize egy feltöltött kép maximális mérete.
-	MaxImageSize = 5 << 20 // 5 MiB
+	MaxImageSize = 5 << 20
 
-	// MaxImages a poszthoz csatolható képek maximális száma. A frontend
-	// ugyanezt a korlátot mutatja (MAX_POST_IMAGES) — ha itt változik, ott is.
 	MaxImages = 10
 
-	// PublicUploadPath az az útvonal, amin az API kiszolgálja a képeket; az
-	// image_paths elemei ezzel a prefixszel kerülnek a DB-be.
 	PublicUploadPath = "/uploads"
 )
 
@@ -31,9 +26,6 @@ var (
 	ErrImageTooLarge    = fmt.Errorf("image is too large (max %d MiB)", MaxImageSize>>20)
 )
 
-// allowedImageTypes a ténylegesen elfogadott MIME típusok és a hozzájuk tartozó
-// kiterjesztés. A típust a fájl TARTALMÁBÓL detektáljuk (http.DetectContentType),
-// nem a kliens által küldött Content-Type fejlécből — azt bárki hazudhatja.
 var allowedImageTypes = map[string]string{
 	"image/jpeg": ".jpg",
 	"image/png":  ".png",
@@ -68,7 +60,6 @@ func SaveImage(file multipart.File, uploadDir string) (string, error) {
 	}
 	defer dst.Close()
 
-	// LimitReader: a méretkorlátot itt is betartatjuk, ne csak a kérés szintjén.
 	if _, err := io.Copy(dst, io.LimitReader(file, MaxImageSize)); err != nil {
 		return "", err
 	}
@@ -88,9 +79,6 @@ func SaveImages(headers []*multipart.FileHeader, uploadDir string) ([]string, er
 	}
 
 	for _, header := range headers {
-		// A méretkorlátot fájlonként a FileHeader alapján utasítjuk el: a
-		// SaveImage-beli LimitReader csak CSONKÍTANA, a túl nagy kép pedig
-		// legyen 400-as hiba, ne néma félkép.
 		if header.Size > MaxImageSize {
 			return fail(ErrImageTooLarge)
 		}
@@ -112,8 +100,6 @@ func SaveImages(headers []*multipart.FileHeader, uploadDir string) ([]string, er
 	return paths, nil
 }
 
-// RemoveImage törli a publikus útvonalhoz tartozó fájlt. A filepath.Base miatt
-// csak az uploadDir-en belül törölhet.
 func RemoveImage(publicPath, uploadDir string) {
 	if publicPath == "" {
 		return

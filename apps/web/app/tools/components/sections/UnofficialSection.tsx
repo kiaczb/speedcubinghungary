@@ -6,10 +6,11 @@ const UnofficialSection = () => {
   return (
     <section>
       <h2 className="text-xl font-bold text-foreground">
-        Nem hivatalos eredmények
+        Versenysorozatok és versenyformák
       </h2>
       <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-        Alternatív pontszámítások és összesítők a WCA hivatalos helyezésein túl.
+        Saját pontszámítású sorozatok és formátumok, a WCA hivatalos
+        helyezésein túl.
       </p>
 
       <div className="mt-6 grid grid-cols-1 items-stretch gap-5 md:grid-cols-2">

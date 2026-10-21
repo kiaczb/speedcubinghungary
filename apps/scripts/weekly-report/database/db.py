@@ -14,8 +14,6 @@ from config import (
 
 logger = logging.getLogger(__name__)
 
-# Connection settings for the SHARED backend database. These mirror the env
-# vars used by the Go backend (apps/api/internal/db/postgres.go).
 DB_CONFIG = {
     "dbname": DB_NAME,
     "user": DB_USER,
@@ -24,23 +22,10 @@ DB_CONFIG = {
     "port": DB_PORT,
 }
 
-# Tables owned by the Go backend that this job reads/writes. The script must
-# NEVER create or alter them; they are provisioned by the backend migrations.
-#  - `users`   : competitor roster (wca_id, name, competition_count,
-#                delegated_count).
-#  - `records` : world/continental/national records (region, event_id,
-#                single, average).
-#  - `posts`   : the site's news posts. The weekly report is published here as
-#                a regular post (tag 'report'), so it reuses the existing Post
-#                listing/detail UI instead of a parallel content system.
 REQUIRED_TABLES = ("users", "records", "posts")
 
 
 def _connect(row_factory=None):
-    """Opens a connection to the shared backend database.
-
-    Uses DATABASE_URL when provided, otherwise the individual DB_* settings.
-    """
     kwargs = {}
     if row_factory is not None:
         kwargs["row_factory"] = row_factory
@@ -51,12 +36,6 @@ def _connect(row_factory=None):
 
 
 def check_connection():
-    """Verifies the shared database is reachable and the required tables exist.
-
-    This is a read-only preflight: it never creates databases, tables or
-    migrations (the Go backend owns the schema). It raises on failure so the
-    weekly job fails loudly instead of silently running against a broken DB.
-    """
     try:
         with _connect() as conn:
             with conn.cursor() as cur:
@@ -77,7 +56,6 @@ def check_connection():
 
 
 def get_person_data(wca_id):
-    """Returns a competitor row from the shared `users` table as a dict, or None."""
     try:
         with _connect(row_factory=dict_row) as conn:
             with conn.cursor() as cur:
@@ -96,12 +74,6 @@ def get_person_data(wca_id):
 
 
 def upsert_person(wca_id, name, comp_count=None, del_count=None):
-    """Inserts or updates a competitor in the shared `users` table (upsert).
-
-    Only the competitor-roster columns are written. Auth columns (email, roles)
-    are deliberately left untouched so this never clobbers backend login data:
-    on insert they take their schema defaults (email NULL, roles '[]').
-    """
     try:
         with _connect() as conn:
             with conn.cursor() as cur:
@@ -111,7 +83,6 @@ def upsert_person(wca_id, name, comp_count=None, del_count=None):
                     VALUES (%s, %s, COALESCE(%s, 0), COALESCE(%s, 0))
                     ON CONFLICT (wca_id) DO UPDATE SET
                         name = EXCLUDED.name,
-                        -- Keep the existing value when the new one is NULL (None).
                         competition_count = COALESCE(%s, users.competition_count),
                         delegated_count = COALESCE(%s, users.delegated_count),
                         updated_at = NOW();
@@ -124,7 +95,6 @@ def upsert_person(wca_id, name, comp_count=None, del_count=None):
 
 
 def upsert_record(region, event_id, single, average):
-    """Inserts or updates a record in the shared `records` table (upsert)."""
     try:
         with _connect() as conn:
             with conn.cursor() as cur:
@@ -144,23 +114,6 @@ def upsert_record(region, event_id, single, average):
 
 
 def insert_weekly_report_post(post_id, title, content, report_week, replace=False):
-    """Publishes the weekly report into the shared `posts` table.
-
-    Idempotent: `posts.report_week` is UNIQUE, so a second run for the same week
-    conflicts instead of creating a duplicate.
-
-    replace=False (default, used by cron): DO NOTHING — the week's first report
-    wins and re-runs leave it untouched.
-    replace=True (manual/test runs, `main.py --force`): DO UPDATE — the week's
-    report is overwritten with the fresh content. Still exactly one post per week.
-
-    Returns True when a row was inserted or updated.
-
-    Unlike the upserts above this deliberately does NOT swallow exceptions — a
-    failed publish must abort the job loudly instead of silently skipping the
-    week's report.
-    """
-    # Két teljes, statikus lekérdezés — nem építünk SQL-t stringből.
     replace_query = """
         INSERT INTO posts (id, tag, title, content, report_week)
         VALUES (%s, 'report', %s, %s, %s)
@@ -188,7 +141,6 @@ def insert_weekly_report_post(post_id, title, content, report_week, replace=Fals
 
 
 def get_all_records():
-    """Returns all records as the JSON-shaped dict the report templates expect."""
     records_dict = {
         "world_records": {},
         "european_records": {},
@@ -219,7 +171,6 @@ def get_all_records():
 
 
 def get_all_important_competitors_from_db(milestones, difference):
-    """Returns competitors whose competition_count is near a milestone."""
     conditions = []
     params = []
     for ms in milestones:
@@ -246,7 +197,6 @@ def get_all_important_competitors_from_db(milestones, difference):
 
 
 def get_all_important_delegates_from_db(milestones, difference):
-    """Returns delegates whose delegated_count is near a milestone."""
     conditions = []
     params = []
     for ms in milestones:
@@ -267,7 +217,6 @@ def get_all_important_delegates_from_db(milestones, difference):
                     params,
                 )
                 rows = cur.fetchall()
-                # Reshape to the structure the email sender expects.
                 return [
                     {
                         "wca_id": r["wca_id"],
