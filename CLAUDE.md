@@ -458,7 +458,11 @@ see §20; the single cover image is backfilled into a one-element array) and
 auth bug described in §9, then adds `CHECK (btrim(wca_id) <> '')` so that state
 cannot recur at the storage layer) and `000016_add_user_session_version`
 (`users.session_version INT NOT NULL DEFAULT 0` — server-side revocation of the
-12-hour session, see §9).
+12-hour session, see §9) and `000017_add_wca_grants` (the admin's encrypted WCA
+`manage_competitions` tokens, see §9). ⚠️ The `feature/learn*` branches also
+use `000017`–`000019`; **renumber them past the last develop migration before
+merging** — golang-migrate fails on a duplicate version, and a lower number
+than the DB's current version is silently never applied.
 Applied automatically on API startup via
 `migrate.New("file:///migrations", cfg.DatabaseURL)` (the prod image bakes
 `db/migrations` to `/migrations`).
@@ -482,6 +486,12 @@ users(id SERIAL PK, wca_id VARCHAR(50) UNIQUE, name, email,
       roles JSONB default '[]', competition_count INT, delegated_count INT,
       session_version INT NOT NULL DEFAULT 0,  -- 000016: kijelentkezés = +1 (§9)
       created_at, updated_at)
+
+-- 000017: az admin WCA-engedélye (§9). A tokenek AES-GCM-mel titkosítva, a
+-- kulcs a JWT_SECRET-ből származik, a user_id hitelesített kiegészítő adat.
+wca_grants(user_id INT PK → users(id) ON DELETE CASCADE, scope TEXT,
+        access_token BYTEA, refresh_token BYTEA, expires_at TIMESTAMPTZ,
+        granted_at, updated_at)
 
 records(region VARCHAR, event_id VARCHAR, single INT, average INT,
         PRIMARY KEY (region, event_id))
@@ -583,7 +593,9 @@ admin route sits in one `Auth + RBAC(admin)` group.
 | POST | `/allrounder/refresh` | JWT + `admin` | `allrounder.Refresh` — re-fetches the season from the WCA API ignoring the cache TTLs. Admin-only because it generates upstream traffic |
 | GET  | `/allrounder/stream` | public | `allrounder.StreamUpdates` (**SSE**: data-less `update` event whenever the running leg changes on WCA Live; `?year=` optional). Opens successfully even when no leg is running. An open stream is what keeps the WCA Live subscription alive (§19) |
 | GET  | `/login` | public | `auth.Login` — starts the WCA OAuth flow: issues the CSRF nonce cookie and redirects to WCA. Takes `?redirect=<path>` (sanitized). **This is the only login entry point**; the browser never builds the authorize URL (§9) |
-| GET  | `/login/callback` | public | `auth.LoginCallback` (WCA OAuth redirect target; verifies `state` against the nonce cookie before exchanging the code) |
+| GET  | `/login/callback` | public | `auth.LoginCallback` (WCA OAuth redirect target; verifies `state` against the nonce cookie before exchanging the code). **Also completes the admin WCA grant** when the `wca_grant_state` cookie matches (§9) — the WCA app has one registered redirect URI |
+| GET  | `/wca/authorize` | JWT + `admin` | `auth.AuthorizeWCA` — starts the `manage_competitions` grant (redirect, so outside the JSON group). Takes `?redirect=<path>` |
+| DELETE | `/wca/grant` | JWT + `admin` | `auth.RevokeWCA` — deletes the stored grant (204) |
 | GET  | `/me` | JWT | `auth.Me` |
 | POST | `/logout` | JWT | `auth.Logout` |
 | GET  | `/special/competitions` | public | `special.GetCompetitions` — the competition picker. `?query=` searches WCA Live by **name** (any country); without it, the **Hungarian** competitions of the last 60 days plus the upcoming ones. Sorted ongoing → upcoming → past |
@@ -665,9 +677,37 @@ that pin each one):
 - **Clear the state cookie BEFORE writing the response.** Every branch ends in
   `http.Redirect`, which calls `WriteHeader`; a `defer`-red `SetCookie` would
   silently never reach the browser.
-- **`scope` is `public email`.** The WCA token is used for exactly one `/me` call
-  and then dropped. `manage_competitions` was removed — don't restore it without
-  an actual endpoint that needs it.
+- **The login `scope` stays `public email`.** That token is used for exactly one
+  `/me` call and then dropped. `manage_competitions` is **not** part of the login
+  — ordinary visitors must not be asked for competition-management rights.
+
+### The admin WCA grant (`manage_competitions`)
+
+Admins authorize it separately (`grant.go`, `/wca/authorize` → the same
+`/login/callback`), and the tokens are **stored** so other admin modules can call
+the WCA as that admin later. First user: the stats page's ages (§22). Rules:
+
+- ⚠️ **The callback can't see the `auth` cookie** — it is `SameSite=Strict` and
+  the return from WCA is a cross-site navigation. So the admin's `user_id` travels
+  in the `wca_grant_state` cookie (`<nonce>:<userID>:<path>`, HttpOnly, Lax,
+  `Path=/`, set while the admin *was* authenticated). The callback checks the
+  grant cookie first and falls back to the normal login state.
+- **Ownership is enforced in SQL, atomically:** `SaveGrant` inserts only `WHERE
+  id = $1 AND wca_id = $2 AND roles @> '["admin"]'` — `$2` is the WCA ID from
+  WCA `/me` for the new token. Granting with another WCA account, or as a
+  non-admin, saves nothing (`ErrGrantOwnerMismatch` → `?wca=failed`).
+  `GetGrant` repeats the admin check, so a demoted admin's token is unusable.
+- **Encrypted at rest:** AES-256-GCM, key = SHA-256(label + `JWT_SECRET`), the
+  `user_id` as additional data (a row copied to another user can't be opened).
+  Deriving from `JWT_SECRET` was deliberate — a new required env var would
+  have crashed the first staging/prod deploy until set by hand. Rotating
+  `JWT_SECRET` simply makes admins grant again.
+- **`WCAAccessToken(ctx, userID)`** is the one way to get a usable token: it
+  refreshes a minute before expiry (WCA tokens live ~2 h) under a mutex, saves
+  a rotated refresh token, and on a **4xx from the refresh** deletes the grant
+  and returns `ErrNoGrant` (revoked on the WCA side → grant again).
+- The token never reaches the browser, and data fetched with it is cached per
+  user (§22).
 
 Authorization:
 - `middleware.AuthMiddlewareWithConfig(cfg, sessions)` reads the `auth` cookie,
@@ -1757,7 +1797,7 @@ phase.
 | before (+ always) | public WCIF (`GetRegistrations`) + persons batch (`GetPersonSummaries`) | field, events, countries, world rankings, NR holders present, veterans, anniversaries, milestones, career medals/records |
 | before (+ always) | per-person competition history (`GetPersonCompetitions`) | comebacks, first competition in this country, busiest this year — **background job** |
 | during / after | WCA Live (`stats.LiveRepository`, own queries, one per round) | rounds progress, DNF rate, records, **PR counts** (only WCA Live tags PRs), per-event bests; 1 min cache |
-| after | WCA API `/competitions/{id}/results` | winners (final round), official records, medal tables, solves/DNF/solving time, sub-10 |
+| after | WCA API `/competitions/{id}/results` | winners (final round), official records, medal tables, solves/DNF/solving time |
 
 Rules and verified facts:
 
@@ -1785,12 +1825,20 @@ Rules and verified facts:
   their first (owner's definition: started 2010, last competed 2014 → 2014
   counts). Shown from 1 year up.
 - **WCA ID year = year of the first competition** — that's what veterans and
-  anniversaries (5/10/15/20/25/30 years) use. ⚠️ **There is no "oldest
-  competitor":** the public WCIF has no birthdate; it needs the
-  `manage_competitions` scope, which was removed on purpose (§9).
+  anniversaries (5/10/15/20/25/30 years) use.
+- **Ages (youngest/oldest, average, median) need the admin WCA
+  grant (§9):** birthdates are only in the **private** WCIF
+  (`/competitions/{id}/wcif` with the admin's token), and the WCA serves it
+  **only to that competition's organizers and delegates** — anyone else gets 403
+  → `ages.status = "forbidden"`. Without a grant the status is `"no-grant"`
+  and the page shows the authorize button. Matched by `wcaUserId` (newcomers
+  have no WCA ID). **Only ages leave the API, never birthdates**; nothing is
+  stored. Cached 15 min per **user + competition** (403 too — the history
+  poll hits the report every 4 s), but the token is fetched **before** the
+  cache is read, so a revoked grant hides ages immediately.
 - **Milestones:** `competition_count` only counts competitions with posted
   results, so before/during the n-th is `count + 1`, after it is `count`.
-  Milestones are 10, 25 and every 25 from 50.
+  Milestones are every 50th competition (50, 100, 150, …).
 - **Result formatting is in Go** (`stats.FormatResult`): centiseconds, FMC
   moves / average ÷100, MBLD decoded (`8/9 52:31`), and `333mbo` (legacy multi
   blind) which uses the new encoding below 10⁹ and the old `1SSAATTTTT` above.

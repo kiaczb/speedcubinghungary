@@ -52,7 +52,6 @@ export default function ResultsSection({
             sub: "FMC és MBLD nélkül",
           },
           { label: "Rekordok", value: results.records.length },
-          { label: "Sub-10 3x3 single", value: results.sub10Singles.length, sub: "versenyző" },
           { label: "Versenyszámok", value: results.winners.length },
         ]}
       />
@@ -109,14 +108,6 @@ export default function ResultsSection({
             }))}
           />
         </StatBlock>
-
-        {results.sub10Singles.length > 0 && (
-          <StatBlock title="Sub-10 3x3 single">
-            <p className="text-sm leading-relaxed text-foreground">
-              {results.sub10Singles.map((person) => person.name).join(", ")}
-            </p>
-          </StatBlock>
-        )}
       </div>
     </StatSection>
   );

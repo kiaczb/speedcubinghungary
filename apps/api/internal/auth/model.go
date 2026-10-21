@@ -1,6 +1,10 @@
 package auth
 
-import "speedcubinghungary/internal/types"
+import (
+	"time"
+
+	"speedcubinghungary/internal/types"
+)
 
 type User struct {
 	ID        int          `db:"id"`
@@ -11,4 +15,12 @@ type User struct {
 	Roles     []types.Role `db:"roles"`
 
 	SessionVersion int `db:"session_version"`
+}
+
+type WCAGrant struct {
+	UserID       int       `db:"user_id"`
+	Scope        string    `db:"scope"`
+	AccessToken  []byte    `db:"access_token"`
+	RefreshToken []byte    `db:"refresh_token"`
+	ExpiresAt    time.Time `db:"expires_at"`
 }

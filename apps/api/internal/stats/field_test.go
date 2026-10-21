@@ -91,7 +91,7 @@ func TestComputeField_RankingsRecordsAndVeterans(t *testing.T) {
 func TestComputeField_MilestonesDependOnWhetherResultsAreIn(t *testing.T) {
 	summaries := map[string]competition.PersonSummary{
 		"2006REGI01": {WCAID: "2006REGI01", CompetitionCount: 99, TotalSolves: 4000, Medals: competition.Medals{Gold: 3, Total: 3}},
-		"2016KULF01": {WCAID: "2016KULF01", CompetitionCount: 25, TotalSolves: 900, Records: competition.RecordCounts{Continental: 1, National: 4, Total: 5}},
+		"2016KULF01": {WCAID: "2016KULF01", CompetitionCount: 50, TotalSolves: 900, Records: competition.RecordCounts{Continental: 1, National: 4, Total: 5}},
 	}
 
 	before := computeField(testInfo(), PhaseBefore, testRegistrations(), summaries)
@@ -106,14 +106,14 @@ func TestComputeField_MilestonesDependOnWhetherResultsAreIn(t *testing.T) {
 
 	after := computeField(testInfo(), PhaseAfter, testRegistrations(), summaries)
 	require.Len(t, after.Milestones, 1)
-	assert.Equal(t, 25, after.Milestones[0].Value, "feltöltés után a WCA már beleszámolja ezt a versenyt")
+	assert.Equal(t, 50, after.Milestones[0].Value, "feltöltés után a WCA már beleszámolja ezt a versenyt")
 }
 
 func TestIsMilestone(t *testing.T) {
-	for _, n := range []int{10, 25, 50, 75, 100, 125, 200} {
+	for _, n := range []int{50, 100, 150, 200} {
 		assert.True(t, isMilestone(n), n)
 	}
-	for _, n := range []int{1, 5, 11, 30, 60, 99} {
+	for _, n := range []int{1, 10, 25, 75, 99, 125} {
 		assert.False(t, isMilestone(n), n)
 	}
 }

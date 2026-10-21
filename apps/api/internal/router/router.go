@@ -42,6 +42,12 @@ func New(
 	r.Get("/special/stream", specialHandler.StreamUpdates)
 
 	r.Group(func(r chi.Router) {
+		r.Use(authMiddleware)
+		r.Use(middleware.RBACMiddleware(types.ROLE_ADMIN))
+		r.Get("/wca/authorize", authHandler.AuthorizeWCA)
+	})
+
+	r.Group(func(r chi.Router) {
 		r.Use(middleware.RateLimit(cfg, middleware.LoginRateLimit))
 		r.Get("/login", authHandler.Login)
 		r.Get("/login/callback", authHandler.LoginCallback)
@@ -85,6 +91,8 @@ func New(
 			r.Post("/allrounder/refresh", allrounderHandler.Refresh)
 
 			r.Put("/special/results/{liveResultId}/attempts/{attemptNumber}/elapsed", specialHandler.RecordElapsed)
+
+			r.Delete("/wca/grant", authHandler.RevokeWCA)
 
 			r.Get("/stats/competitions", statsHandler.SearchCompetitions)
 			r.Get("/stats/competitions/{id}", statsHandler.GetReport)

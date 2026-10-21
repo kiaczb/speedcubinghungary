@@ -41,6 +41,23 @@ func (m *MockService) GetSession(ctx context.Context, userID int) (middleware.Se
 	return args.Get(0).(middleware.Session), args.Error(1)
 }
 
+func (m *MockService) GrantAuthorizeURL(state string) string {
+	return m.Called(state).String(0)
+}
+
+func (m *MockService) CompleteGrant(ctx context.Context, userID int, code string) error {
+	return m.Called(userID, code).Error(0)
+}
+
+func (m *MockService) WCAAccessToken(ctx context.Context, userID int) (string, error) {
+	args := m.Called(userID)
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockService) RevokeGrant(ctx context.Context, userID int) error {
+	return m.Called(userID).Error(0)
+}
+
 func newTestHandler(svc Service) *Handler {
 	return NewHandler(svc, testConfig())
 }

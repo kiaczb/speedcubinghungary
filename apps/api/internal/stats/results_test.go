@@ -38,7 +38,6 @@ func TestComputeResults(t *testing.T) {
 	assert.Equal(t, 1, stats.DNFs)
 	assert.Equal(t, int64(820+950+990+1000+990+1050+1100+1080+1010+701+899+920+850+930+1100+1200+1250+1190+1210), stats.SolvingCentiseconds,
 		"az FMC lépésszám nem idő, kimarad az összegből")
-	assert.Equal(t, []Person{{Name: "Anna", WCAID: "2010AAAA01", CountryISO2: "HU"}, {Name: "Béla", WCAID: "2012BBBB01", CountryISO2: "SK"}}, stats.Sub10Singles)
 }
 
 func TestComputeLive(t *testing.T) {

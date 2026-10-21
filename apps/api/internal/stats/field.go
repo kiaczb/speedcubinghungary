@@ -33,7 +33,7 @@ func competitionYear(info CompetitionInfo) int {
 }
 
 func isMilestone(n int) bool {
-	return n == 10 || n == 25 || (n >= 50 && n%25 == 0)
+	return n >= 50 && n%50 == 0
 }
 
 func computeField(info CompetitionInfo, phase Phase, registrations competition.Registrations, summaries map[string]competition.PersonSummary) *FieldStats {

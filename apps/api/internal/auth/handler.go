@@ -2,6 +2,7 @@ package auth
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -36,6 +37,12 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) LoginCallback(w http.ResponseWriter, r *http.Request) {
+	if grant, ok := verifyGrantState(r, r.URL.Query().Get("state")); ok {
+		clearGrantStateCookie(w, h.secureCookies())
+		h.completeGrant(w, r, grant)
+		return
+	}
+
 	clearStateCookie(w, h.secureCookies())
 
 	redirectPath, ok := verifyState(r, r.URL.Query().Get("state"))
@@ -121,4 +128,55 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(`{"message":"logged out"}`))
+}
+
+func withQueryFlag(path, flag string) string {
+	if strings.Contains(path, "?") {
+		return path + "&" + flag
+	}
+	return path + "?" + flag
+}
+
+func (h *Handler) AuthorizeWCA(w http.ResponseWriter, r *http.Request) {
+	user := middleware.GetUserFromContext(r)
+	if user == nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	redirectPath := sanitizeRedirectPath(r.URL.Query().Get("redirect"))
+	nonce := newStateNonce()
+	setGrantStateCookie(w, nonce, user.UserID, redirectPath, h.secureCookies())
+
+	http.Redirect(w, r, h.service.GrantAuthorizeURL(nonce), http.StatusFound)
+}
+
+func (h *Handler) completeGrant(w http.ResponseWriter, r *http.Request, state grantState) {
+	code := r.URL.Query().Get("code")
+	if code == "" {
+		log.Printf("auth: sikertelen WCA-engedélyezés: %v", fmt.Errorf("callback `code` nélkül (wca error=%q)", r.URL.Query().Get("error")))
+		http.Redirect(w, r, h.frontendURL(withQueryFlag(state.redirectPath, "wca=failed")), http.StatusFound)
+		return
+	}
+
+	if err := h.service.CompleteGrant(r.Context(), state.userID, code); err != nil {
+		log.Printf("auth: sikertelen WCA-engedélyezés: %v", err)
+		http.Redirect(w, r, h.frontendURL(withQueryFlag(state.redirectPath, "wca=failed")), http.StatusFound)
+		return
+	}
+
+	http.Redirect(w, r, h.frontendURL(state.redirectPath), http.StatusFound)
+}
+
+func (h *Handler) RevokeWCA(w http.ResponseWriter, r *http.Request) {
+	user := middleware.GetUserFromContext(r)
+	if user == nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if err := h.service.RevokeGrant(r.Context(), user.UserID); err != nil {
+		httperr.Write(w, r, http.StatusInternalServerError, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

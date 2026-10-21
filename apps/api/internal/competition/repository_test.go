@@ -86,3 +86,33 @@ func TestWCARepository_GetCompetition(t *testing.T) {
 	_, err = repo.GetCompetition("NemLetezo2099")
 	assert.ErrorIs(t, err, ErrNotFound)
 }
+
+func TestWCARepository_PrivateWCIFSendsTheTokenOnlyThere(t *testing.T) {
+	var mu sync.Mutex
+	headers := map[string]string{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		headers[r.URL.Path] = r.Header.Get("Authorization")
+		mu.Unlock()
+		if r.URL.Path == "/Tiltott2026/wcif" {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		fmt.Fprint(w, `{"persons":[]}`)
+	}))
+	t.Cleanup(server.Close)
+
+	repo := newWCARepository(server.URL)
+
+	_, err := repo.GetPrivateWCIF("Sajat2026", "titkos-token")
+	require.NoError(t, err)
+	_, err = repo.GetPrivateWCIF("Tiltott2026", "titkos-token")
+	assert.ErrorIs(t, err, ErrForbidden, "nem szervezőként/delegáltként a WCA 403-at ad")
+	_, err = repo.GetWCIF("Sajat2026")
+	require.NoError(t, err)
+
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Equal(t, "Bearer titkos-token", headers["/Sajat2026/wcif"])
+	assert.Empty(t, headers["/Sajat2026/wcif/public"], "a nyilvános kérésekbe nem kerülhet token")
+}

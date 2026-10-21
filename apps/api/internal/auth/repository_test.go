@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"testing"
+	"time"
 
 	"speedcubinghungary/internal/middleware"
 	"speedcubinghungary/internal/types"
@@ -75,5 +76,34 @@ func TestPostgresRepository_RevokeSessionsBumpsTheVersion(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
 	require.NoError(t, NewPostgresRepository(db).RevokeSessions(context.Background(), 7))
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestPostgresRepository_SaveGrantRequiresTheMatchingAdmin(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	grant := WCAGrant{UserID: 7, Scope: "public email manage_competitions", AccessToken: []byte("a"), RefreshToken: []byte("r"), ExpiresAt: time.Now()}
+	mock.ExpectExec(`(?s)INSERT INTO wca_grants.*WHERE id = \$1 AND wca_id = \$2 AND roles @> '\["admin"\]'::jsonb`).
+		WithArgs(7, "2019IDEG01", grant.Scope, grant.AccessToken, grant.RefreshToken, grant.ExpiresAt).
+		WillReturnResult(sqlmock.NewResult(0, 0))
+
+	err = NewPostgresRepository(db).SaveGrant(context.Background(), grant, "2019IDEG01")
+	assert.ErrorIs(t, err, ErrGrantOwnerMismatch, "idegen WCA-fiókkal vagy nem adminként nem menthető engedély")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestPostgresRepository_GetGrantWithoutRowIsNoGrant(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	mock.ExpectQuery(`SELECT g.scope, g.access_token, g.refresh_token, g.expires_at`).
+		WithArgs(7).
+		WillReturnError(sql.ErrNoRows)
+
+	_, err = NewPostgresRepository(db).GetGrant(context.Background(), 7)
+	assert.ErrorIs(t, err, ErrNoGrant)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }

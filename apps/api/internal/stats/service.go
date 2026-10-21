@@ -2,16 +2,20 @@ package stats
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"sync"
 	"time"
 	_ "time/tzdata"
 
+	"speedcubinghungary/internal/auth"
 	"speedcubinghungary/internal/competition"
 )
 
 const liveCacheTTL = time.Minute
+
+const birthdateCacheTTL = 15 * time.Minute
 
 type CompetitionSource interface {
 	GetCompetition(competitionID string) (competition.Competition, error)
@@ -20,6 +24,17 @@ type CompetitionSource interface {
 	GetPersonSummaries(wcaIDs []string) (map[string]competition.PersonSummary, error)
 	GetPersonCompetitions(wcaID string) ([]competition.PersonCompetition, error)
 	GetResults(competitionID string) ([]competition.Result, error)
+	GetBirthdates(competitionID, accessToken string) (map[int]string, error)
+}
+
+type TokenSource interface {
+	WCAAccessToken(ctx context.Context, userID int) (string, error)
+}
+
+type cachedBirthdates struct {
+	birthdates map[int]string
+	status     AgeStatus
+	at         time.Time
 }
 
 type LiveSource interface {
@@ -35,6 +50,7 @@ type cachedLive struct {
 type Service struct {
 	competitions CompetitionSource
 	live         LiveSource
+	tokens       TokenSource
 	history      *historyTracker
 	location     *time.Location
 	now          func() time.Time
@@ -42,9 +58,12 @@ type Service struct {
 	liveMu    sync.Mutex
 	liveIDs   map[string]int
 	liveCache map[string]cachedLive
+
+	birthdatesMu sync.Mutex
+	birthdates   map[string]cachedBirthdates
 }
 
-func NewService(competitions CompetitionSource, live LiveSource) *Service {
+func NewService(competitions CompetitionSource, live LiveSource, tokens TokenSource) *Service {
 	location, err := time.LoadLocation("Europe/Budapest")
 	if err != nil {
 		location = time.UTC
@@ -52,11 +71,13 @@ func NewService(competitions CompetitionSource, live LiveSource) *Service {
 	return &Service{
 		competitions: competitions,
 		live:         live,
+		tokens:       tokens,
 		history:      newHistoryTracker(competitions.GetPersonCompetitions),
 		location:     location,
 		now:          time.Now,
 		liveIDs:      make(map[string]int),
 		liveCache:    make(map[string]cachedLive),
+		birthdates:   make(map[string]cachedBirthdates),
 	}
 }
 
@@ -101,7 +122,7 @@ func phaseFor(info CompetitionInfo, now time.Time) Phase {
 	return PhaseBefore
 }
 
-func (s *Service) GetReport(ctx context.Context, competitionID string) (*Report, error) {
+func (s *Service) GetReport(ctx context.Context, competitionID string, userID int) (*Report, error) {
 	comp, err := s.competitions.GetCompetition(competitionID)
 	if err != nil {
 		return nil, err
@@ -115,6 +136,7 @@ func (s *Service) GetReport(ctx context.Context, competitionID string) (*Report,
 		Phase:       phase,
 		GeneratedAt: now,
 		History:     emptyHistory(HistoryUnavailable),
+		Ages:        emptyAges(AgesUnavailable),
 	}
 
 	var wg sync.WaitGroup
@@ -161,7 +183,56 @@ func (s *Service) GetReport(ctx context.Context, competitionID string) (*Report,
 		report.Field.SummariesError = "A versenyzők WCA-összesítője (versenyszám, érmek, rekordok) most nem kérhető le."
 	}
 	report.History = s.historyStats(info, registrations, ids)
+	report.Ages = s.ageStats(ctx, info, registrations, userID)
 	return report, nil
+}
+
+func (s *Service) ageStats(ctx context.Context, info CompetitionInfo, registrations competition.Registrations, userID int) AgeStats {
+	birthdates, status := s.birthdatesFor(ctx, info.ID, userID)
+	if status != AgesReady {
+		return emptyAges(status)
+	}
+	return computeAges(info, registrations.Registrants, birthdates)
+}
+
+func (s *Service) birthdatesFor(ctx context.Context, competitionID string, userID int) (map[int]string, AgeStatus) {
+	token, err := s.tokens.WCAAccessToken(ctx, userID)
+	if errors.Is(err, auth.ErrNoGrant) {
+		return nil, AgesNoGrant
+	}
+	if err != nil {
+		log.Printf("stats: a WCA-token nem kérhető le (felhasználó %d): %v", userID, err)
+		return nil, AgesUnavailable
+	}
+
+	key := fmt.Sprintf("%d:%s", userID, competitionID)
+	now := time.Now()
+	s.birthdatesMu.Lock()
+	for k, entry := range s.birthdates {
+		if now.Sub(entry.at) >= birthdateCacheTTL {
+			delete(s.birthdates, k)
+		}
+	}
+	if entry, ok := s.birthdates[key]; ok {
+		s.birthdatesMu.Unlock()
+		return entry.birthdates, entry.status
+	}
+	s.birthdatesMu.Unlock()
+
+	birthdates, err := s.competitions.GetBirthdates(competitionID, token)
+	status := AgesReady
+	switch {
+	case errors.Is(err, competition.ErrForbidden):
+		status = AgesForbidden
+	case err != nil:
+		log.Printf("stats: %s privát WCIF-je nem kérhető le: %v", competitionID, err)
+		return nil, AgesUnavailable
+	}
+
+	s.birthdatesMu.Lock()
+	s.birthdates[key] = cachedBirthdates{birthdates: birthdates, status: status, at: now}
+	s.birthdatesMu.Unlock()
+	return birthdates, status
 }
 
 func wcaIDs(registrations competition.Registrations) []string {
