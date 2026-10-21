@@ -31,6 +31,12 @@ const DATE_TIME = formatter({
 });
 const TIMESTAMP = formatter({ dateStyle: "short", timeStyle: "short" });
 const DAY_MONTH = formatter({ month: "short", day: "numeric" });
+const ISO_DATE = new Intl.DateTimeFormat("en-CA", {
+  timeZone: TIME_ZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
 const DAY_MONTH_TIME = formatter({
   month: "short",
   day: "numeric",
@@ -81,6 +87,10 @@ export function formatDayMonth(value: DateInput): string {
 
 export function formatDayMonthTime(value: DateInput): string {
   return format(DAY_MONTH_TIME, value);
+}
+
+export function formatIsoDate(value: DateInput): string {
+  return format(ISO_DATE, value);
 }
 
 export function formatDateRange(start: DateInput, end: DateInput): string {

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"sync"
 	"testing"
 	"time"
@@ -24,6 +25,14 @@ func (s stubRepository) GetPsychSheet(string, string) (wcaPsychSheet, error) {
 }
 func (s stubRepository) GetWCIF(string) (wcaWCIF, error)          { return wcaWCIF{}, s.err }
 func (s stubRepository) GetRegistrationCount(string) (int, error) { return 0, s.err }
+func (s stubRepository) GetPersons([]string) ([]wcaPersonSummary, error) { return nil, s.err }
+func (s stubRepository) GetPersonCompetitions(string) ([]wcaCompetition, error) {
+	return nil, s.err
+}
+func (s stubRepository) GetResults(string) ([]wcaResult, error) { return nil, s.err }
+func (s stubRepository) SearchCompetitions(url.Values) ([]wcaCompetition, error) {
+	return nil, s.err
+}
 
 type upcomingRepository struct {
 	stubRepository
@@ -114,13 +123,13 @@ func TestService_SweepsExpiredCacheEntries(t *testing.T) {
 
 	stale := time.Now().Add(-2 * upstreamCacheTTL)
 	service.psychSheets["psych-sheet:Regi/333"] = cacheEntry[[]PsychSheetEntry]{at: stale}
-	service.competitors["competitors:Regi"] = cacheEntry[[]Competitor]{at: stale}
+	service.registrations["registrations:Regi"] = cacheEntry[Registrations]{at: stale}
 
 	_, err := service.GetPsychSheet("Uj2026", "333")
 	require.NoError(t, err)
 
 	assert.NotContains(t, service.psychSheets, "psych-sheet:Regi/333")
-	assert.NotContains(t, service.competitors, "competitors:Regi")
+	assert.NotContains(t, service.registrations, "registrations:Regi")
 	assert.Contains(t, service.psychSheets, "psych-sheet:Uj2026/333", "a friss bejegyzés marad")
 }
 
@@ -178,4 +187,57 @@ func TestService_RefreshesRegistrationCountsFasterThanTheList(t *testing.T) {
 	listed := service.upcoming["upcoming:HU"]
 	service.mu.Unlock()
 	assert.Nil(t, listed.value[0].AcceptedCount, "a cache-elt lista nem tárol létszámot")
+}
+
+func TestService_KeepsPersonDataAcrossTheShortSweep(t *testing.T) {
+	service := NewService(stubRepository{})
+
+	hourOld := time.Now().Add(-time.Hour)
+	service.persons["2016SZAN01"] = cacheEntry[PersonSummary]{value: PersonSummary{WCAID: "2016SZAN01"}, at: hourOld}
+	service.histories["history:2016SZAN01"] = cacheEntry[[]PersonCompetition]{at: hourOld}
+	service.persons["2000REGI01"] = cacheEntry[PersonSummary]{at: time.Now().Add(-2 * personDataTTL)}
+
+	_, err := service.GetPsychSheet("Uj2026", "333")
+	require.NoError(t, err)
+
+	assert.Contains(t, service.persons, "2016SZAN01", "a 24 órás személyadat nem eshet ki a 15 perces söprésnél")
+	assert.Contains(t, service.histories, "history:2016SZAN01")
+	assert.NotContains(t, service.persons, "2000REGI01")
+}
+
+type personsRepository struct {
+	stubRepository
+	mu     sync.Mutex
+	asked  [][]string
+	people map[string]int
+}
+
+func (r *personsRepository) GetPersons(wcaIDs []string) ([]wcaPersonSummary, error) {
+	r.mu.Lock()
+	r.asked = append(r.asked, append([]string(nil), wcaIDs...))
+	r.mu.Unlock()
+
+	summaries := make([]wcaPersonSummary, 0, len(wcaIDs))
+	for _, id := range wcaIDs {
+		if count, ok := r.people[id]; ok {
+			summary := wcaPersonSummary{CompetitionCount: count}
+			summary.Person.WCAID = id
+			summaries = append(summaries, summary)
+		}
+	}
+	return summaries, nil
+}
+
+func TestService_GetPersonSummaries_FetchesOnlyMissingValidIDs(t *testing.T) {
+	repo := &personsRepository{people: map[string]int{"2016SZAN01": 80, "2019SIMO07": 12}}
+	service := NewService(repo)
+	service.persons["2016SZAN01"] = cacheEntry[PersonSummary]{value: PersonSummary{WCAID: "2016SZAN01", CompetitionCount: 79}, at: time.Now()}
+
+	summaries, err := service.GetPersonSummaries([]string{"2016SZAN01", "2019SIMO07", "2019SIMO07", "", "nem-wca-id"})
+	require.NoError(t, err)
+
+	assert.Equal(t, [][]string{{"2019SIMO07"}}, repo.asked, "a cache-ben lévőt, a duplikátumot és az érvénytelen azonosítót nem kérjük le")
+	assert.Equal(t, 79, summaries["2016SZAN01"].CompetitionCount, "a cache-elt érték szolgál ki")
+	assert.Equal(t, 12, summaries["2019SIMO07"].CompetitionCount)
+	assert.Len(t, summaries, 2)
 }

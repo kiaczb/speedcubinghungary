@@ -55,6 +55,7 @@ speedcubinghungary/
 │   │       ├── allrounder/  # Hungarian All-Rounder: cached WCA results + live leg + scoring
 │   │       ├── special/     # Budapest Special: live WCA Live results + recorded DNF times
 │   │       ├── wcalive/     # shared WCA Live transport (GraphQL, Phoenix socket, broadcaster)
+│   │       ├── stats/       # admin competition statistics (before/during/after), see §22
 │   │       ├── middleware/  # JSON content-type, JWT auth, RBAC
 │   │       ├── httperr/     # hiba → HTTP válasz (5xx szövege naplóba, nem a kliensnek)
 │   │       ├── config/      # env var loading + validation (fail-fast)
@@ -225,7 +226,7 @@ Wiring is manual constructor injection in `cmd/server/main.go` — `repo → ser
 handler`, one block per feature, then the finished handlers (and the finished
 auth middleware) are passed into
 `router.New(cfg, authMiddleware, postHandler, competitionHandler, predictionHandler,
-authHandler, specialHandler, allrounderHandler)`, which only registers routes.
+authHandler, specialHandler, allrounderHandler, statsHandler)`, which only registers routes.
 **There is no DI framework; follow this manual pattern.**
 
 Other Go conventions observed:
@@ -313,7 +314,8 @@ Other Go conventions observed:
   the runtime's zone and a Server Component runs in the container's UTC while a
   client component runs on the visitor's machine; near midnight the same date
   rendered as two different days. Add a new shape here rather than writing
-  another `toLocaleDateString` in a component), `time.ts` (WCA-style digit-only time entry, shared by
+  another `toLocaleDateString` in a component; `formatIsoDate` gives the
+  Budapest `YYYY-MM-DD` for comparing against WCA dates), `time.ts` (WCA-style digit-only time entry, shared by
   the prediction form and the Special DNF cell: `formatTimeInput()` formats
   while typing and returns `null` for a keystroke it refuses — the caller
   keeps the previous value; `parseTimeInput()` is the **only** validity check
@@ -573,7 +575,7 @@ admin route sits in one `Auth + RBAC(admin)` group.
 | DELETE | `/posts` | JWT + `admin` | `post.DeletePosts` (body `{ids:[]}`; also deletes the posts' image files from the volume, see §20) |
 | GET  | `/competitions/upcoming` | public | `competition.GetUpcoming` (HU only; DTO includes `eventIds` — the WCA API's `event_ids` passed straight through, no extra request — plus `registrationOpen`/`registrationClose` (RFC3339, UTC), `competitorLimit` (null = no limit) and `acceptedCount`. ⚠️ `acceptedCount` is fetched **only for competitions whose registration is open right now** (WCA `/competitions/{id}/registrations` — that endpoint lists exactly the accepted competitors, verified equal to the WCIF's accepted + competing count, at ~18 KB instead of the WCIF's ~330 KB), in parallel. ⚠️ **The count has its own 1-minute cache (`registered`, `registrationCountTTL`), and "is registration open?" is decided per request, not when the list was cached.** The first version filled the count inside the 15-minute list cache, which missed the opening minutes entirely (the list was cached just before opening time) and would have shown a 15-minute-old "még N hely" — measured: All-Rounder 9 2026 took 10 of its 20 places in the first 6 minutes. The cached list itself never carries a count; `GetUpcomingHungarian` clones it before filling. It is `null` outside the open window **and** when that request fails — a failed count is logged, never fatal to the list) |
 | GET  | `/competitions/{id}/psych-sheet/{eventId}` | public | `competition.GetPsychSheet` — proxy of the WCA psych sheet (PR-ranked start list) for one event: `[{name, wcaId, position}]`, `position` 0 = no PR yet, `wcaId` empty for newcomers. Ids validated against `^[A-Za-z0-9]{1,64}$` (400), an id the WCA doesn't know 404, upstream failure 502. **Cached 15 min + singleflight**, expired entries swept, see §21 |
-| GET  | `/competitions/{id}/competitors` | public | `competition.GetCompetitors` — every accepted, competing registrant from the public WCIF, sorted by name: `[{name, wcaId}]`. (The WCA `/registrations` endpoint only carries user ids, no names — that's why WCIF.) Same validation/caching as above |
+| GET  | `/competitions/{id}/competitors` | public | `competition.GetCompetitors` — every accepted, competing registrant from the public WCIF, sorted by name: `[{name, wcaId}]`. (The WCA `/registrations` endpoint only carries user ids, no names — that's why WCIF.) Derived from `GetRegistrations`, the **one** cached WCIF parse (~500 KB) that the stats page shares, so a competition's WCIF is downloaded once per 15 min |
 | GET  | `/predictions` | public | `prediction.GetContests` — every tippverseny, `competitionName`/`City`/`Country`/`StartDate` enriched live from `competition.Service.GetUpcomingHungarian` (not stored, see §21). `status` is computed from `predictionDeadline`, never `"evaluated"` yet |
 | POST | `/predictions` | JWT + `admin` | `prediction.CreateContest` (JSON body `{competitionId, predictionDeadline (RFC3339), podiumEventIds[], extraQuestions: [{prompt, type: "person"\|"time"\|"number"\|"text"}]}`; 400 on a past deadline, an empty/duplicated/malformed `podiumEventIds` (max 20), or an invalid/blank question (max 20, prompt ≤ 300 chars, stored trimmed). Records the admin in `created_by`. Every validation error wraps `prediction.ErrValidation`, which is the one thing the handler checks for 400 — add new rules as `validationError`, not to a status chain) |
 | DELETE | `/predictions/{id}` | JWT + `admin` | `prediction.DeleteContest` — deletes the contest row; `prediction_podium_events`/`prediction_extra_questions` cascade via their FK (`ON DELETE CASCADE`), no transaction needed. 404 if the id doesn't exist, 400 if it isn't a UUID |
@@ -587,6 +589,8 @@ admin route sits in one `Auth + RBAC(admin)` group.
 | GET  | `/special/competitions` | public | `special.GetCompetitions` — the competition picker. `?query=` searches WCA Live by **name** (any country); without it, the **Hungarian** competitions of the last 60 days plus the upcoming ones. Sorted ongoing → upcoming → past |
 | GET  | `/special/report` | public | `special.GetReport` (per-competitor view, assembled from **live** WCA Live results + our recorded DNF times). **`?competition=<wcaId>` is required** (400 without it). Optional `?round=N` narrows to the Nth round of **every** event (1 → `333-r1`, `222-r1`, …); invalid values 400, WCA Live unreachable 502, watch capacity exhausted 503 |
 | GET  | `/special/stream` | public | `special.StreamUpdates` (**SSE**: `update` event on every change of `?competition=<wcaId>`, required). An open stream is also what keeps *that competition's* WCA Live subscription alive (§18) |
+| GET  | `/stats/competitions` | JWT + `admin` | `stats.SearchCompetitions` — the picker: without `?query=` the Hungarian competitions from a year ago onwards (WCA API, `country_iso2=HU`), with it a WCA name search (any country). 15 min cache |
+| GET  | `/stats/competitions/{id}` | JWT + `admin` | `stats.GetReport` — one competition's statistics, see §22. 400 invalid id, 404 unknown to the WCA, 502 upstream |
 | PUT  | `/special/results/{liveResultId}/attempts/{attemptNumber}/elapsed` | JWT + `admin` | `special.RecordElapsed` (body `{competitionWcaId, elapsedCs, note}`; `elapsedCs: null` **deletes** the entry). Keyed by WCA Live ids, not our own — there is no row for an un-timed DNF |
 
 **Reading `/special/*` is public; only recording a DNF duration is admin.** The
@@ -1738,6 +1742,71 @@ gondolkodás nélkül — a userenkénti válaszok tárolása és a pontozás lo
 valószínűleg saját táblát/service-réteget igényel, hasonlóan ahhoz, ahogy az
 allrounder is külön választja a "series config kódban" (§19) és a "letöltött
 eredmény DB-ben" felelősséget.
+
+## 22. Statisztikák (`internal/stats` + `/admin/stats`)
+
+Admin-only page with one competition's statistics, in three phases that come
+from three different sources. `phaseFor`: results posted (`results_posted_at`)
+→ **after**; today (Budapest) ≥ start date → **during**; else **before**.
+Sections accumulate rather than replace — after the competition the page
+still shows the field and the WCA Live PRs, ordered by what matters for the
+phase.
+
+| Phase | Source | Notes |
+| --- | --- | --- |
+| before (+ always) | public WCIF (`GetRegistrations`) + persons batch (`GetPersonSummaries`) | field, events, countries, world rankings, NR holders present, veterans, anniversaries, milestones, career medals/records |
+| before (+ always) | per-person competition history (`GetPersonCompetitions`) | comebacks, first competition in this country, busiest this year — **background job** |
+| during / after | WCA Live (`stats.LiveRepository`, own queries, one per round) | rounds progress, DNF rate, records, **PR counts** (only WCA Live tags PRs), per-event bests; 1 min cache |
+| after | WCA API `/competitions/{id}/results` | winners (final round), official records, medal tables, solves/DNF/solving time, sub-10 |
+
+Rules and verified facts:
+
+- **Every WCA API call goes through `competition.Service`/`WCARepository`**, so
+  the shared 6-in-flight semaphore (§14) bounds the stats page too. `stats`
+  depends on it through the narrow `CompetitionSource` interface (same pattern
+  as `prediction.CompetitionLookup`). Don't give `stats` its own HTTP client.
+- **Caches** (in memory, `competition.Service`): WCIF/registrations, results,
+  search 15 min; person summaries and histories **24 h per person**. ⚠️
+  `sweep` takes a per-map TTL — with the old single 15-min sweep the 24-hour
+  person entries were silently thrown away (pinned by a test). Persistence in
+  Postgres is planned later; nothing here is stored yet.
+- **The persons batch** (`/persons?wca_ids=…`) takes ~130 ids in one request
+  (~4 s); we chunk by 100. It gives `competition_count`, medals, record counts
+  and total solves — but **no competition dates**.
+- **History is the expensive part:** `/persons/{id}/competitions` is the only
+  source of dates, ~1–3 s per person. It lists **only competitions with
+  results** (verified: 233 = distinct competitions in that person's results),
+  so organizer/delegate-only appearances don't skew comebacks. The job
+  (`historyTracker`): 3 workers, 429 → 30 s backoff, max 3 attempts, failed
+  people retried after 5 min, state per competition pruned after 24 h. The
+  frontend polls every 4 s while `history.status === "running"`. Measured:
+  127 people in ~1–2 min, no 429.
+- **Comeback = gap since the person's *last* competition before this one**, not
+  their first (owner's definition: started 2010, last competed 2014 → 2014
+  counts). Shown from 1 year up.
+- **WCA ID year = year of the first competition** — that's what veterans and
+  anniversaries (5/10/15/20/25/30 years) use. ⚠️ **There is no "oldest
+  competitor":** the public WCIF has no birthdate; it needs the
+  `manage_competitions` scope, which was removed on purpose (§9).
+- **Milestones:** `competition_count` only counts competitions with posted
+  results, so before/during the n-th is `count + 1`, after it is `count`.
+  Milestones are 10, 25 and every 25 from 50.
+- **Result formatting is in Go** (`stats.FormatResult`): centiseconds, FMC
+  moves / average ÷100, MBLD decoded (`8/9 52:31`), and `333mbo` (legacy multi
+  blind) which uses the new encoding below 10⁹ and the old `1SSAATTTTT` above.
+- **"Today" is Budapest time** via `time.LoadLocation("Europe/Budapest")`, and
+  `stats` imports `time/tzdata` because the prod `alpine` image has no tzdata.
+- WCA Live round results come with `singleRecordTag`/`averageRecordTag`
+  (`PR`/`NR`/…); a record also counts as a PR. Data stays on WCA Live after the
+  competition, which is why "after" still has a WCA Live section.
+- Frontend: client-side (the admin cookie is needed, so `clientJson`, not
+  `serverJson`), `?competition=` in the URL like the Special page, wrapped in
+  `AdminGate` — which now takes `children` (the admin index passes
+  `AdminToolGrid`). The report view is keyed by competition, so switching
+  competitions resets its state without an effect. Bars are single-series
+  (`BarList`), every value also printed as text.
+- Smoke test against the real WCA (opt-in):
+  `STATS_SMOKE=HungarianOpen2026 STATS_SMOKE_HISTORY=1 go test ./internal/stats -run Smoke -v -timeout 10m`
 
 ## Instructions for Claude
 

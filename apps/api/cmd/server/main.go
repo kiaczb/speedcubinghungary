@@ -13,6 +13,7 @@ import (
 	"speedcubinghungary/internal/prediction"
 	"speedcubinghungary/internal/router"
 	"speedcubinghungary/internal/special"
+	"speedcubinghungary/internal/stats"
 	"speedcubinghungary/internal/wcalive"
 
 	"github.com/golang-migrate/migrate/v4"
@@ -68,11 +69,13 @@ func main() {
 		competitionService,
 	))
 
+	statsHandler := stats.NewHandler(stats.NewService(competitionService, stats.NewLiveRepository(cfg.WCALiveURL)))
+
 	authService := auth.NewService(auth.NewPostgresRepository(dbConn), cfg)
 	authHandler := auth.NewHandler(authService, cfg)
 	authMiddleware := middleware.AuthMiddlewareWithConfig(cfg, authService)
 
-	r := router.New(cfg, authMiddleware, postHandler, competitionHandler, predictionHandler, authHandler, specialHandler, allrounderHandler)
+	r := router.New(cfg, authMiddleware, postHandler, competitionHandler, predictionHandler, authHandler, specialHandler, allrounderHandler, statsHandler)
 
 	log.Printf("Server started on :8080 (mode: %s)", cfg.Deployment)
 	log.Fatal(http.ListenAndServe("0.0.0.0:8080", r))
