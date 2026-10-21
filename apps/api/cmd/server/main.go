@@ -69,9 +69,10 @@ func main() {
 		competitionService,
 	))
 
-	statsHandler := stats.NewHandler(stats.NewService(competitionService, stats.NewLiveRepository(cfg.WCALiveURL)))
-
 	authService := auth.NewService(auth.NewPostgresRepository(dbConn), cfg)
+
+	statsHandler := stats.NewHandler(stats.NewService(competitionService, stats.NewLiveRepository(cfg.WCALiveURL), authService))
+
 	authHandler := auth.NewHandler(authService, cfg)
 	authMiddleware := middleware.AuthMiddlewareWithConfig(cfg, authService)
 

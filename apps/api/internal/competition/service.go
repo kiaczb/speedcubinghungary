@@ -261,6 +261,7 @@ func (s *Service) GetRegistrations(competitionID string) (Registrations, error) 
 				continue
 			}
 			registrations.Registrants = append(registrations.Registrants, Registrant{
+				WCAUserID:     p.WCAUserID,
 				Name:          p.Name,
 				WCAID:         p.WCAID,
 				CountryISO2:   p.CountryISO2,
@@ -272,6 +273,26 @@ func (s *Service) GetRegistrations(competitionID string) (Registrations, error) 
 		}
 		return registrations, nil
 	})
+}
+
+func (s *Service) GetBirthdates(competitionID, accessToken string) (map[int]string, error) {
+	if !idPattern.MatchString(competitionID) {
+		return nil, ErrInvalidID
+	}
+
+	wcif, err := s.repo.GetPrivateWCIF(competitionID, accessToken)
+	if err != nil {
+		return nil, err
+	}
+
+	birthdates := make(map[int]string, len(wcif.Persons))
+	for _, p := range wcif.Persons {
+		if p.Registration == nil || p.Registration.Status != "accepted" || !p.Registration.IsCompeting || p.Birthdate == "" {
+			continue
+		}
+		birthdates[p.WCAUserID] = p.Birthdate
+	}
+	return birthdates, nil
 }
 
 func (s *Service) GetPersonSummaries(wcaIDs []string) (map[string]PersonSummary, error) {

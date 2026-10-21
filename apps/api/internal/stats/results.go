@@ -15,15 +15,12 @@ var roundOrder = map[string]int{
 	"f": 5, "c": 5,
 }
 
-const sub10 = 1000
-
 func computeResults(info CompetitionInfo, results []competition.Result) *ResultStats {
 	stats := &ResultStats{
 		Winners:        []EventWinner{},
 		Records:        []RecordEntry{},
 		Podiums:        []MedalHolder{},
 		CountryPodiums: []CountryMedals{},
-		Sub10Singles:   []Person{},
 	}
 
 	eventOrder := make(map[string]int, len(info.EventIDs))
@@ -40,7 +37,6 @@ func computeResults(info CompetitionInfo, results []competition.Result) *ResultS
 
 	medals := map[string]*MedalHolder{}
 	countries := map[string]*CountryMedals{}
-	sub10People := map[string]bool{}
 
 	for _, r := range results {
 		person := Person{Name: r.Name, WCAID: r.WCAID, CountryISO2: r.CountryISO2}
@@ -69,11 +65,6 @@ func computeResults(info CompetitionInfo, results []competition.Result) *ResultS
 				Person: person, EventID: r.EventID, Type: "average", Record: r.AverageRecord,
 				Display: FormatResult(r.EventID, r.Average, true),
 			})
-		}
-
-		if r.EventID == "333" && r.Best > 0 && r.Best < sub10 && !sub10People[personKey(person)] {
-			sub10People[personKey(person)] = true
-			stats.Sub10Singles = append(stats.Sub10Singles, person)
 		}
 
 		if roundOrder[r.RoundTypeID] != finalRound[r.EventID] || r.Pos < 1 || r.Pos > 3 || r.Best <= 0 {
@@ -113,7 +104,6 @@ func computeResults(info CompetitionInfo, results []competition.Result) *ResultS
 		return orderOf(eventOrder, stats.Winners[i].EventID) < orderOf(eventOrder, stats.Winners[j].EventID)
 	})
 	sortRecords(stats.Records, eventOrder)
-	sortPeople(stats.Sub10Singles)
 
 	for _, holder := range medals {
 		stats.Podiums = append(stats.Podiums, *holder)

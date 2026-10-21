@@ -40,6 +40,23 @@ func (m *MockRepo) RevokeSessions(ctx context.Context, userID int) error {
 	return m.Called(userID).Error(0)
 }
 
+func (m *MockRepo) SaveGrant(ctx context.Context, grant WCAGrant, wcaID string) error {
+	return m.Called(grant, wcaID).Error(0)
+}
+
+func (m *MockRepo) GetGrant(ctx context.Context, userID int) (WCAGrant, error) {
+	args := m.Called(userID)
+	return args.Get(0).(WCAGrant), args.Error(1)
+}
+
+func (m *MockRepo) UpdateGrant(ctx context.Context, grant WCAGrant) error {
+	return m.Called(grant).Error(0)
+}
+
+func (m *MockRepo) DeleteGrant(ctx context.Context, userID int) error {
+	return m.Called(userID).Error(0)
+}
+
 const testJWTSecret = "test-secret-that-is-at-least-32-chars-long"
 
 func testConfig() *config.Config {

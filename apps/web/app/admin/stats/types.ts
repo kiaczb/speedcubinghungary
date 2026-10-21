@@ -99,6 +99,23 @@ export type HistoryStats = {
   busiestYear: PersonValue[];
 };
 
+export type AgeStatus = "ready" | "no-grant" | "forbidden" | "unavailable";
+
+export type AgedPerson = {
+  person: Person;
+  years: number;
+  days: number;
+};
+
+export type AgeStats = {
+  status: AgeStatus;
+  known: number;
+  youngest: AgedPerson[];
+  oldest: AgedPerson[];
+  average: number;
+  median: number;
+};
+
 export type RecordEntry = {
   person: Person;
   eventId: string;
@@ -154,7 +171,6 @@ export type ResultStats = {
   solves: number;
   dnfs: number;
   solvingCentiseconds: number;
-  sub10Singles: Person[];
 };
 
 export type StatsReport = {
@@ -164,6 +180,7 @@ export type StatsReport = {
   field?: FieldStats;
   fieldError?: string;
   history: HistoryStats;
+  ages: AgeStats;
   live?: LiveStats;
   liveError?: string;
   results?: ResultStats;

@@ -29,11 +29,14 @@ var ErrNotFound = errors.New("not found on the WCA API")
 
 var ErrRateLimited = errors.New("rate limited by the WCA API")
 
+var ErrForbidden = errors.New("the WCA account may not manage this competition")
+
 type Repository interface {
 	GetCompetition(competitionID string) (wcaCompetition, error)
 	GetUpcomingByCountry(countryISO2 string) ([]wcaCompetition, error)
 	GetPsychSheet(competitionID, eventID string) (wcaPsychSheet, error)
 	GetWCIF(competitionID string) (wcaWCIF, error)
+	GetPrivateWCIF(competitionID, accessToken string) (wcaWCIF, error)
 	GetRegistrationCount(competitionID string) (int, error)
 	GetPersons(wcaIDs []string) ([]wcaPersonSummary, error)
 	GetPersonCompetitions(wcaID string) ([]wcaCompetition, error)
@@ -102,6 +105,12 @@ func (r *WCARepository) GetWCIF(competitionID string) (wcaWCIF, error) {
 	return wcif, err
 }
 
+func (r *WCARepository) GetPrivateWCIF(competitionID, accessToken string) (wcaWCIF, error) {
+	var wcif wcaWCIF
+	err := r.getAuthorizedJSON(fmt.Sprintf("%s/%s/wcif", r.baseURL, url.PathEscape(competitionID)), accessToken, &wcif)
+	return wcif, err
+}
+
 func (r *WCARepository) GetRegistrationCount(competitionID string) (int, error) {
 	var registrations []wcaRegistration
 	if err := r.getJSON(fmt.Sprintf("%s/%s/registrations", r.baseURL, url.PathEscape(competitionID)), &registrations); err != nil {
@@ -143,6 +152,10 @@ func (r *WCARepository) apiRoot() string {
 }
 
 func (r *WCARepository) getJSON(reqURL string, out any) error {
+	return r.getAuthorizedJSON(reqURL, "", out)
+}
+
+func (r *WCARepository) getAuthorizedJSON(reqURL, accessToken string, out any) error {
 	select {
 	case r.slots <- struct{}{}:
 		defer func() { <-r.slots }()
@@ -150,7 +163,15 @@ func (r *WCARepository) getJSON(reqURL string, out any) error {
 		return errUpstreamBusy
 	}
 
-	resp, err := r.client.Get(reqURL)
+	req, err := http.NewRequest(http.MethodGet, reqURL, nil)
+	if err != nil {
+		return err
+	}
+	if accessToken != "" {
+		req.Header.Set("Authorization", "Bearer "+accessToken)
+	}
+
+	resp, err := r.client.Do(req)
 	if err != nil {
 		return err
 	}
@@ -161,6 +182,8 @@ func (r *WCARepository) getJSON(reqURL string, out any) error {
 		return ErrNotFound
 	case resp.StatusCode == http.StatusTooManyRequests:
 		return ErrRateLimited
+	case resp.StatusCode == http.StatusUnauthorized, resp.StatusCode == http.StatusForbidden:
+		return ErrForbidden
 	case resp.StatusCode != http.StatusOK:
 		return fmt.Errorf("WCA API returned status %d", resp.StatusCode)
 	}

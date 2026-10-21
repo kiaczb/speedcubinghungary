@@ -17,6 +17,7 @@ type Report struct {
 	Field        *FieldStats     `json:"field,omitempty"`
 	FieldError   string          `json:"fieldError,omitempty"`
 	History      HistoryStats    `json:"history"`
+	Ages         AgeStats        `json:"ages"`
 	Live         *LiveStats      `json:"live,omitempty"`
 	LiveError    string          `json:"liveError,omitempty"`
 	Results      *ResultStats    `json:"results,omitempty"`
@@ -175,7 +176,6 @@ type ResultStats struct {
 	Solves              int             `json:"solves"`
 	DNFs                int             `json:"dnfs"`
 	SolvingCentiseconds int64           `json:"solvingCentiseconds"`
-	Sub10Singles        []Person        `json:"sub10Singles"`
 }
 
 type EventWinner struct {
@@ -190,4 +190,28 @@ type CountryMedals struct {
 	Gold        int    `json:"gold"`
 	Silver      int    `json:"silver"`
 	Bronze      int    `json:"bronze"`
+}
+
+type AgeStatus string
+
+const (
+	AgesReady       AgeStatus = "ready"
+	AgesNoGrant     AgeStatus = "no-grant"
+	AgesForbidden   AgeStatus = "forbidden"
+	AgesUnavailable AgeStatus = "unavailable"
+)
+
+type AgeStats struct {
+	Status   AgeStatus    `json:"status"`
+	Known    int          `json:"known"`
+	Youngest []AgedPerson `json:"youngest"`
+	Oldest   []AgedPerson `json:"oldest"`
+	Average  float64      `json:"average"`
+	Median   float64      `json:"median"`
+}
+
+type AgedPerson struct {
+	Person Person `json:"person"`
+	Years  int    `json:"years"`
+	Days   int    `json:"days"`
 }

@@ -64,6 +64,7 @@ type Registrations struct {
 }
 
 type Registrant struct {
+	WCAUserID     int            `json:"wcaUserId"`
 	Name          string         `json:"name"`
 	WCAID         string         `json:"wcaId"`
 	CountryISO2   string         `json:"countryIso2"`
@@ -92,6 +93,8 @@ type wcaWCIFEvent struct {
 }
 
 type wcaWCIFPerson struct {
+	WCAUserID     int                  `json:"wcaUserId"`
+	Birthdate     string               `json:"birthdate"`
 	Name          string               `json:"name"`
 	WCAID         string               `json:"wcaId"`
 	CountryISO2   string               `json:"countryIso2"`

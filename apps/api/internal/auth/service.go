@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"speedcubinghungary/internal/config"
@@ -35,6 +36,10 @@ type Service interface {
 	LoginCallback(ctx context.Context, code string) (string, error)
 	Logout(ctx context.Context, userID int) error
 	GetSession(ctx context.Context, userID int) (middleware.Session, error)
+	GrantAuthorizeURL(state string) string
+	CompleteGrant(ctx context.Context, userID int, code string) error
+	WCAAccessToken(ctx context.Context, userID int) (string, error)
+	RevokeGrant(ctx context.Context, userID int) error
 }
 
 type service struct {
@@ -44,6 +49,8 @@ type service struct {
 	authorizeURL string
 	tokenURL     string
 	meURL        string
+
+	grantMu sync.Mutex
 }
 
 func NewService(repo Repository, cfg *config.Config) Service {
@@ -58,11 +65,15 @@ func NewService(repo Repository, cfg *config.Config) Service {
 }
 
 func (s *service) AuthorizeURL(state string) string {
+	return s.buildAuthorizeURL(state, wcaScopes)
+}
+
+func (s *service) buildAuthorizeURL(state, scopes string) string {
 	query := url.Values{}
 	query.Set("client_id", s.cfg.WCAClientID)
 	query.Set("redirect_uri", s.cfg.WCARedirectURI)
 	query.Set("response_type", "code")
-	query.Set("scope", wcaScopes)
+	query.Set("scope", scopes)
 	query.Set("state", state)
 
 	return s.authorizeURL + "?" + query.Encode()
@@ -79,12 +90,12 @@ type wcaUser struct {
 }
 
 func (s *service) LoginCallback(ctx context.Context, code string) (string, error) {
-	accessToken, err := s.exchangeCode(ctx, code)
+	tokens, err := s.exchangeCode(ctx, code)
 	if err != nil {
 		return "", err
 	}
 
-	wca, err := s.fetchMe(ctx, accessToken)
+	wca, err := s.fetchMe(ctx, tokens.AccessToken)
 	if err != nil {
 		return "", err
 	}
@@ -103,44 +114,61 @@ func (s *service) LoginCallback(ctx context.Context, code string) (string, error
 	return s.signToken(user)
 }
 
-func (s *service) exchangeCode(ctx context.Context, code string) (string, error) {
+type tokenResponse struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	ExpiresIn    int    `json:"expires_in"`
+	Scope        string `json:"scope"`
+}
+
+type tokenStatusError struct {
+	status int
+}
+
+func (e *tokenStatusError) Error() string {
+	return fmt.Sprintf("WCA token endpoint returned status %d", e.status)
+}
+
+func (s *service) exchangeCode(ctx context.Context, code string) (*tokenResponse, error) {
 	form := url.Values{}
-	form.Set("client_id", s.cfg.WCAClientID)
-	form.Set("client_secret", s.cfg.WCAClientSecret)
 	form.Set("grant_type", "authorization_code")
 	form.Set("code", code)
 	form.Set("redirect_uri", s.cfg.WCARedirectURI)
+	return s.requestToken(ctx, form)
+}
+
+func (s *service) requestToken(ctx context.Context, form url.Values) (*tokenResponse, error) {
+	form.Set("client_id", s.cfg.WCAClientID)
+	form.Set("client_secret", s.cfg.WCAClientSecret)
 
 	req, err := http.NewRequestWithContext(
 		ctx, http.MethodPost, s.tokenURL, strings.NewReader(form.Encode()),
 	)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("WCA token exchange failed: %w", err)
+		return nil, fmt.Errorf("WCA token request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("WCA token exchange returned status %d", resp.StatusCode)
+		return nil, &tokenStatusError{status: resp.StatusCode}
 	}
 
-	var tokenResp struct {
-		AccessToken string `json:"access_token"`
-	}
-	if err := decodeJSON(resp.Body, &tokenResp); err != nil {
-		return "", fmt.Errorf("WCA token response is not valid JSON: %w", err)
+	var tokens tokenResponse
+	if err := decodeJSON(resp.Body, &tokens); err != nil {
+		return nil, fmt.Errorf("WCA token response is not valid JSON: %w", err)
 	}
 
-	if tokenResp.AccessToken == "" {
-		return "", fmt.Errorf("WCA token response contained no access_token")
+	if tokens.AccessToken == "" {
+		return nil, fmt.Errorf("WCA token response contained no access_token")
 	}
 
-	return tokenResp.AccessToken, nil
+	return &tokens, nil
 }
 
 func (s *service) fetchMe(ctx context.Context, accessToken string) (*wcaUser, error) {

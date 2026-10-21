@@ -6,12 +6,15 @@ import (
 	"encoding/hex"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
 
 const (
 	stateCookieName = "oauth_state"
+
+	grantStateCookieName = "wca_grant_state"
 
 	stateTTL = 10 * time.Minute
 
@@ -94,4 +97,59 @@ func isSafePathRune(r rune) bool {
 	}
 
 	return strings.ContainsRune("-._~/%?&=@+:$!*'()#", r)
+}
+
+type grantState struct {
+	userID       int
+	redirectPath string
+}
+
+func setGrantStateCookie(w http.ResponseWriter, nonce string, userID int, redirectPath string, secure bool) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     grantStateCookieName,
+		Value:    nonce + ":" + strconv.Itoa(userID) + ":" + redirectPath,
+		HttpOnly: true,
+		Secure:   secure,
+		SameSite: http.SameSiteLaxMode,
+		Path:     "/",
+		MaxAge:   int(stateTTL.Seconds()),
+	})
+}
+
+func clearGrantStateCookie(w http.ResponseWriter, secure bool) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     grantStateCookieName,
+		Value:    "",
+		HttpOnly: true,
+		Secure:   secure,
+		SameSite: http.SameSiteLaxMode,
+		Path:     "/",
+		MaxAge:   -1,
+	})
+}
+
+func verifyGrantState(r *http.Request, state string) (grantState, bool) {
+	cookie, err := r.Cookie(grantStateCookieName)
+	if err != nil || cookie.Value == "" || state == "" {
+		return grantState{}, false
+	}
+
+	nonce, rest, found := strings.Cut(cookie.Value, ":")
+	if !found || nonce == "" {
+		return grantState{}, false
+	}
+	rawUserID, redirectPath, found := strings.Cut(rest, ":")
+	if !found {
+		return grantState{}, false
+	}
+	userID, err := strconv.Atoi(rawUserID)
+	if err != nil || userID <= 0 {
+		return grantState{}, false
+	}
+
+	if subtle.ConstantTimeCompare([]byte(nonce), []byte(state)) != 1 {
+		return grantState{}, false
+	}
+
+	return grantState{userID: userID, redirectPath: sanitizeRedirectPath(redirectPath)}, true
 }

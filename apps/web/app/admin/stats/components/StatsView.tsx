@@ -16,6 +16,7 @@ import { ApiError, clientJson } from "@/app/lib/api";
 import { formatDateRange } from "@/app/lib/date";
 import type { Phase, StatsReport } from "../types";
 import { countryName } from "../lib/format";
+import AgesSection from "./AgesSection";
 import CompetitionPicker from "./CompetitionPicker";
 import FieldSection from "./FieldSection";
 import HistorySection from "./HistorySection";
@@ -51,9 +52,11 @@ function errorMessage(error: unknown): string {
 
 function ReportView({
   competitionId,
+  grantFailed,
   onBack,
 }: {
   competitionId: string;
+  grantFailed: boolean;
   onBack: () => void;
 }) {
   const [report, setReport] = useState<StatsReport | null>(null);
@@ -151,6 +154,14 @@ function ReportView({
         error={report.fieldError}
       />
     ),
+    ages: (
+      <AgesSection
+        key="ages"
+        competitionId={competition.id}
+        ages={report.ages}
+        onChanged={() => setRefreshes((n) => n + 1)}
+      />
+    ),
     history: (
       <HistorySection
         key="history"
@@ -161,10 +172,10 @@ function ReportView({
   };
   const order: (keyof typeof sections)[] =
     phase === "after"
-      ? ["results", "live", "field", "history"]
+      ? ["results", "live", "field", "ages", "history"]
       : phase === "during"
-        ? ["live", "field", "history"]
-        : ["field", "history"];
+        ? ["live", "field", "ages", "history"]
+        : ["field", "ages", "history"];
 
   return (
     <div className="flex flex-col gap-12">
@@ -184,6 +195,13 @@ function ReportView({
           {error && (
             <p className="mt-2 text-sm text-brand-red">
               A frissítés nem sikerült: {error}
+            </p>
+          )}
+          {grantFailed && report.ages.status === "no-grant" && (
+            <p className="mt-2 text-sm text-brand-red">
+              A WCA-hozzáférés engedélyezése nem sikerült. A saját, admin
+              WCA-fiókoddal kell belépni a WCA-n, és el kell fogadni a
+              versenykezelési hozzáférést.
             </p>
           )}
         </div>
@@ -241,6 +259,7 @@ export default function StatsView() {
     <ReportView
       key={competitionId}
       competitionId={competitionId}
+      grantFailed={searchParams.get("wca") === "failed"}
       onBack={() => router.replace("/admin/stats")}
     />
   );

@@ -7,6 +7,7 @@ import (
 
 	"speedcubinghungary/internal/competition"
 	"speedcubinghungary/internal/httperr"
+	"speedcubinghungary/internal/middleware"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -29,7 +30,13 @@ func (h *Handler) SearchCompetitions(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetReport(w http.ResponseWriter, r *http.Request) {
-	report, err := h.service.GetReport(r.Context(), chi.URLParam(r, "id"))
+	user := middleware.GetUserFromContext(r)
+	if user == nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	report, err := h.service.GetReport(r.Context(), chi.URLParam(r, "id"), user.UserID)
 	if err != nil {
 		writeError(w, r, err)
 		return

@@ -23,6 +23,9 @@ func (s stubRepository) GetUpcomingByCountry(string) ([]wcaCompetition, error) {
 func (s stubRepository) GetPsychSheet(string, string) (wcaPsychSheet, error) {
 	return wcaPsychSheet{}, s.err
 }
+func (s stubRepository) GetPrivateWCIF(string, string) (wcaWCIF, error) {
+	return wcaWCIF{}, s.err
+}
 func (s stubRepository) GetWCIF(string) (wcaWCIF, error)          { return wcaWCIF{}, s.err }
 func (s stubRepository) GetRegistrationCount(string) (int, error) { return 0, s.err }
 func (s stubRepository) GetPersons([]string) ([]wcaPersonSummary, error) { return nil, s.err }
