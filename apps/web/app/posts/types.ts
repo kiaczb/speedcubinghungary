@@ -70,8 +70,17 @@ export type WeeklyReportMilestoneDelegate = {
   count: number;
 };
 
+export type WeeklyReportMilestoneSolver = {
+  name: string;
+  count: number;
+  milestone: number;
+  remaining: number;
+  achieved: boolean;
+};
+
 export type WeeklyReport = {
   competitions: WeeklyReportCompetition[];
   competitorMilestones: WeeklyReportMilestoneCompetitor[];
   delegateMilestones: WeeklyReportMilestoneDelegate[];
+  solveMilestones: WeeklyReportMilestoneSolver[];
 };

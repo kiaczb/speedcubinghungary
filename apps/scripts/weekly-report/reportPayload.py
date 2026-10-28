@@ -45,4 +45,14 @@ def BuildReportPayload(report_data):
             }
             for delegate in report_data["delegate_milestones"]
         ],
+        "solveMilestones": [
+            {
+                "name": solver["name"],
+                "count": solver["successful_solves_count"],
+                "milestone": solver["milestone"],
+                "remaining": solver["remaining"],
+                "achieved": solver["is_achieved"],
+            }
+            for solver in report_data.get("solve_milestones", [])
+        ],
     }
