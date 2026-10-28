@@ -23,6 +23,7 @@ DB_CONFIG = {
 }
 
 REQUIRED_TABLES = ("users", "records", "posts")
+REQUIRED_COLUMNS = (("users", "successful_solves_count"),)
 
 
 def _connect(row_factory=None):
@@ -47,6 +48,19 @@ def check_connection():
                             f"Required table '{table}' is missing from the shared "
                             f"database '{DB_NAME}'. Run the Go backend migrations first."
                         )
+                for table, column in REQUIRED_COLUMNS:
+                    cur.execute(
+                        """
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_schema = 'public' AND table_name = %s AND column_name = %s
+                        """,
+                        (table, column),
+                    )
+                    if cur.fetchone() is None:
+                        raise RuntimeError(
+                            f"Required column '{table}.{column}' is missing from the shared "
+                            f"database '{DB_NAME}'. Run the Go backend migrations first."
+                        )
         logger.info(
             "Connected to shared database '%s'; required tables present.", DB_NAME
         )
@@ -61,7 +75,8 @@ def get_person_data(wca_id):
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    SELECT wca_id, name, competition_count, delegated_count
+                    SELECT wca_id, name, competition_count, delegated_count,
+                           successful_solves_count
                     FROM users
                     WHERE wca_id = %s
                     """,
@@ -73,21 +88,26 @@ def get_person_data(wca_id):
         return None
 
 
-def upsert_person(wca_id, name, comp_count=None, del_count=None):
+def upsert_person(wca_id, name, comp_count=None, del_count=None, solve_count=None):
     try:
         with _connect() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    INSERT INTO users (wca_id, name, competition_count, delegated_count)
-                    VALUES (%s, %s, COALESCE(%s, 0), COALESCE(%s, 0))
+                    INSERT INTO users (wca_id, name, competition_count, delegated_count,
+                                       successful_solves_count)
+                    VALUES (%s, %s, COALESCE(%s, 0), COALESCE(%s, 0), COALESCE(%s, 0))
                     ON CONFLICT (wca_id) DO UPDATE SET
                         name = EXCLUDED.name,
                         competition_count = COALESCE(%s, users.competition_count),
                         delegated_count = COALESCE(%s, users.delegated_count),
+                        successful_solves_count = COALESCE(%s, users.successful_solves_count),
                         updated_at = NOW();
                     """,
-                    (wca_id, name, comp_count, del_count, comp_count, del_count),
+                    (
+                        wca_id, name, comp_count, del_count, solve_count,
+                        comp_count, del_count, solve_count,
+                    ),
                 )
             conn.commit()
     except Exception:
@@ -193,6 +213,32 @@ def get_all_important_competitors_from_db(milestones, difference):
                 return cur.fetchall()
     except Exception:
         logger.exception("Failed to read milestone competitors")
+        return []
+
+
+def get_all_important_solvers_from_db(milestone_step, difference):
+    try:
+        with _connect(row_factory=dict_row) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT wca_id, name, successful_solves_count
+                    FROM users
+                    WHERE successful_solves_count > 0
+                      AND (
+                        (MOD(successful_solves_count, %s) <= %s
+                         AND successful_solves_count >= %s)
+                        OR MOD(successful_solves_count, %s) >= (%s - %s)
+                      )
+                    """,
+                    (
+                        milestone_step, difference, milestone_step,
+                        milestone_step, milestone_step, difference,
+                    ),
+                )
+                return cur.fetchall()
+    except Exception:
+        logger.exception("Failed to read milestone solvers")
         return []
 
 

@@ -1,7 +1,10 @@
+import logging
 from database.db import upsert_person, get_person_data, get_all_important_competitors_from_db
 from utils import ConvertDate
 import requests
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 difference = 3
 milestones = [100, 200]
@@ -84,6 +87,6 @@ def EstimateMilestoneCompetition(wca_id, current_count):
                 return f"Nincs elég regisztrált verseny (még {needed} kellene)", "", False
         else:
             return "WCA API nem elérhető", "", False
-    except Exception as e:
-        print(f"Hiba a mérföldkő becslésénél ({wca_id}): {e}")
+    except Exception:
+        logger.exception("Failed to estimate milestone competition for %s", wca_id)
         return "Hiba a lekérdezés során", "", False

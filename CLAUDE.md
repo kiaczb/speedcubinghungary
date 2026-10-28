@@ -401,11 +401,32 @@ Other Go conventions observed:
   email HTML. The email still renders from Jinja (`templating.py` /
   `html_environment` / `templates/competitions.html`); only the website post uses
   the JSON payload. Keep `reportPayload.py` and `types.ts` (`WeeklyReport*`) in sync.
-- **All Hungarian-interest competitors are included, not just record-setters**
-  (`BuildReportData` no longer filters). `competitors.py` already returns every
-  Hungarian competitor who had a result; those without a record get an empty
-  `results` list (shown as a name with a "résztvevő" marker). This also affects
-  the email, which shares the data.
+- **The website post includes all Hungarian-interest competitors, the email
+  does not.** `BuildReportData` doesn't filter: `competitors.py` returns every
+  Hungarian competitor who had a result, and those without a record get an
+  empty `results` list in the post (shown with a "résztvevő" marker). The
+  **email** follows the standalone `kiaczb/weekly-report` repo instead
+  (`emailSender.EmailCompetitions`): on a **Hungarian** competition only the
+  record-setters are listed and a competition without any is dropped; on a
+  foreign one every Hungarian is listed. It filters a **copy** — the post is
+  written from the same `Competition` objects.
+- **The job tracks the original `kiaczb/weekly-report` repo's behaviour**, plus
+  what this system adds (the `report` post, logging instead of `print`, the
+  shared `users` table instead of its own `persons`). Ported from it:
+  - **`/results` fallback** (`EventsFromResults`): once results are posted, the
+    public WCIF's `events` may no longer carry them, so `/competitions/{id}/results`
+    is mapped back onto WCIF registrant ids (by WCA ID, newcomers by name) and
+    replaces the WCIF events.
+  - **Solve milestones** (`solvesCount.py`, every 5000, ±250): per competitor
+    the official `total_solves` from WCA `/persons/{id}`, plus this
+    competition's live-counted successful attempts while `results_posted_at`
+    is empty. A failed lookup leaves the stored value alone. Stored in
+    `users.successful_solves_count` (migration `000019`), in the email, and as
+    `solveMilestones` in the post payload (optional in `parseWeeklyReport`,
+    because older posts don't have it).
+  - `database/db.py` `check_connection` also checks required **columns**, so
+    running the job before the API migrated fails loudly instead of every
+    swallowed `upsert_person` failing silently.
 - The reported period is a **rolling 7-day window** (run time − 1 week … run
   time), *not* a calendar week — `competition.py` queries the WCA API with that
   range. The post title must show that actual window; only the idempotency key
@@ -459,7 +480,9 @@ cannot recur at the storage layer) and `000016_add_user_session_version`
 12-hour session, see §9) and `000017_add_wca_grants` (the admin's encrypted WCA
 `manage_competitions` tokens, see §9) and `000018_add_certificate_templates`
 (`certificate_templates` + `certificate_assets`, the certificate editor's
-storage, see §23). ⚠️ The `feature/learn*` branches also
+storage, see §23) and `000019_add_user_successful_solves`
+(`users.successful_solves_count INT NOT NULL DEFAULT 0`, written only by the
+weekly-report job, §6). ⚠️ The `feature/learn*` branches also
 use `000017`–`000019`; **renumber them past the last develop migration before
 merging** — golang-migrate fails on a duplicate version, and a lower number
 than the DB's current version is silently never applied.
@@ -485,6 +508,7 @@ users(id SERIAL PK, wca_id VARCHAR(50) UNIQUE, name, email,
       avatar_url TEXT NULL,   -- 000004: WCA profilkép URL-je (nullable)
       roles JSONB default '[]', competition_count INT, delegated_count INT,
       session_version INT NOT NULL DEFAULT 0,  -- 000016: kijelentkezés = +1 (§9)
+      successful_solves_count INT NOT NULL DEFAULT 0,  -- 000019: heti riport (§6)
       created_at, updated_at)
 
 -- 000017: az admin WCA-engedélye (§9). A tokenek AES-GCM-mel titkosítva, a
@@ -552,7 +576,7 @@ Notes / current state:
 - `posts.id` is a `uuid.NewString()` generated in the service (not a DB default).
 - `users.roles` is JSONB; login upsert **preserves existing roles** and only seeds
   `["user"]` on first insert (see `auth/repository.go` `Upsert` `ON CONFLICT`).
-- `records` and `users.competition_count`/`delegated_count` are written and read
+- `records` and `users.competition_count`/`delegated_count`/`successful_solves_count` are written and read
   only by the Python job (`SaveRecords`, `upsert_person`); the Go API does not
   touch them.
 - Competition data is **not** persisted — it is proxied live from WCA per request.
