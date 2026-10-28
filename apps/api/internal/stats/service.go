@@ -158,7 +158,7 @@ func (s *Service) GetReport(ctx context.Context, competitionID string, userID in
 	}
 	if phase != PhaseBefore {
 		wg.Go(func() {
-			live, fetchedAt, err := s.liveData(ctx, competitionID)
+			live, fetchedAt, err := s.LiveData(ctx, competitionID)
 			if err != nil {
 				log.Printf("stats: %s WCA Live adatai nem kérhetők le: %v", competitionID, err)
 				report.LiveError = "A verseny nincs a WCA Live-on, vagy az most nem érhető el."
@@ -268,7 +268,7 @@ func (s *Service) historyStats(info CompetitionInfo, registrations competition.R
 	return stats
 }
 
-func (s *Service) liveData(ctx context.Context, competitionID string) (*LiveCompetition, time.Time, error) {
+func (s *Service) LiveData(ctx context.Context, competitionID string) (*LiveCompetition, time.Time, error) {
 	s.liveMu.Lock()
 	defer s.liveMu.Unlock()
 

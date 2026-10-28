@@ -99,3 +99,25 @@ export function formatDateRange(start: DateInput, end: DateInput): string {
 
   return from === to ? from : `${from} – ${to}`;
 }
+
+function longDateParts(value: DateInput) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  const parts = LONG_DATE.formatToParts(date);
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((p) => p.type === type)?.value ?? "";
+  return { year: part("year"), month: part("month"), day: part("day") };
+}
+
+export function formatCompactDateRange(start: DateInput, end: DateInput): string {
+  const from = longDateParts(start);
+  const to = longDateParts(end);
+  if (!from || !to || from.year !== to.year) return formatDateRange(start, end);
+  if (from.month !== to.month) {
+    return `${from.year}. ${from.month} ${from.day}. – ${to.month} ${to.day}.`;
+  }
+  if (from.day !== to.day) {
+    return `${from.year}. ${from.month} ${from.day}–${to.day}.`;
+  }
+  return formatLongDate(start);
+}

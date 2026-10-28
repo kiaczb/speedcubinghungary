@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"speedcubinghungary/internal/allrounder"
 	"speedcubinghungary/internal/auth"
+	"speedcubinghungary/internal/certificate"
 	"speedcubinghungary/internal/competition"
 	"speedcubinghungary/internal/config"
 	"speedcubinghungary/internal/middleware"
@@ -27,6 +28,7 @@ func New(
 	specialHandler *special.Handler,
 	allrounderHandler *allrounder.Handler,
 	statsHandler *stats.Handler,
+	certificateHandler *certificate.Handler,
 ) *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(middleware.SecurityHeaders)
@@ -45,6 +47,7 @@ func New(
 		r.Use(authMiddleware)
 		r.Use(middleware.RBACMiddleware(types.ROLE_ADMIN))
 		r.Get("/wca/authorize", authHandler.AuthorizeWCA)
+		r.Get("/certificates/assets/{id}", certificateHandler.GetAsset)
 	})
 
 	r.Group(func(r chi.Router) {
@@ -96,6 +99,16 @@ func New(
 
 			r.Get("/stats/competitions", statsHandler.SearchCompetitions)
 			r.Get("/stats/competitions/{id}", statsHandler.GetReport)
+
+			r.Get("/certificates/recipients", certificateHandler.GetRecipients)
+			r.Get("/certificates/templates", certificateHandler.ListTemplates)
+			r.Post("/certificates/templates", certificateHandler.CreateTemplate)
+			r.Get("/certificates/templates/{id}", certificateHandler.GetTemplate)
+			r.Put("/certificates/templates/{id}", certificateHandler.UpdateTemplate)
+			r.Delete("/certificates/templates/{id}", certificateHandler.DeleteTemplate)
+			r.Get("/certificates/assets", certificateHandler.ListAssets)
+			r.Post("/certificates/assets", certificateHandler.UploadAsset)
+			r.Delete("/certificates/assets/{id}", certificateHandler.DeleteAsset)
 		})
 	})
 
