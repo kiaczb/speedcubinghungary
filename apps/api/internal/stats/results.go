@@ -15,6 +15,10 @@ var roundOrder = map[string]int{
 	"f": 5, "c": 5,
 }
 
+func RoundOrder(roundTypeID string) int {
+	return roundOrder[roundTypeID]
+}
+
 func computeResults(info CompetitionInfo, results []competition.Result) *ResultStats {
 	stats := &ResultStats{
 		Winners:        []EventWinner{},

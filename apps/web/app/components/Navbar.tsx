@@ -231,7 +231,7 @@ const Navbar = ({ action }: NavbarProps) => {
 
   return (
     <nav
-      className={`sticky top-0 z-50 w-full border-b bg-white transition-[border-color,box-shadow] duration-300 ease-smooth dark:bg-canvas ${
+      className={`sticky top-0 z-50 w-full border-b bg-white transition-[border-color,box-shadow] duration-300 ease-smooth ${
         isScrolled ? "border-line shadow-card" : "border-transparent"
       }`}
     >
@@ -284,7 +284,7 @@ const Navbar = ({ action }: NavbarProps) => {
       <div
         id="mobile-menu"
         inert={!isMenuOpen}
-        className={`overflow-y-auto border-t border-line bg-white transition-[max-height,opacity] duration-300 ease-smooth dark:bg-surface md:hidden ${
+        className={`overflow-y-auto border-t border-line bg-white transition-[max-height,opacity] duration-300 ease-smooth md:hidden ${
           isMenuOpen
             ? "max-h-[calc(100vh-4rem)] opacity-100"
             : "max-h-0 border-transparent opacity-0"

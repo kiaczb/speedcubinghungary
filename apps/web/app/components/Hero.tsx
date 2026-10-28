@@ -6,7 +6,7 @@ import { SITE_DESCRIPTION } from "../lib/site";
 
 const Hero = () => {
   return (
-    <section className="relative flex min-h-[calc(85vh-4rem)] flex-col items-center justify-center overflow-hidden bg-white px-5 py-20 dark:bg-canvas sm:px-8 lg:px-12">
+    <section className="relative flex min-h-[calc(85vh-4rem)] flex-col items-center justify-center overflow-hidden bg-white px-5 py-20 sm:px-8 lg:px-12">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-[9vh] xl:h-[13vh]">
         <div
           className="absolute left-0 top-0 h-full w-[60%] bg-brand-green lg:w-[40%]"

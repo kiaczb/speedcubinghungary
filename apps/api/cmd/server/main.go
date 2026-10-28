@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"speedcubinghungary/internal/allrounder"
 	"speedcubinghungary/internal/auth"
+	"speedcubinghungary/internal/certificate"
 	"speedcubinghungary/internal/competition"
 	"speedcubinghungary/internal/config"
 	"speedcubinghungary/internal/db"
@@ -71,12 +72,19 @@ func main() {
 
 	authService := auth.NewService(auth.NewPostgresRepository(dbConn), cfg)
 
-	statsHandler := stats.NewHandler(stats.NewService(competitionService, stats.NewLiveRepository(cfg.WCALiveURL), authService))
+	statsService := stats.NewService(competitionService, stats.NewLiveRepository(cfg.WCALiveURL), authService)
+	statsHandler := stats.NewHandler(statsService)
+
+	certificateHandler := certificate.NewHandler(certificate.NewService(
+		certificate.NewPostgresRepository(dbConn),
+		competitionService,
+		statsService,
+	))
 
 	authHandler := auth.NewHandler(authService, cfg)
 	authMiddleware := middleware.AuthMiddlewareWithConfig(cfg, authService)
 
-	r := router.New(cfg, authMiddleware, postHandler, competitionHandler, predictionHandler, authHandler, specialHandler, allrounderHandler, statsHandler)
+	r := router.New(cfg, authMiddleware, postHandler, competitionHandler, predictionHandler, authHandler, specialHandler, allrounderHandler, statsHandler, certificateHandler)
 
 	log.Printf("Server started on :8080 (mode: %s)", cfg.Deployment)
 	log.Fatal(http.ListenAndServe("0.0.0.0:8080", r))
