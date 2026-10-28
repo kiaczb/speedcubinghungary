@@ -56,6 +56,7 @@ speedcubinghungary/
 │   │       ├── special/     # Budapest Special: live WCA Live results + recorded DNF times
 │   │       ├── wcalive/     # shared WCA Live transport (GraphQL, Phoenix socket, broadcaster)
 │   │       ├── stats/       # admin competition statistics (before/during/after), see §22
+│   │       ├── certificate/ # admin certificates: recipients, templates, image library, see §23
 │   │       ├── middleware/  # JSON content-type, JWT auth, RBAC
 │   │       ├── httperr/     # hiba → HTTP válasz (5xx szövege naplóba, nem a kliensnek)
 │   │       ├── config/      # env var loading + validation (fail-fast)
@@ -126,7 +127,7 @@ as parameters and only registers routes.
 
 | Layer     | Stack |
 | --------- | ----- |
-| Frontend  | Next.js **16.2.7** (App Router, Turbopack default), React **19.2.4**, TypeScript 5, Tailwind CSS **v4** (`@tailwindcss/postcss`), `react-icons`, `@cubing/icons` (WCA event icon font, ~13 KB, imported only by the `/tools/allrounder`, `/tools/special` and `/tools/prediction` client components). Node 22. |
+| Frontend  | Next.js **16.2.7** (App Router, Turbopack default), React **19.2.4**, TypeScript 5, Tailwind CSS **v4** (`@tailwindcss/postcss`), `react-icons`, `@cubing/icons` (WCA event icon font, ~13 KB, imported only by the `/tools/allrounder`, `/tools/special`, `/tools/prediction`, `/admin/stats` and `/admin/certificates` client components), `pdf-lib` + `@pdf-lib/fontkit` (certificate PDFs, lazy-loaded on click in `/admin/certificates`, see §23), `qrcode-generator` (QR codes on certificates). Node 22. |
 | Backend   | Go **1.25.5**, `go-chi/chi/v5` (router), `go-chi/cors`, `golang-jwt/jwt/v5`, `golang-migrate/migrate/v4`, `jackc/pgx/v5` (via `stdlib` driver) + `lib/pq` (for `pq.Array`), `google/uuid`, `coder/websocket` (WCA Live subscriptions). Tests: `stretchr/testify` + `DATA-DOG/go-sqlmock`. |
 | Scripts   | Python 3.11+ (weekly-report), Jinja-style HTML templates, SMTP email. `requirements.txt` at `apps/scripts/weekly-report/`. |
 | Data      | PostgreSQL **17**. |
@@ -226,7 +227,7 @@ Wiring is manual constructor injection in `cmd/server/main.go` — `repo → ser
 handler`, one block per feature, then the finished handlers (and the finished
 auth middleware) are passed into
 `router.New(cfg, authMiddleware, postHandler, competitionHandler, predictionHandler,
-authHandler, specialHandler, allrounderHandler, statsHandler)`, which only registers routes.
+authHandler, specialHandler, allrounderHandler, statsHandler, certificateHandler)`, which only registers routes.
 **There is no DI framework; follow this manual pattern.**
 
 Other Go conventions observed:
@@ -339,7 +340,10 @@ Other Go conventions observed:
     them. Keep it.
   - The logo (`SpeedcubingFullAnimatedSVG`) draws its letters and black cube
     pieces with `fill="currentColor"` under `text-foreground`; it no longer
-    takes a `textColor` prop.
+    takes a `textColor` prop. Its static path data (letters, frame, cube, the
+    red/green squares and their colours) lives in
+    `app/components/svgs/speedcubingLogo.ts`, shared with the certificate PDF
+    (§23); only the animated offset pieces stay inline.
   - `:root` sets `color-scheme: light`, so native controls stay light even on
     a dark OS.
 - **Server Components fetch data server-side** (e.g. `app/posts/page.tsx`
@@ -453,7 +457,9 @@ auth bug described in §9, then adds `CHECK (btrim(wca_id) <> '')` so that state
 cannot recur at the storage layer) and `000016_add_user_session_version`
 (`users.session_version INT NOT NULL DEFAULT 0` — server-side revocation of the
 12-hour session, see §9) and `000017_add_wca_grants` (the admin's encrypted WCA
-`manage_competitions` tokens, see §9). ⚠️ The `feature/learn*` branches also
+`manage_competitions` tokens, see §9) and `000018_add_certificate_templates`
+(`certificate_templates` + `certificate_assets`, the certificate editor's
+storage, see §23). ⚠️ The `feature/learn*` branches also
 use `000017`–`000019`; **renumber them past the last develop migration before
 merging** — golang-migrate fails on a duplicate version, and a lower number
 than the DB's current version is silently never applied.
@@ -597,6 +603,12 @@ admin route sits in one `Auth + RBAC(admin)` group.
 | GET  | `/special/stream` | public | `special.StreamUpdates` (**SSE**: `update` event on every change of `?competition=<wcaId>`, required). An open stream is also what keeps *that competition's* WCA Live subscription alive (§18) |
 | GET  | `/stats/competitions` | JWT + `admin` | `stats.SearchCompetitions` — the picker: without `?query=` the Hungarian competitions from a year ago onwards (WCA API, `country_iso2=HU`), with it a WCA name search (any country). 15 min cache |
 | GET  | `/stats/competitions/{id}` | JWT + `admin` | `stats.GetReport` — one competition's statistics, see §22. 400 invalid id, 404 unknown to the WCA, 502 upstream |
+| GET/POST | `/certificates/templates` | JWT + `admin` | `certificate.ListTemplates` / `CreateTemplate` (JSON `{name, description, kind, document}`, 201). 400 invalid name/kind/document |
+| GET/PUT/DELETE | `/certificates/templates/{id}` | JWT + `admin` | get / update (`{name, description, document, version}`; **409** on a stale `version`, kind is ignored) / delete (204). 400 non-UUID, 404 unknown |
+| GET/POST | `/certificates/assets` | JWT + `admin` | image library: list (no bytes) / upload (multipart `file`, PNG/JPEG ≤ 10 MiB, 201) |
+| GET  | `/certificates/assets/{id}` | JWT + `admin` | the image bytes (outside the JSON group, §17) |
+| DELETE | `/certificates/assets/{id}` | JWT + `admin` | 204; **409** while a template references it |
+| GET  | `/certificates/recipients` | JWT + `admin` | `certificate.GetRecipients` — `?competition=<wcaId>&mode=podium\|competitors\|registrants`, the certificate recipients plus where they came from, see §23. 400 invalid id/mode, 404 unknown to the WCA, 502 upstream (also: not on WCA Live during the competition) |
 | PUT  | `/special/results/{liveResultId}/attempts/{attemptNumber}/elapsed` | JWT + `admin` | `special.RecordElapsed` (body `{competitionWcaId, elapsedCs, note}`; `elapsedCs: null` **deletes** the entry). Keyed by WCA Live ids, not our own — there is no row for an un-timed DNF |
 
 **Reading `/special/*` is public; only recording a DNF duration is admin.** The
@@ -960,11 +972,13 @@ nav links in `app/lib/site.ts` if needed. **Read the Next 16 docs first** (§3 w
   It's a separate, manually-started `caddy` container (image `caddy:latest`,
   container name literally `caddy`, config bind-mounted from
   `~/caddy/Caddyfile` on the host — **not tracked in this repo**)
-  that also proxies an unrelated `other.example.org` domain (Jellyfin). It
-  exists because the compose `caddy` service can't bind :80/:443 — something
-  already holds those ports on this host — so `up -d` for the `proxy` profile
-  fails with "port is already allocated" and the compose `caddy` service stays
-  `Created`/`Exited`, harmlessly. Two consequences if the API/web containers
+  that also proxies an unrelated `other.example.org` domain (Jellyfin), so it
+  holds :80/:443 and the compose `caddy` can't bind them. ⚠️ **The server's
+  `.env.test` must therefore leave `COMPOSE_PROFILES` empty** (not `proxy` as
+  in `.env.test.example`): with the profile on, `up -d` starts web/api, then
+  fails on the caddy with "port is already allocated", exits 1, and the deploy
+  workflow goes red (`set -e`) even though the new web/api are already running.
+  This bit on 2026-10-21. Two consequences if the API/web containers
   are ever recreated with a different Compose project name (i.e.
   `COMPOSE_PROJECT_NAME`, which sets the container-name prefix and the
   `<project>_appnet` network name) — this already happened once
@@ -1849,6 +1863,184 @@ Rules and verified facts:
   (`BarList`), every value also printed as text.
 - Smoke test against the real WCA (opt-in):
   `STATS_SMOKE=HungarianOpen2026 STATS_SMOKE_HISTORY=1 go test ./internal/stats -run Smoke -v -timeout 10m`
+
+## 23. Oklevelek (`internal/certificate` + `/admin/certificates`)
+
+Admin-only, one admin tile. The flow is **template first, then competition**
+(the owner's call):
+
+- **`/admin/certificates`** — the template gallery: one card per saved
+  template with a rendered thumbnail (sample data), **Használat** /
+  Szerkesztés / copy / delete, plus an "Új sablon" card.
+- **`/admin/certificates/generate?template=&competition=&mode=`** — the chosen
+  template on top, then the competition picker, then **who** gets a
+  certificate (only the modes that match the template's kind: `placement` →
+  Dobogósok only, no tabs; `participation` → Versenyzők / Regisztráltak),
+  review/deselect, and download one multi-page **PDF** (one certificate per
+  page), a one-page **sample**, or a CSV (`;`-separated, UTF-8 BOM, so
+  Hungarian Excel and Word mail merge open it). Everything is in the URL.
+- `/admin/certificates/templates` only redirects to the gallery (old links);
+  **`/templates/[id]`** is the visual **template editor**: three columns
+  (elements / data fields / image library / layers · canvas · properties),
+  drag-and-drop, move/resize with snapping, undo/redo, Ctrl+S, preview with
+  sample or real competition data, PDF test. Desktop only (≥1024 px).
+
+### Templates: kind, document, storage
+
+- A template has a **kind**: `placement` (one certificate per podium place —
+  Dobogósok mode) or `participation` (one per person — Versenyzők and
+  Regisztráltak). The kind decides which data fields exist (`variablesFor`)
+  and is **fixed after creation** (`UpdateTemplate` ignores it; copy to change).
+- The **document** is one JSON (`lib/template/model.ts`, `schemaVersion: 1`):
+  `page` (mm, background, safety margin) + an ordered `elements` array
+  (array order = z-order). Element types: `text`, `image`, `logo`, `rect`,
+  `ellipse`, `line`, `qr`. Lengths are **mm**, font sizes and stroke widths **pt**.
+  The server only checks the envelope (object, `schemaVersion`, `page`,
+  `elements`, ≤ 200 elements, ≤ 1 MiB) and stores it compacted in JSONB —
+  the element format is the frontend's. Bump `schemaVersion` (both sides) if
+  the format ever changes incompatibly.
+- **Text** = segments, each plain text or a typed data field
+  (`{ variable: "competitor.name" }`), with **one style per element**
+  (font, size, bold/italic/underline, colour, align, line height, letter
+  spacing, uppercase, fit = wrap | shrink | wrapShrink + min size). Mixed
+  per-run formatting is not supported. In the editor the segments are edited
+  in a `contentEditable` with non-editable chips (`TextContentEditor`).
+- The colour `"medal"` resolves per place (gold/silver/bronze) — the only
+  place-dependent styling. `a/az` + name variants exist as their own data
+  fields (`competition.nameWithArticle`, `result.eventWithArticle`).
+- Concurrency: `version` column, `PUT` sends the version it edited, a
+  mismatch is **409** and the editor offers "load theirs" / "overwrite".
+- **Images live in Postgres** (`certificate_assets.data BYTEA`), not on the
+  uploads volume: `/uploads/*` is served publicly, and signatures/stamps
+  must not be. Served only by the admin route `GET /certificates/assets/{id}`
+  (outside the JSON group, `Cache-Control: private, immutable` — assets are
+  immutable, a replacement is a new asset). PNG/JPEG only (content-sniffed,
+  ≤ 10 MiB, ≤ 12000 px); SVG deliberately not (scripts). Deleting an asset a
+  template references is **409** — checked with `jsonb_path_exists` in the
+  same `DELETE`. Repository smoke test (real Postgres):
+  `SMOKE_DATABASE_URL=… SMOKE_USER_ID=<admin users.id> go test ./internal/certificate -run SmokeDatabase -v`
+- **There is no built-in template — removed at the owner's request.** A new
+  template starts from a blank A4 landscape page (`blankDocument`); without a
+  saved template the gallery shows only the "Új sablon" card. Don't add a hard-coded default back.
+- Locked elements can't be picked on the canvas (so a full-page background
+  doesn't swallow clicks) — select them from the Layers list.
+
+- **QR codes** (`lib/template/qr.ts`, `qrcode-generator`): content is segments
+  like text (presets: the competitor's WCA profile, the competition's WCA page,
+  or custom). If a data field in it is empty — a newcomer has no WCA ID until
+  results are posted — the **fallback** segments are used (default: the
+  competition page), or the code is left out when there is none. The text is
+  UTF-8-encoded to a byte string first, because the library's default
+  `stringToBytes` truncates every char to one byte. Drawn as one vector path
+  (row runs) in both SVG and PDF; a module under 0.4 mm is flagged. Verified
+  by rasterising the PDF and decoding with jsQR.
+- **Editor styling:** data fields are a plain list and inline tokens are a
+  neutral dotted underline; the template kind is plain muted text. The owner
+  rejected tinted green pill chips and coloured category badges here — keep it
+  neutral.
+
+### One layout engine: canvas = PDF
+
+- `lib/template/textLayout.ts` (`layoutText`) does line breaking, shrink-to-fit
+  and alignment from the **font files' metrics** via pdf-lib (`metrics.ts`),
+  not from the browser. The editor canvas (SVG, `CertificateCanvas`) and the
+  PDF (`lib/pdf/render.ts`) both draw its output, so they break lines in the
+  same place. Verified: canvas screenshot vs PDF render, the difference image
+  is black except anti-aliasing. Keep text measurement out of the DOM.
+- ⚠️ **Don't name a file `layout.ts` (or `page`, `template`, `loading`,
+  `error`, `route`, `default`) anywhere under `app/`** — Next treats it as a
+  route file even inside a colocated `lib/` folder (the dev type-checker
+  flagged `lib/template/layout.ts` as a broken layout). Hence `textLayout.ts`.
+- Overflow (doesn't fit even at min size) and missing glyphs show as a red box
+  on the canvas, as an editor warning, and are listed after PDF generation.
+
+### PDF generation (browser, `pdf-lib` + `@pdf-lib/fontkit`)
+
+- Runs **in the browser**, behind a dynamic `import("../lib/pdf/generate")` on
+  click — the ~1.1 MB pdf-lib + fontkit chunk is not part of the page load.
+  Keep that boundary.
+- **Template previews** (`components/TemplatePreview.tsx`): the gallery cards
+  and the generate page header (sample data), and the "Előnézet" thumbnail in
+  the generate bar (the first recipient in print order; click opens it large
+  with prev/next over the selected recipients). It
+  draws with the editor's own shapes (`components/CertificateShapes.tsx`, shared
+  with `CertificateCanvas`) and measures text with pdf-lib, which it loads via
+  a dynamic `import("../lib/template/resources")` — so the pdf-lib chunk
+  arrives right after a page with a preview renders, still not in the initial
+  bundle.
+- Split on purpose: `content.ts` turns recipients into data-field values
+  (`CertificateContext`) in print order and may use the app's `@/` helpers;
+  `render.ts` draws any template document for those contexts and imports only
+  pdf-lib, fontkit, the logo data and the pure `lib/template` modules, so it
+  can be run and checked outside Next (Node 22 type stripping + `pdftoppm`).
+  Only the fonts and images the template actually uses are fetched.
+- ⚠️ **Fonts are embedded in full, not subset.** pdf-lib's `subset: true`
+  silently drops most EB Garamond glyphs ("OKLEVÉL" rendered as "E V") — Geist
+  happened to survive. Full embedding costs ~0.5 MB per document, independent
+  of page count. Don't turn subsetting back on without checking a rendered page.
+- Fonts: `public/fonts/certificate/` — EB Garamond (400/600 + italics),
+  Playfair Display (400/700), Geist (400/600), Great Vibes (script); static
+  TTFs, OFL licences next to them. The catalogue is `lib/template/fonts.ts`;
+  a missing bold/italic falls back to the regular file. Verified to cover Hungarian, Czech, Polish,
+  Romanian, Turkish, Nordic and Cyrillic. Names have the trailing parenthesised
+  local script stripped (`latinName`), so CJK is never needed; any character
+  still missing is reported after generation, not silently boxed.
+- The logo is drawn **vector** from `app/components/svgs/speedcubingLogo.ts` —
+  the path data was moved out of `SpeedcubingFullAnimatedSVG` so the navbar and
+  the PDF share one source. The paths are in potrace's y-up space, and
+  `drawSvgPath` always flips y, so `drawLogo` wraps it in an extra
+  `concatTransformationMatrix(1,0,0,-1,0,0)`.
+- The logo is drawn **once per colour** into an embedded page (`embedPage`)
+  and every image is embedded once; pages only reference them — 150
+  certificates ≈ 0.65 MB, ~1 s.
+- Podium print order is per event **3rd → 2nd → 1st** (the award ceremony
+  order); people lists are alphabetical. Hungarian article (`a`/`az`) before
+  the competition and event names comes from `withArticle` (vowel, or a
+  leading `1`/`5` — "az 5x5x5").
+- Text that still doesn't fit at its minimum size is drawn anyway and the
+  recipient is listed in the UI after download.
+- The CSP blocks a PDF in an iframe (`object-src 'none'`), which is why the
+  sample is a download, not an inline preview. Don't loosen the CSP for it.
+- Dev container: new npm deps need `docker compose … exec web npm install` and
+  a `web` restart (same as §19).
+
+Three modes, one endpoint (`/certificates/recipients`), and the **source
+follows the competition phase**, like the stats page:
+
+| Mode | Before | During (Budapest today ≥ start date) | After (`results_posted_at`) |
+| --- | --- | --- | --- |
+| `podium` | nothing, every event `pending` | WCA Live, only **finished** finals | WCA API results |
+| `competitors` | nothing | WCA Live | WCA API results |
+| `registrants` | public WCIF (accepted + competing) | same | same |
+
+Rules (pinned by `recipients_test.go`, verified on HungarianAllRounder62026
+and the live HungarianOpen2026):
+
+- **Podium = per event, the final (last) round, place 1–3 with a valid result
+  (`best > 0`).** The WCA has no overall ranking. A DNF-ed finalist at `pos` 3
+  gets nothing. **Ties are kept**: two 2nd places → two certificates, no 3rd
+  (happened for real: HungarianOpen2026 `333fm`).
+- During the competition a final counts only when WCA Live says `finished`;
+  `running` / `pending` events are listed separately, not silently dropped.
+- The printed result is the **ranking** result: average, except for the
+  blind events (`333bf`, `444bf`, `555bf`, `333mbf`, `333mbo`, ranked by
+  single) and when there is no valid average. Formatted by `stats.FormatResult`.
+- "Competed" = at least one attempt that is a time or a DNF; DNS-only and
+  not-yet-started rows don't count.
+- Live data comes from **`stats.Service.LiveData`** (exported for this; its
+  1-minute cache and the WCA Live id resolution are shared, not copied), and
+  the final round of a WCA API result set from `stats.RoundOrder`. Every WCA
+  call still goes through `competition.Service` (cache + semaphore, §14).
+- Names are given as the WCA has them — for Hungarians usually given name
+  first ("Dávid Szabó"). The CSV has both `Név` (the trailing parenthesised
+  local-script part stripped, `latinName`) and `WCA-név`.
+- Frontend: `?template=&competition=&mode=` in the URL, reuses the stats
+  `CompetitionPicker` (and its `/stats/competitions` endpoint). Deselection is
+  kept per competition across mode switches (the key includes the mode).
+  People lists are re-sorted client-side with `Intl.Collator("hu")`; the server
+  sorts bytewise only for determinism.
+- Smoke test (opt-in):
+  `CERTIFICATE_SMOKE=HungarianOpen2026,HungarianAllRounder62026 go test ./internal/certificate -run Smoke -v`
 
 ## Instructions for Claude
 
