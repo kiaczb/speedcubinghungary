@@ -1,6 +1,6 @@
 import Link from "next/link";
 import React from "react";
-import { CONTACT_ITEMS, NAV_LINKS, SITE_DESCRIPTION } from "../lib/site";
+import { CONTACT_ITEMS, FOOTER_LINKS, NAV_LINKS, SITE_DESCRIPTION } from "../lib/site";
 
 const Footer = () => {
   return (
@@ -20,8 +20,8 @@ const Footer = () => {
             <h2 className="font-mono text-xs font-medium uppercase tracking-[0.18em] text-white/40">
               Oldalak
             </h2>
-            <ul className="mt-4 space-y-2.5">
-              {NAV_LINKS.map((link) => (
+              <ul className="mt-4 space-y-2.5">
+              {FOOTER_LINKS.map((link) => (
                 <li key={link.href}>
                   <Link
                     href={link.href}

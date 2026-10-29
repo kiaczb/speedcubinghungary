@@ -79,6 +79,7 @@ def test_render_content_is_valid_json():
         "competitions": [],
         "competitorMilestones": [],
         "delegateMilestones": [],
+        "solveMilestones": [],
     }
 
 
@@ -141,6 +142,7 @@ def test_build_report_data_keeps_all_competitors(monkeypatch):
 
     monkeypatch.setattr(reportData, "GetImportantCompetitors", lambda: [])
     monkeypatch.setattr(reportData, "GetImportantDelegates", lambda: [])
+    monkeypatch.setattr(reportData, "GetImportantSolvers", lambda: [])
 
     comp = _competition(competitors=[
         _competitor(name="Rekorder", records={"333": [SimpleNamespace(Type="single", Result=642, Badge="NR")]}),

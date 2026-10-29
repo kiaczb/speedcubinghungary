@@ -9,7 +9,12 @@ export function parseWeeklyReport(content: string): WeeklyReport | null {
       Array.isArray(data.competitorMilestones) &&
       Array.isArray(data.delegateMilestones)
     ) {
-      return data as WeeklyReport;
+      return {
+        ...data,
+        solveMilestones: Array.isArray(data.solveMilestones)
+          ? data.solveMilestones
+          : [],
+      } as WeeklyReport;
     }
     return null;
   } catch {

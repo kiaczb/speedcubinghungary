@@ -76,11 +76,13 @@ function MilestoneList({ children }: { children: React.ReactNode }) {
 }
 
 export default function WeeklyReportView({ report }: { report: WeeklyReport }) {
-  const { competitions, competitorMilestones, delegateMilestones } = report;
+  const { competitions, competitorMilestones, delegateMilestones, solveMilestones } =
+    report;
   const isEmpty =
     competitions.length === 0 &&
     competitorMilestones.length === 0 &&
-    delegateMilestones.length === 0;
+    delegateMilestones.length === 0 &&
+    solveMilestones.length === 0;
 
   if (isEmpty) {
     return (
@@ -146,6 +148,40 @@ export default function WeeklyReportView({ report }: { report: WeeklyReport }) {
                 <span className="text-muted-foreground">
                   — <span className="tabular font-mono">{milestone.count}</span>{" "}
                   verseny
+                </span>
+              </li>
+            ))}
+          </MilestoneList>
+        </>
+      )}
+
+      {solveMilestones.length > 0 && (
+        <>
+          <SectionTitle>Kirakási mérföldkövek</SectionTitle>
+          <MilestoneList>
+            {solveMilestones.map((milestone, i) => (
+              <li key={i} className="flex flex-wrap items-baseline gap-x-2">
+                <span className="font-medium text-foreground">
+                  {milestone.name}
+                </span>
+                <span className="text-muted-foreground">
+                  — <span className="tabular font-mono">{milestone.count}</span>{" "}
+                  sikeres kirakás
+                </span>
+                <span className="text-sm text-subtle-foreground">
+                  {milestone.achieved ? (
+                    <>
+                      (teljesítve:{" "}
+                      <span className="tabular font-mono">{milestone.milestone}</span>)
+                    </>
+                  ) : (
+                    <>
+                      (még{" "}
+                      <span className="tabular font-mono">{milestone.remaining}</span>{" "}
+                      a következőig:{" "}
+                      <span className="tabular font-mono">{milestone.milestone}</span>)
+                    </>
+                  )}
                 </span>
               </li>
             ))}

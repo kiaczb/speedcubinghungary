@@ -53,6 +53,10 @@ export const NAV_LINKS: NavLink[] = [
   ...NAV_ITEMS.flatMap((item) => (isNavGroup(item) ? item.links : [item])),
 ];
 
+export const FOOTER_LINKS: NavLink[] = NAV_LINKS.filter((link) =>
+  ["/calendar", "/posts", "/about", "/contact"].includes(link.href)
+);
+
 type ContactItem = {
   icon: IconType;
   label: string;
