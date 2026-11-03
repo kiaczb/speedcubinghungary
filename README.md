@@ -98,7 +98,7 @@ git switch develop
 
 Workflows in `.github/workflows/`:
 
-- `ci.yml` — build + lint + test (Go, Next.js and the weekly-report tests). Runs on `develop`/`feature/*`/`hotfix/*` and PRs, and is reused by the deploy workflows.
+- `ci.yml` — build + lint + test (Go — including the weekly-report job — and Next.js). Runs on `develop`/`feature/*`/`hotfix/*` and PRs, and is reused by the deploy workflows.
 - `deploy-test.yml` — on push to `test`: run CI, then SSH-deploy with the `test` Compose files. Uses the `test` GitHub Environment.
 - `deploy-prod.yml` — on push to `main`: run CI, then SSH-deploy with the `prod` Compose files. Uses the `production` GitHub Environment.
 
@@ -123,8 +123,7 @@ database starts empty — migrations are schema-only and contain no seed data.
 All configuration is environment-driven. **One env file per environment, shared by
 the whole stack** — there are no per-app `.env` files. Only the `.env*.example`
 templates are tracked; the real root `.env.dev`/`.env.test`/`.env.prod` are
-git-ignored, and the Python weekly-report job reads the same root file (not a
-separate one).
+git-ignored.
 
 - **Development:** copy `.env.dev.example` → `.env.dev` locally.
 - **Test / Production:** by design, the real `.env.test` / `.env.prod` live
@@ -139,92 +138,69 @@ Rules: never hardcode a secret, password, API key, or environment URL in code,
 Dockerfiles, or the compose files. Add new variables to the `.env.*.example`
 templates and map them in `infra/docker-compose.yml`.
 
-## Weekly report job (`apps/scripts/weekly-report`)
+## Weekly report job (`apps/api/cmd/weekly-report`)
 
-A Python job that reads the shared Postgres and, in a single run:
+A Go binary next to the API server (same module, same Docker image, package
+`internal/weeklyreport`). In a single run it:
 
-1. builds the weekly report from the WCA API + the shared database,
+1. builds the weekly report from the WCA API + the shared database, and
+   refreshes everyone's competition / delegation / successful-solve counts
+   there from the WCA (official numbers + competitions whose results are only
+   on WCA Live so far),
 2. **publishes it as a regular Post** on the site (`post_tag = 'report'`),
-3. emails it over SMTP (`EMAIL_TO`).
+3. refreshes the stored WR/ER/NR table from the WCA,
+4. emails it over SMTP (`EMAIL_TO`).
 
 Step 2 deliberately reuses the existing Post system rather than adding a parallel
 content store, so the report inherits the normal listing (`/posts`), the detail
 page (`/posts/<id>`) and the badge rendering with no extra UI.
 
-The report post stores its data as **JSON** (`reportPayload.py`) and the site
-renders it with a dedicated, styled component (`WeeklyReportView`) — competition
-cards, result chips, milestones. Normal (admin) posts are Markdown; only the
-report uses the structured payload, selected by `tag === "report"`. **Every**
-Hungarian-interest competitor is listed, not just record-setters (those without a
-record show as a name only).
+The report post stores its data as **JSON** (`payload.go`) and the site renders it
+with a dedicated component (`WeeklyReportView`). **Every** Hungarian-interest
+competitor is listed in the post; the **e-mail** lists only the record-setters of
+Hungarian competitions (and every Hungarian at foreign ones).
 
-**Reported period:** the job queries a **rolling 7-day window** (run time − 1 week
-… run time), not a calendar week. The post title shows exactly that window.
+**Reported period:** a **rolling 7-day window** (run time − 1 week … run time,
+Budapest time), not a calendar week. The post title shows exactly that window.
 
 **Idempotency:** `posts.report_week` (the Monday of the week the job ran in) is
-`UNIQUE` and the insert is `ON CONFLICT DO NOTHING`, so running the job twice in
-the same week never creates a second report post. The job is therefore safe to
-retry and safe to trigger manually.
+`UNIQUE` and the insert is `ON CONFLICT DO NOTHING`, so a second run in the same
+week never creates a second post. The counters are recomputed from the WCA on
+every run, so re-running is safe for them too.
 
-**Manual / test runs** — two flags, never used by cron:
-
-```bash
-python main.py --skip-email        # no SMTP, useful for repeated local testing
-python main.py --force             # overwrite this week's report with fresh content
-python main.py --force --skip-email
-```
-
-Without `--force` a re-run leaves the week's existing report untouched; with it
-the post is rewritten in place (still exactly one post per week).
-
-The e-mail is sent **after** the post is stored, and a send failure aborts the job
-with a logged error and a non-zero exit code — the post and records are already
-persisted at that point, so they are never lost to an SMTP outage.
-
-It is **not** part of the always-on stack — it runs on demand or from cron. Both
-run paths below read the same env vars.
-
-### Containerized (recommended on the servers)
-
-The job has a `Dockerfile` and a compose service behind the `jobs` profile, so a
-normal `up` never starts it. Run it against the shared DB using the same
-`--env-file` model as the rest of the stack:
+**Flags** — never used by cron:
 
 ```bash
-# staging (reads .env.test, sends to its EMAIL_TO — point that at a test inbox)
-docker compose \
-  -f infra/docker-compose.yml \
-  -f infra/docker-compose.test.yml \
-  --env-file .env.test \
-  --profile jobs run --rm weekly-report
+weekly-report -skip-email        # no SMTP, useful for testing
+weekly-report -force             # overwrite this week's report with fresh content
+weekly-report -counts-only       # only refresh the counters and records from the WCA (no post, no e-mail)
+weekly-report -dry-run           # write NOTHING to the DB; log what would change, send the e-mail as "[TESZT] …"
 ```
 
-The `EMAIL_FROM` / `EMAIL_TO` / `EMAIL_APP_PASSWORD` vars live in the same
-`.env.test` / `.env.prod` as the rest of the stack (see the templates); the DB
-config is shared. Inside compose the job reaches the DB over the internal network
-(`DB_HOST=db`).
+The e-mail is sent **after** the post is stored, and any failure exits non-zero
+with a logged error — the post is already persisted by then, so it is never lost
+to an SMTP outage.
 
-### Standalone (local, no Docker)
+### Running it
 
-Uses the **same root `.env.dev`** as the rest of the stack — no per-app `.env`.
-`config.py` detects it isn't in a container and connects to the DB on
-`localhost:5432` (which the dev compose exposes), so start the DB first.
+The job runs **inside the running `api` container** (`docker compose exec`), so it
+always uses the deployed code, the env vars the API already has, and a schema the
+API has already migrated. `infra/cron/weekly-report.sh` wraps that:
 
 ```bash
-docker compose -f infra/docker-compose.yml -f infra/docker-compose.dev.yml \
-  --env-file .env.dev up -d db          # DB reachable on localhost:5432
-
-cd apps/scripts/weekly-report
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-python main.py                          # ENV defaults to dev; ENV=test for .env.test
+ENV=test infra/cron/weekly-report.sh                 # staging, sends to its EMAIL_TO
+ENV=test infra/cron/weekly-report.sh -skip-email     # flags are passed through
+ENV=dev  infra/cron/weekly-report.sh -skip-email     # dev: `go run` in the dev container
 ```
+
+`EMAIL_FROM` / `EMAIL_TO` (comma-separated for several recipients) /
+`EMAIL_APP_PASSWORD` (a Gmail app password) live in the same `.env.<env>` as the
+rest of the stack and are mapped to the `api` service. Point `EMAIL_TO` at a test
+inbox on staging.
 
 ### Scheduling (cron)
 
-The project has no in-app scheduler, so the existing cron approach is used. A
-wrapper script (`infra/cron/weekly-report.sh`) runs the containerized job with the
-right Compose files, so the crontab entry stays a one-liner:
+There is no in-app scheduler; the host's cron calls the wrapper:
 
 ```bash
 chmod +x infra/cron/weekly-report.sh
@@ -233,36 +209,33 @@ crontab -e
 0 8 * * 1 ENV=test /srv/speedcubinghungary-DEV/speedcubinghungary/infra/cron/weekly-report.sh >> /var/log/speedcubinghungary-weekly-report.log 2>&1
 ```
 
-`ENV` selects the environment (`dev` / `test` / `prod`) and therefore the Compose
-override + `.env.<ENV>` file. Because publishing is idempotent per week, a missed
-run can simply be re-triggered by hand:
-
-```bash
-ENV=test infra/cron/weekly-report.sh
-```
+The cron line's time is in the **server's** time zone. A missed run can simply be
+re-triggered by hand (`ENV=test infra/cron/weekly-report.sh`).
 
 ### Tests
 
 ```bash
-cd apps/scripts/weekly-report
-pip install -r requirements-dev.txt
-python -m pytest
+cd apps/api && go test ./internal/weeklyreport
+WEEKLY_REPORT_SMOKE=HungarianOpen2026 go test ./internal/weeklyreport -run Smoke -v   # real WCA API
 ```
 
-Covered: the weekly idempotency key, the title showing the actual queried window,
-and the JSON payload (valid JSON, results + milestones, and that every competitor
-is included — not just record-setters). CI runs these on every push
-(`Scripts (weekly-report tests)` job).
+### Importing the old standalone job's data (one-time, per environment)
 
-### Configuration
+The standalone `kiaczb/weekly-report` job kept its counters in its own
+`persons` / `records` tables. Before the **first** Go run on an environment,
+load its `pg_dump` (`INSERT` format) into the shared DB:
 
-`config.py` reads the shared root `.env.<ENV>` (`ENV` selects it, default `dev`)
-via `python-dotenv` and validates required variables fail-fast — mirroring
-`apps/api/internal/config/config.go`. It detects whether it runs in a container
-(`/.dockerenv`): in a container it uses the root file's `DB_HOST=db` /
-`DATABASE_URL`; on the host it ignores `DATABASE_URL` and connects to
-`localhost:5432` instead (the container-internal `db` host isn't reachable there).
-In the container the root file isn't copied in, so `python-dotenv` no-ops and the
-values arrive from the compose `--env-file`. All sensitive values come from the
-environment, never from hardcoded literals. In a test/staging context, point
-`EMAIL_TO` at a fixed test inbox so real recipients are never emailed.
+```bash
+ENV=test infra/scripts/import-weekly-report-dump.sh /path/to/dump-weekly-report.sql
+ENV=test infra/cron/weekly-report.sh -counts-only    # then correct every counter from the WCA
+```
+
+It needs the `db` container running and the API migrated (migration `000019`).
+Only the dump's `persons` / `records` `INSERT` rows are used — its DDL is
+ignored — and everything happens in one transaction. `persons` map onto `users`:
+new people are inserted; existing users keep their name, roles and e-mail, but
+their competition / delegation counts are **set** to the dump's (and their
+solve count, where the dump has one). Records the DB already has are left
+alone. The import mainly tells the job *who* to track — the `-counts-only` run
+right after it replaces every count with the WCA-derived one. Stop the old job
+once the Go one takes over.

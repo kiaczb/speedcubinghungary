@@ -6,6 +6,7 @@ import (
 
 	"speedcubinghungary/internal/competition"
 	"speedcubinghungary/internal/stats"
+	"speedcubinghungary/internal/wcaformat"
 )
 
 const podiumSize = 3
@@ -26,9 +27,9 @@ var rankedBySingle = map[string]bool{
 
 func rankingResult(eventID string, best, average int) (string, string) {
 	if !rankedBySingle[eventID] && average > 0 {
-		return stats.FormatResult(eventID, average, true), resultAverage
+		return wcaformat.Result(eventID, average, true), resultAverage
 	}
-	return stats.FormatResult(eventID, best, false), resultSingle
+	return wcaformat.Result(eventID, best, false), resultSingle
 }
 
 func competed(attempts []int) bool {

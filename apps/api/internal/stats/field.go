@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"speedcubinghungary/internal/competition"
+	"speedcubinghungary/internal/wcaformat"
 )
 
 const (
@@ -149,7 +150,7 @@ func rankedResult(r competition.Registrant, pb competition.PersonalBest) RankedR
 		Person:          personOf(r),
 		EventID:         pb.EventID,
 		Type:            pb.Type,
-		Display:         FormatResult(pb.EventID, pb.Best, pb.Type == "average"),
+		Display:         wcaformat.Result(pb.EventID, pb.Best, pb.Type == "average"),
 		Record:          recordOf(pb),
 		WorldRanking:    pb.WorldRanking,
 		NationalRanking: pb.NationalRanking,

@@ -18,12 +18,21 @@ if [[ ! -f "$OVERRIDE" ]]; then
   exit 1
 fi
 
+compose() {
+  docker compose -f infra/docker-compose.yml -f "$OVERRIDE" --env-file "$ENV_FILE" "$@"
+}
+
+if [[ -z "$(compose ps --status running -q api)" ]]; then
+  echo "ERROR: the api container is not running (env=${ENV})" >&2
+  exit 1
+fi
+
 echo "=== [$(date -Is)] weekly-report start (env=${ENV}) ==="
 
-docker compose \
-  -f infra/docker-compose.yml \
-  -f "$OVERRIDE" \
-  --env-file "$ENV_FILE" \
-  --profile jobs run --rm weekly-report
+if [[ "$ENV" == "dev" ]]; then
+  compose exec -T api go run ./cmd/weekly-report "$@"
+else
+  compose exec -T -u appuser api /app/weekly-report "$@"
+fi
 
 echo "=== [$(date -Is)] weekly-report done (env=${ENV}) ==="

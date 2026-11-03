@@ -3,6 +3,8 @@ package stats
 import (
 	"sort"
 	"time"
+
+	"speedcubinghungary/internal/wcaformat"
 )
 
 func computeLive(info CompetitionInfo, live *LiveCompetition, fetchedAt time.Time) *LiveStats {
@@ -36,7 +38,7 @@ func computeLive(info CompetitionInfo, live *LiveCompetition, fetchedAt time.Tim
 			entered := false
 			for _, attempt := range result.Attempts {
 				switch {
-				case attempt == resultDNF:
+				case attempt == wcaformat.DNF:
 					stats.DNFs++
 					stats.Attempts++
 					entered = true
@@ -74,7 +76,7 @@ func computeLive(info CompetitionInfo, live *LiveCompetition, fetchedAt time.Tim
 						EventID: round.EventID,
 						Type:    tagged.kind,
 						Record:  tagged.tag,
-						Display: FormatResult(round.EventID, tagged.value, tagged.average),
+						Display: wcaformat.Result(round.EventID, tagged.value, tagged.average),
 					})
 				}
 			}
@@ -87,11 +89,11 @@ func computeLive(info CompetitionInfo, live *LiveCompetition, fetchedAt time.Tim
 			values := bestValues[round.EventID]
 			if result.Best > 0 && (values[0] == 0 || result.Best < values[0]) {
 				values[0] = result.Best
-				best.Single = &Highlight{Person: result.Person, Display: FormatResult(round.EventID, result.Best, false)}
+				best.Single = &Highlight{Person: result.Person, Display: wcaformat.Result(round.EventID, result.Best, false)}
 			}
 			if result.Average > 0 && (values[1] == 0 || result.Average < values[1]) {
 				values[1] = result.Average
-				best.Average = &Highlight{Person: result.Person, Display: FormatResult(round.EventID, result.Average, true)}
+				best.Average = &Highlight{Person: result.Person, Display: wcaformat.Result(round.EventID, result.Average, true)}
 			}
 			bestValues[round.EventID] = values
 		}

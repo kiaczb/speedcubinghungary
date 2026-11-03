@@ -13,12 +13,14 @@ WORKDIR /src
 COPY apps/api/go.mod apps/api/go.sum ./
 RUN go mod download
 COPY apps/api/ ./
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /server ./cmd/server
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /server ./cmd/server \
+ && CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /weekly-report ./cmd/weekly-report
 
 FROM alpine:3.20 AS prod
 RUN apk add --no-cache ca-certificates su-exec && addgroup -S -g 1001 appuser && adduser -S -u 1001 -G appuser appuser
 WORKDIR /app
 COPY --from=build /server /app/server
+COPY --from=build /weekly-report /app/weekly-report
 COPY db/migrations /migrations
 COPY infra/docker/api/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh

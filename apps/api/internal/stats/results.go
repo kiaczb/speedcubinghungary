@@ -4,6 +4,7 @@ import (
 	"sort"
 
 	"speedcubinghungary/internal/competition"
+	"speedcubinghungary/internal/wcaformat"
 )
 
 var roundOrder = map[string]int{
@@ -47,12 +48,12 @@ func computeResults(info CompetitionInfo, results []competition.Result) *ResultS
 
 		for _, attempt := range r.Attempts {
 			switch {
-			case attempt == resultDNF:
+			case attempt == wcaformat.DNF:
 				stats.DNFs++
 				stats.Solves++
 			case attempt > 0:
 				stats.Solves++
-				if isTimedEvent(r.EventID) {
+				if wcaformat.IsTimedEvent(r.EventID) {
 					stats.SolvingCentiseconds += int64(attempt)
 				}
 			}
@@ -61,13 +62,13 @@ func computeResults(info CompetitionInfo, results []competition.Result) *ResultS
 		if r.SingleRecord != "" {
 			stats.Records = append(stats.Records, RecordEntry{
 				Person: person, EventID: r.EventID, Type: "single", Record: r.SingleRecord,
-				Display: FormatResult(r.EventID, r.Best, false),
+				Display: wcaformat.Result(r.EventID, r.Best, false),
 			})
 		}
 		if r.AverageRecord != "" {
 			stats.Records = append(stats.Records, RecordEntry{
 				Person: person, EventID: r.EventID, Type: "average", Record: r.AverageRecord,
-				Display: FormatResult(r.EventID, r.Average, true),
+				Display: wcaformat.Result(r.EventID, r.Average, true),
 			})
 		}
 
@@ -79,8 +80,8 @@ func computeResults(info CompetitionInfo, results []competition.Result) *ResultS
 			stats.Winners = append(stats.Winners, EventWinner{
 				EventID: r.EventID,
 				Person:  person,
-				Best:    FormatResult(r.EventID, r.Best, false),
-				Average: FormatResult(r.EventID, r.Average, true),
+				Best:    wcaformat.Result(r.EventID, r.Best, false),
+				Average: wcaformat.Result(r.EventID, r.Average, true),
 			})
 		}
 

@@ -14,8 +14,8 @@ don't rediscover context each session. Update it when you learn something durabl
 
 Speedcubing Hungary is the web platform for the Hungarian speedcubing community.
 It shows news/posts, an upcoming-competition calendar sourced from the World Cube
-Association (WCA), and lets WCA members log in via WCA OAuth. A separate Python
-job emails a weekly competition/records report.
+Association (WCA), and lets WCA members log in via WCA OAuth. A separate Go
+job (same image as the API) emails a weekly competition/records report.
 
 It is a **monorepo** with three deployable apps plus shared infra, wired together
 by Docker Compose:
@@ -25,7 +25,7 @@ Browser ──HTTP──▶ web (Next.js SSR + client) ──HTTP──▶ api (
                                                           │
                                                           └──▶ WCA API (OAuth + competitions)
 Caddy (test/prod only) terminates HTTPS on a single domain: WEB_DOMAIN/api→api (prefix stripped), everything else→web.
-scripts (Python) runs out-of-band, reads the same Postgres, calls WCA, sends email.
+weekly-report (Go, cron → docker compose exec in the api container) reads/writes the same Postgres, calls WCA, sends email.
 ```
 
 Key architectural facts:
@@ -48,6 +48,7 @@ speedcubinghungary/
 ├── apps/
 │   ├── api/                 # Go backend (chi router, layered architecture)
 │   │   ├── cmd/server/main.go        # entrypoint: config → db → migrate → router → listen :8080
+│   │   ├── cmd/weekly-report/main.go # the weekly report job (cron), see §6
 │   │   └── internal/
 │   │       ├── auth/        # WCA OAuth login, JWT minting, /me, /logout, users table
 │   │       ├── post/        # news posts CRUD (Postgres-backed)
@@ -56,7 +57,9 @@ speedcubinghungary/
 │   │       ├── special/     # Budapest Special: live WCA Live results + recorded DNF times
 │   │       ├── wcalive/     # shared WCA Live transport (GraphQL, Phoenix socket, broadcaster)
 │   │       ├── stats/       # admin competition statistics (before/during/after), see §22
+│   │       ├── wcaformat/   # the ONE WCA result formatter (times, FMC, MBLD), see §6
 │   │       ├── certificate/ # admin certificates: recipients, templates, image library, see §23
+│   │       ├── weeklyreport/ # the weekly report job: WCA → users/records/posts + e-mail, see §6
 │   │       ├── middleware/  # JSON content-type, JWT auth, RBAC
 │   │       ├── httperr/     # hiba → HTTP válasz (5xx szövege naplóba, nem a kliensnek)
 │   │       ├── config/      # env var loading + validation (fail-fast)
@@ -65,8 +68,6 @@ speedcubinghungary/
 │   │       └── types/       # shared enums: Role, PostTag
 │   ├── web/                 # Next.js 16 / React 19 frontend (App Router)
 │   │   └── app/             # routes + colocated components/lib/types
-│   └── scripts/
-│       └── weekly-report/   # Python weekly email job (WCA + Postgres + SMTP)
 ├── db/migrations/           # golang-migrate SQL files (schema, no seeds)
 ├── infra/
 │   ├── docker-compose.yml            # base stack (shared, values from --env-file)
@@ -129,7 +130,6 @@ as parameters and only registers routes.
 | --------- | ----- |
 | Frontend  | Next.js **16.2.7** (App Router, Turbopack default), React **19.2.4**, TypeScript 5, Tailwind CSS **v4** (`@tailwindcss/postcss`), `react-icons`, `@cubing/icons` (WCA event icon font, ~13 KB, imported only by the `/tools/allrounder`, `/tools/special`, `/tools/prediction`, `/admin/stats` and `/admin/certificates` client components), `pdf-lib` + `@pdf-lib/fontkit` (certificate PDFs, lazy-loaded on click in `/admin/certificates`, see §23), `qrcode-generator` (QR codes on certificates). Node 22. |
 | Backend   | Go **1.25.5**, `go-chi/chi/v5` (router), `go-chi/cors`, `golang-jwt/jwt/v5`, `golang-migrate/migrate/v4`, `jackc/pgx/v5` (via `stdlib` driver) + `lib/pq` (for `pq.Array`), `google/uuid`, `coder/websocket` (WCA Live subscriptions). Tests: `stretchr/testify` + `DATA-DOG/go-sqlmock`. |
-| Scripts   | Python 3.11+ (weekly-report), Jinja-style HTML templates, SMTP email. `requirements.txt` at `apps/scripts/weekly-report/`. |
 | Data      | PostgreSQL **17**. |
 | Infra     | Docker Compose, Caddy 2 (alpine) reverse proxy w/ Let's Encrypt, GitHub Actions CI/CD, SSH-based deploy. |
 
@@ -240,10 +240,19 @@ Other Go conventions observed:
   a `*url.Error` names the upstream hosts and our query parameters, and neither
   helps the browser. The status is still the caller's decision: it knows which
   of its sentinels means what.
+- **WCA results are formatted in exactly one place: `internal/wcaformat`**
+  (`Result(eventID, value, average)` — times incl. hours, DNF/DNS, FMC single vs
+  average, MBLD new and old encoding, unknown MBLD time; plus `DNF`/`DNS` and
+  `IsTimedEvent`). `stats`, `certificate` and `weeklyreport` all call it; the
+  weekly report briefly had its own copy, which was missing hours, `333mbo` and
+  zero-padding. **Don't write another formatter in a feature package** — add
+  the case to `wcaformat` and its table test. (The frontend's Special page has
+  its own `formatCentiseconds`, which formats raw WCA Live attempts and negative
+  remaining budgets client-side — a different layer.)
 - Enums are string types in `internal/types` (`Role`, `PostTag`) with `UPPER_SNAKE`
   const names and lowercase string values.
 - **The source carries no comments** (removed deliberately, 2026-09). The only
-  exceptions are tool directives: `eslint-disable-*`, shebangs and the
+  exceptions are tool directives: `eslint-disable-*`, `//go:embed`, shebangs and the
   Dockerfile `# syntax=` line. The *why* behind non-obvious decisions lives in
   this file, not in the code. Some identifiers and test names are **in
   Hungarian** — that's normal here.
@@ -385,68 +394,124 @@ Other Go conventions observed:
   everything else → `PostContent`. Parse failure falls back to `PostContent` so
   the page never crashes. Lists/cards show `reportSummary()` for report posts, not
   `postPreview`. The payload shape is `WeeklyReport*` in `types.ts` — keep it in
-  sync with `apps/scripts/weekly-report/reportPayload.py`.
+  sync with `apps/api/internal/weeklyreport/payload.go`.
 
-### Python (weekly-report)
-- **The weekly report is published into the existing `posts` table**, not a
-  separate content store — so it reuses the normal listing/detail UI. Flow in
-  `main.py`: `BuildReportData()` (`reportData.py`) builds the dataset **once**,
-  then `WriteEmail()` renders it as HTML for email and
-  `PublishWeeklyReportPost()` (`reportPost.py`) serialises the **same** data as
-  **JSON** (`reportPayload.py` → `BuildReportPayload`) and inserts it with tag
-  `report`. Don't recompute the milestones separately — they hit the DB *and* the
-  WCA API.
-- The report post `content` is **JSON**, rendered by the frontend's
-  `WeeklyReportView` (see the Frontend section) — *not* Markdown and *not* the
-  email HTML. The email still renders from Jinja (`templating.py` /
-  `html_environment` / `templates/competitions.html`); only the website post uses
-  the JSON payload. Keep `reportPayload.py` and `types.ts` (`WeeklyReport*`) in sync.
-- **The website post includes all Hungarian-interest competitors, the email
-  does not.** `BuildReportData` doesn't filter: `competitors.py` returns every
-  Hungarian competitor who had a result, and those without a record get an
-  empty `results` list in the post (shown with a "résztvevő" marker). The
-  **email** follows the standalone `kiaczb/weekly-report` repo instead
-  (`emailSender.EmailCompetitions`): on a **Hungarian** competition only the
-  record-setters are listed and a competition without any is dropped; on a
-  foreign one every Hungarian is listed. It filters a **copy** — the post is
-  written from the same `Competition` objects.
-- **The job tracks the original `kiaczb/weekly-report` repo's behaviour**, plus
-  what this system adds (the `report` post, logging instead of `print`, the
-  shared `users` table instead of its own `persons`). Ported from it:
-  - **`/results` fallback** (`EventsFromResults`): once results are posted, the
-    public WCIF's `events` may no longer carry them, so `/competitions/{id}/results`
-    is mapped back onto WCIF registrant ids (by WCA ID, newcomers by name) and
-    replaces the WCIF events.
-  - **Solve milestones** (`solvesCount.py`, every 5000, ±250): per competitor
-    the official `total_solves` from WCA `/persons/{id}`, plus this
-    competition's live-counted successful attempts while `results_posted_at`
-    is empty. A failed lookup leaves the stored value alone. Stored in
-    `users.successful_solves_count` (migration `000019`), in the email, and as
-    `solveMilestones` in the post payload (optional in `parseWeeklyReport`,
-    because older posts don't have it).
-  - `database/db.py` `check_connection` also checks required **columns**, so
-    running the job before the API migrated fails loudly instead of every
-    swallowed `upsert_person` failing silently.
+### Weekly report job (`cmd/weekly-report` + `internal/weeklyreport`)
+A Go binary in the **API module and image** (`/app/weekly-report`), rewritten
+from the Python job in 2026-10. It is **not** an HTTP endpoint and not a
+scheduler: host cron runs `infra/cron/weekly-report.sh` (`ENV=test|prod`),
+which `docker compose exec`s it **inside the running `api` container** as
+`appuser` (dev: `go run ./cmd/weekly-report` in the dev container). That is
+deliberate — the job always runs the deployed code, against a schema the API
+has already migrated, with the env the API already has (`EMAIL_*` are mapped to
+the `api` service). The old `jobs`-profile service was dropped: a `run --rm`
+service isn't rebuilt by the deploy's `up -d --build`, so it went stale.
+- **Flow (`Service.Run`):** schema check → load stored records → list the
+  week's competitions → process them → build `ReportData` **once** → publish
+  the post → save the WCA records → e-mail. Don't recompute the milestones
+  separately — they hit the DB *and* the WCA API.
+- **The post is written before the e-mail**, so an SMTP failure (exit 1) cannot
+  lose the week's report. A failed record save is logged, the e-mail still goes
+  out, and the run still exits 1. A failed competition list, schema check or
+  milestone query aborts **before** publishing — `ON CONFLICT DO NOTHING` would
+  otherwise lock the week with an empty report.
+- The report post `content` is **JSON** (`payload.go`), rendered by the
+  frontend's `WeeklyReportView` — *not* Markdown and *not* the e-mail HTML. Keep
+  `payload.go` and `types.ts` (`WeeklyReport*`) in sync. `result` is always a
+  string (Python sent FMC singles as a number).
+- The e-mail is `html/template` (`templates/email.html`, embedded with
+  `go:embed`). All formatting happens in Go (`emailView`), the template only
+  prints — keep it that way.
+- **The website post includes all Hungarian-interest competitors, the e-mail
+  does not.** The post lists everyone who had a result (no record → empty
+  `results`, shown as "résztvevő"). The e-mail follows the standalone
+  `kiaczb/weekly-report` repo (`EmailCompetitions`): on a **Hungarian**
+  competition only record-setters, a competition without any is dropped; on a
+  foreign one every Hungarian. It filters a copy.
+- Who counts: `countryIso2 == "HU"` plus `excludedCompetitorWCAIDs`
+  (`records.go`) — members of the community competing for another country,
+  who never get an **NR** badge.
+- **Records:** badges are decided against the *stored* `records` table (last
+  week's WCA state), checked WR → CR → NR, `<=` (so a record already in the
+  WCA's table still counts), average before single, and the in-memory table is
+  updated so a slower result later in the week isn't a record too. A record the
+  table doesn't have is skipped (Python crashed and dropped the competition).
+- **`/results` fallback** (`eventsFromResults`): once results are posted the
+  public WCIF may no longer carry them, so `/competitions/{id}/results` is
+  mapped back onto WCIF registrant ids (by WCA ID, newcomers by name) and
+  replaces the WCIF events. A 404 there just means "not posted".
+- **The counters are DERIVED from the WCA on every run, never incremented**
+  (`counts.go`, 2026-10 — the incremental Python logic had drifted: 33 of 1268
+  competition counts and 3 of 4 delegate counts were off, e.g. 8 instead of 38):
+  - `competition_count` = the WCA's official `competition_count` + the
+    **unposted** competitions (no `results_posted_at`) of the last 8 weeks
+    (`unpostedLookback`) the person competed at. `successful_solves_count` =
+    `total_solves` + the successful attempts there. Both from the **batch**
+    `/persons?wca_ids=` (100 per request) — ⚠️ not `/persons/{id}`, which the
+    WCA rate-limits hard (measured: 8 of 106 people needed 4 retries, ~85 s).
+  - The unposted competitions are read from their **public WCIF**, which WCA
+    Live syncs into — so a competition that is only on WCA Live (e.g.
+    HungarianOpen2026 the week after) already counts. A WCIF downloaded for the
+    report is reused. Results unposted for more than 8 weeks drop out until
+    posted.
+  - "Competed" = at least one attempt that is a time or a DNF (`hasCompeted`,
+    the certificates' rule) — an empty WCA Live row or DNS-only is not a
+    competition. The report's competitor list uses the same rule.
+  - `delegated_count` = competitions with `start_date <= today`, not cancelled,
+    from `/competitions?delegate=<wcaId>` (the delegates of a competition are
+    in the list response, with `country_iso2`). Started-but-unposted ones
+    count. The Python job counted a delegate *competing* at a Hungarian
+    competition instead, which is why it drifted.
+  - **Who:** everyone in `users` with `competition_count > 0` or
+    `delegated_count > 0`, plus this week's tracked competitors, plus tracked
+    people from unposted competitions, plus Hungarian delegates of the last 8
+    weeks' competitions. Logged-in foreign users (counts 0) are left alone.
+  - Written by `SaveCounts` / `SaveDelegatedCounts` in one transaction each.
+    A failed `/persons` batch keeps the old values (the run still reports and
+    e-mails, then exits 1); a failed delegate lookup skips that delegate.
+  - So a run is **idempotent** for the counters, `-force` re-runs included, and
+    `-counts-only` refreshes just the counters **and the `records` table** from
+    the WCA (no post, no e-mail) — that is how a DB is fixed by hand. Refreshing
+    records outside the weekly run is safe: a result that is already in the
+    WCA's table still gets its badge, because the check is `<=`.
+  - Stored in `users` (`competition_count`, `delegated_count`,
+    `successful_solves_count` — the last from migration `000019`).
+- **WCA client (`wca.go`) is the job's own**, not `competition.WCARepository`:
+  it needs endpoints the API doesn't (date-range listing, WCIF rounds, `/users`,
+  `/records`) and it is a separate process, so the API's in-process semaphore
+  couldn't bound it anyway. Same shape: 6 in flight, retry on 429/5xx/network
+  errors with 1 s/4 s/16 s/64 s backoff (logged), 404 → `ErrNotFound`.
 - The reported period is a **rolling 7-day window** (run time − 1 week … run
-  time), *not* a calendar week — `competition.py` queries the WCA API with that
-  range. The post title must show that actual window; only the idempotency key
-  (`WeekStart`) is the calendar-week Monday. Don't conflate the two.
-- Idempotency lives in the DB: `posts.report_week` is UNIQUE and the insert uses
-  `ON CONFLICT (report_week) DO NOTHING`, so a second run in the same week is a
-  no-op. `main.py --force` switches it to `DO UPDATE` (overwrite in place) and
-  `--skip-email` bypasses SMTP — both are manual/test aids, never used by cron.
-  `insert_weekly_report_post` deliberately **raises** (unlike the other upserts,
-  which swallow) so a failed publish aborts the job loudly.
-- Order in `main.py` matters: the post + records are written **before** the
-  e-mail, so an SMTP failure (which now logs and re-raises → exit 1) cannot lose
-  the week's report.
-- Scheduling: no in-app scheduler — host cron calls
-  `infra/cron/weekly-report.sh` (`ENV=test|prod`), which runs the containerized
-  job via the `jobs` compose profile.
-- Package-per-concern under `apps/scripts/weekly-report/`
-  (`CompetitionModels/`, `database/`, `templates/`), orchestrated by `main.py`.
-  Uses `logging`, exits non-zero on failure. Reads the shared Postgres read-only
-  and sends email via SMTP. HTML templates under `templates/`.
+  time, Budapest), *not* a calendar week. The post title shows that window; only
+  the idempotency key (`WeekStart`) is the calendar-week Monday.
+- Idempotency: `posts.report_week` is UNIQUE, insert is `ON CONFLICT
+  (report_week) DO NOTHING`; `-force` switches to `DO UPDATE`, `-skip-email`
+  skips SMTP. Manual/test aids, never used by cron.
+- **`-dry-run` is THE way to test against a real database** (the owner's
+  rule: testing must not write the DB — a "test" run with `-skip-email` once
+  created a report post and had to be deleted by hand). `DryRunRepository`
+  (`dryrun.go`) wraps the real one: reads pass through, every write is
+  logged instead (counter changes per person, records that would change, the
+  post title), and the computed counters are kept **in memory** so the
+  milestones are the ones a real run would produce. The e-mail still goes out,
+  subject prefixed `[TESZT] ` (`WithSubjectPrefix`). Verified locally by an md5
+  fingerprint of `users`/`records`/`posts` before and after: identical. Works
+  with `-counts-only` too.
+- Results are formatted by the shared `wcaformat.Result` (see below), so the
+  report now prints `1:05.50` (Python: `1:5.50`) and `9/11 52:31` (Python:
+  `9 / 11 52:31`). `FormatDateRange` still prints `2026. Jul. 31-02.` across a
+  month boundary, like the original.
+- **Seeding:** the counters themselves no longer need history, but the job
+  only tracks people it knows. `infra/scripts/import-weekly-report-dump.sh`
+  (`ENV=…`, arg: the standalone job's `pg_dump` in INSERT format) loads its
+  `persons` into `users` and adds missing `records`; run it once per
+  environment, then `weekly-report -counts-only`. Local dev: done 2026-10-28,
+  then verified against the WCA independently — all 1268 competition and
+  solve counts and the 4 delegate counts match. A later dump (2026-11-03) had
+  only one new person and worse counters, so it was **not** imported: when the
+  dump adds nobody who matters, `-counts-only` alone is the refresh.
+- Smoke test (opt-in, real WCA API, no DB):
+  `WEEKLY_REPORT_SMOKE=HungarianOpen2026 go test ./internal/weeklyreport -run Smoke -v`
 
 ---
 
@@ -577,8 +642,8 @@ Notes / current state:
 - `users.roles` is JSONB; login upsert **preserves existing roles** and only seeds
   `["user"]` on first insert (see `auth/repository.go` `Upsert` `ON CONFLICT`).
 - `records` and `users.competition_count`/`delegated_count`/`successful_solves_count` are written and read
-  only by the Python job (`SaveRecords`, `upsert_person`); the Go API does not
-  touch them.
+  only by the weekly-report job (`internal/weeklyreport`); the API server does
+  not touch them.
 - Competition data is **not** persisted — it is proxied live from WCA per request.
 
 ### Adding a migration
@@ -805,8 +870,8 @@ quietly behaving like development. Don't add defaults back.
 Other important vars:
 - DB: the API uses **only `DATABASE_URL`** — for the connection pool
   (`db.NewPostgres`) and for golang-migrate alike. `DB_HOST`, `DB_PORT`,
-  `DB_USER`, `DB_PASSWORD`, `DB_NAME` feed the `postgres` image, the weekly-report
-  job and the `DATABASE_URL` interpolation; the api service doesn't receive them.
+  `DB_USER`, `DB_PASSWORD`, `DB_NAME` feed the `postgres` image and the
+  `DATABASE_URL` interpolation; the api service doesn't receive them.
   **They are the single source of truth for the DB credentials.** The env
   files no longer also define `POSTGRES_USER`/`POSTGRES_PASSWORD`/`POSTGRES_DB`
   — `docker-compose.yml`'s `db` service sources those (which the `postgres`
@@ -842,27 +907,15 @@ Other important vars:
 - Compose: `COMPOSE_PROJECT_NAME`, `COMPOSE_PROFILES=proxy` (test/prod),
   `WEB_DOMAIN`/`ACME_EMAIL` (Caddy — single domain, API path-routed under
   `WEB_DOMAIN/api`), `WEB_PORT`/`API_PORT`/
-  `DB_PORT_HOST` (dev host ports). The `weekly-report` service sits behind the
-  `jobs` profile (run it with `--profile jobs run --rm weekly-report`); its
-  `EMAIL_FROM`/`EMAIL_TO`/`EMAIL_APP_PASSWORD` now live in the root
-  `.env.<env>` templates too (defaulted to empty in the base compose so the main
-  stack stays warning-free) — the job validates them fail-fast at runtime.
-- Weekly-report job (Python): **uses the same root `.env.<ENV>` file as the rest
-  of the stack — no per-app `.env`.** `config.py` reads `ENV` (default `dev`) and
-  `load_dotenv`s the repo-root `.env.<ENV>`, with fail-fast validation mirroring
-  `apps/api/internal/config/config.go`. It runs **either** standalone (venv on the
-  host) **or** as a compose service behind the `jobs` profile. ⚠️ DB host caveat:
-  the root file targets the Docker network (`DB_HOST=db`, `DATABASE_URL=...@db`),
-  which only resolves inside a container. `config.py` detects whether it runs in a
-  container (`/.dockerenv`): in a container it uses the root file's `DB_HOST`/
-  `DATABASE_URL` as-is; **on the host it ignores `DATABASE_URL` and connects to
-  `localhost`** (the dev compose exposes the DB there). In the container no env
-  file is copied in (`.dockerignore` + build context is the job dir, not the repo
-  root), so `load_dotenv` no-ops and the values arrive from the compose
-  `--env-file`. All secrets come from the environment; **never hardcode them in
-  `config.py` or any tracked file**. Point `EMAIL_TO` at a fixed test inbox in
-  test/staging. Not scheduled by default — host cron runs
-  `infra/cron/weekly-report.sh` (`ENV=test|prod`).
+  `DB_PORT_HOST` (dev host ports).
+- Weekly-report job (Go, §6): `EMAIL_FROM` / `EMAIL_TO` (comma-separated for
+  several recipients) / `EMAIL_APP_PASSWORD` (Gmail app password) live in the
+  root `.env.<env>` templates and are mapped to the **`api`** service (defaulted
+  to empty, so the server doesn't need them). The job reads them plus
+  `DATABASE_URL` via `config.LoadWeeklyReport` — fail-fast, and the e-mail ones
+  only when `-skip-email` isn't given. It doesn't use `config.Load`: the job
+  needs none of the OAuth/JWT values. Point `EMAIL_TO` at a fixed test inbox in
+  test/staging.
 
 **Secret-delivery model (deliberate choice):** test/prod deploys use a
 server-local `.env.test`/`.env.prod` placed once during server setup (git-ignored,
@@ -945,7 +998,7 @@ nav links in `app/lib/site.ts` if needed. **Read the Next 16 docs first** (§3 w
     Tippverseny if there is one, else the latest `report` post
     (`ReportTile`: record count, top 3 records ranked WR → CR → NR, first
     achieved milestone), else the Tippverseny fallback copy. The weekly job
-    only ever emits `WR`/`CR`/`NR` badges (`config.py` `badges`) and sends
+    only ever emits `WR`/`CR`/`NR` badges (`recordRegions` in `weeklyreport/records.go`) and sends
     **raw** event ids/types (`"333"`, `"single"`) — the tile maps them through
     `eventName()`; anything else is filtered out, not shown. The
     rule behind it: a tile must show something fresh most weeks — an
@@ -993,10 +1046,13 @@ nav links in `app/lib/site.ts` if needed. **Read the Next 16 docs first** (§3 w
   Postgres. Don't assume a cache/queue layer exists.
 - ⚠️ **On the current staging host (`server`), the internet-facing Caddy is
   NOT the compose-managed `caddy` service from `infra/docker-compose.yml`.**
-  It's a separate, manually-started `caddy` container (image `caddy:latest`,
-  container name literally `caddy`, config bind-mounted from
-  `~/caddy/Caddyfile` on the host — **not tracked in this repo**)
-  that also proxies an unrelated `other.example.org` domain (Jellyfin), so it
+  It's a separate `caddy` container run by its own Compose project `caddy`
+  (`~/caddy/docker-compose.yml`, image `caddy:latest`, container
+  name literally `caddy`, config bind-mounted as a **single file** from
+  `~/caddy/Caddyfile`, certs in `~/caddy/caddy_data`
+  — **none of it tracked in this repo**)
+  that also proxies an unrelated `other.example.org` domain (Jellyfin, via
+  `host.docker.internal:8096`), so it
   holds :80/:443 and the compose `caddy` can't bind them. ⚠️ **The server's
   `.env.test` must therefore leave `COMPOSE_PROFILES` empty** (not `proxy` as
   in `.env.test.example`): with the profile on, `up -d` starts web/api, then
@@ -1018,7 +1074,10 @@ nav links in `app/lib/site.ts` if needed. **Read the Next 16 docs first** (§3 w
      container names fail (`no such host`) even with a correct Caddyfile.
   A `caddy reload` can report `"config is unchanged"` and silently keep
   serving the old config if the reload races the file edit — `docker restart
-  caddy` is the reliable way to pick up a Caddyfile change here. Prefer fixing
+  caddy` is the reliable way to pick up a Caddyfile change here. **(inferred)**
+  The likely cause is the single-file bind mount: an editor or `sed -i` that
+  writes a new inode leaves the container looking at the old file until it is
+  restarted. Prefer fixing
   the underlying port conflict and switching back to the compose-managed
   `caddy` service over perpetuating this manual one, but until that happens,
   check both of the above after any staging redeploy that changes the project
@@ -1026,14 +1085,10 @@ nav links in `app/lib/site.ts` if needed. **Read the Next 16 docs first** (§3 w
 - `db/postgres.go` uses `sslmode=disable`; acceptable because the DB is only on the
   internal Docker network (never published in test/prod). Make it configurable if
   the DB is ever exposed.
-- The weekly-report job previously hardcoded the Gmail app password + DB creds in
-  a committed-looking `env.py` module. It's now `config.py`, which reads the shared
-  root `.env.<ENV>` (see §10) — secret-free and env-driven; never hardcode values
-  back into `config.py`.
 - **One env file per environment, no per-app `.env`.** The only real env files are
   the root `.env.dev`/`.env.test`/`.env.prod` (git-ignored), loaded via
-  `--env-file`; the tracked templates are `.env.<env>.example`. The Python job
-  reads the *same* root file (see §10). The old per-directory leftovers (root
+  `--env-file`; the tracked templates are `.env.<env>.example`. The weekly-report
+  job runs in the `api` container with its env (see §10). The old per-directory leftovers (root
   `.env`, `apps/api/.env`, `apps/web/.env`, `db/.env`, `apps/web/.env.example`,
   `apps/scripts/weekly-report/.env[.example]`) have been removed — **don't
   reintroduce per-service env files.**
@@ -1871,9 +1926,10 @@ Rules and verified facts:
 - **Milestones:** `competition_count` only counts competitions with posted
   results, so before/during the n-th is `count + 1`, after it is `count`.
   Milestones are every 50th competition (50, 100, 150, …).
-- **Result formatting is in Go** (`stats.FormatResult`): centiseconds, FMC
-  moves / average ÷100, MBLD decoded (`8/9 52:31`), and `333mbo` (legacy multi
-  blind) which uses the new encoding below 10⁹ and the old `1SSAATTTTT` above.
+- **Result formatting is in Go** (`wcaformat.Result`, shared with the
+  certificates and the weekly report — §6): centiseconds, FMC moves / average
+  ÷100, MBLD decoded (`8/9 52:31`), and `333mbo` (legacy multi blind) which uses
+  the new encoding below 10⁹ and the old `1SSAATTTTT` above.
 - **"Today" is Budapest time** via `time.LoadLocation("Europe/Budapest")`, and
   `stats` imports `time/tzdata` because the prod `alpine` image has no tzdata.
 - WCA Live round results come with `singleRecordTag`/`averageRecordTag`
@@ -2048,7 +2104,7 @@ and the live HungarianOpen2026):
   `running` / `pending` events are listed separately, not silently dropped.
 - The printed result is the **ranking** result: average, except for the
   blind events (`333bf`, `444bf`, `555bf`, `333mbf`, `333mbo`, ranked by
-  single) and when there is no valid average. Formatted by `stats.FormatResult`.
+  single) and when there is no valid average. Formatted by `wcaformat.Result`.
 - "Competed" = at least one attempt that is a time or a DNF; DNS-only and
   not-yet-started rows don't count.
 - Live data comes from **`stats.Service.LiveData`** (exported for this; its

@@ -30,6 +30,9 @@ services:
       DATABASE_URL: ${DATABASE_URL}
       JWT_SECRET: ${JWT_SECRET}
       WCA_LIVE_URL: ${WCA_LIVE_URL:-}
+      EMAIL_FROM: ${EMAIL_FROM:-}
+      EMAIL_TO: ${EMAIL_TO:-}
+      EMAIL_APP_PASSWORD: ${EMAIL_APP_PASSWORD:-}
     volumes:
       - uploads_data:/data/uploads
     networks: [appnet]
@@ -44,27 +47,6 @@ services:
       NODE_ENV: ${NODE_ENV}
       SERVER_API_URL: ${SERVER_API_URL}
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
-    networks: [appnet]
-
-  weekly-report:
-    build:
-      context: ../apps/scripts/weekly-report
-      dockerfile: Dockerfile
-    profiles: [jobs]
-    depends_on:
-      db:
-        condition: service_healthy
-    environment:
-      DATABASE_URL: ${DATABASE_URL}
-      DB_HOST: ${DB_HOST}
-      DB_PORT: ${DB_PORT}
-      DB_USER: ${DB_USER}
-      DB_PASSWORD: ${DB_PASSWORD}
-      DB_NAME: ${DB_NAME}
-      EMAIL_FROM: ${EMAIL_FROM:-}
-      EMAIL_TO: ${EMAIL_TO:-}
-      EMAIL_APP_PASSWORD: ${EMAIL_APP_PASSWORD:-}
-    restart: "no"
     networks: [appnet]
 
   caddy:
