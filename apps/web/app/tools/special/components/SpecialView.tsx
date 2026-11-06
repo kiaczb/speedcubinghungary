@@ -17,7 +17,9 @@ import StateMessage from "@/app/components/ui/StateMessage";
 import { clientApiUrl, clientFetch, clientJson } from "@/app/lib/api";
 import CompetitionPicker from "./CompetitionPicker";
 import CompetitorCard from "./CompetitorCard";
+import RoundLimits from "./RoundLimits";
 import RoundTabs from "./RoundTabs";
+import { collectLimits } from "../lib/limits";
 import type { Competition, Competitor, SpecialReport } from "../types";
 
 const FALLBACK_POLL_MS = 30_000;
@@ -254,6 +256,8 @@ const SpecialView = () => {
         selected={selectedRound}
         onSelect={setSelectedRound}
       />
+
+      <RoundLimits limits={collectLimits(competitors)} />
 
       {competitors.length === 0 ? (
         <StateMessage

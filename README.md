@@ -5,8 +5,7 @@ Monorepo:
 | Path            | Service  | Stack                         |
 | --------------- | -------- | ----------------------------- |
 | `apps/web`      | frontend | Next.js 16 / React 19         |
-| `apps/api`      | backend  | Go (chi, golang-migrate)      |
-| `apps/scripts`  | jobs     | Python weekly report          |
+| `apps/api`      | backend  | Go (chi, golang-migrate) + weekly report job |
 | `db/migrations` | schema   | SQL migrations (schema only)  |
 
 The runtime stack runs on Docker Compose (services: `web`, `api`, `db`).
@@ -107,6 +106,10 @@ Each deploy Environment needs secrets `SSH_HOST`, `SSH_USER`, `SSH_KEY`,
 `production` environment to gate prod deploys behind manual approval.
 
 ## Server setup (one-time, per server)
+
+Going live in production: [docs/go-live.md](docs/go-live.md). Manual steps a
+release needs on the server (env, cron, one-off scripts) are logged in
+[docs/release-ops.md](docs/release-ops.md).
 
 ```bash
 git clone -b test <repo-url> /srv/speedcubinghungary    # or -b main on production

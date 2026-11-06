@@ -7,6 +7,7 @@ import Card from "@/app/components/Cards/Card";
 import { controlClass } from "@/app/components/ui/Field";
 import { eventName } from "@/app/lib/events";
 import { formatTimeInput, parseTimeInput } from "@/app/lib/time";
+import { roundLabel } from "../lib/limits";
 import { DNF, DNS, formatAttemptResult, formatCentiseconds } from "../lib/time";
 import type { Competitor, CompetitorAttempt, CompetitorRound } from "../types";
 
@@ -24,10 +25,20 @@ function maxAttemptCount(rounds: CompetitorRound[]): number {
   return rounds.reduce((max, round) => Math.max(max, round.attempts.length), 0);
 }
 
-const ReadOnlyAttemptCell = ({ attempt }: { attempt: CompetitorAttempt }) => {
+type ReadOnlyAttemptCellProps = {
+  attempt: CompetitorAttempt;
+  className: string;
+};
+
+const ReadOnlyAttemptCell = ({
+  attempt,
+  className,
+}: ReadOnlyAttemptCellProps) => {
   if (attempt.result === DNF) {
     return (
-      <td className="tabular px-2 py-2 text-center font-mono text-sm text-brand-red">
+      <td
+        className={`tabular px-2 py-2 text-center font-mono text-sm text-brand-red ${className}`}
+      >
         {attempt.elapsedCs != null ? (
           <span title="DNF · a solve tényleges hossza">
             {formatCentiseconds(attempt.elapsedCs)}
@@ -44,7 +55,7 @@ const ReadOnlyAttemptCell = ({ attempt }: { attempt: CompetitorAttempt }) => {
     <td
       className={`tabular px-2 py-2 text-center font-mono text-sm ${
         attempt.result === DNS ? "text-subtle-foreground" : "text-foreground"
-      }`}
+      } ${className}`}
     >
       {formatAttemptResult(attempt.result)}
     </td>
@@ -194,6 +205,9 @@ const CompetitorCard = ({
 }: CompetitorCardProps) => {
   const columns = maxAttemptCount(competitor.rounds);
 
+  const compactOnMobile = !onRecord;
+  const attemptColumnClass = compactOnMobile ? "hidden sm:table-cell" : "";
+
   const focusTargetKey = autoFocus
     ? competitor.rounds
         .flatMap((round) =>
@@ -229,9 +243,21 @@ const CompetitorCard = ({
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-line text-xs text-subtle-foreground">
-              <th className="px-2 py-1.5 text-left font-medium">Kör</th>
+              <th className="px-2 py-1.5 text-left font-medium">
+                {compactOnMobile ? (
+                  <>
+                    <span className="sm:hidden">Kategória</span>
+                    <span className="hidden sm:inline">Kör</span>
+                  </>
+                ) : (
+                  "Kör"
+                )}
+              </th>
               {Array.from({ length: columns }, (_, index) => (
-                <th key={index} className="px-2 py-1.5 text-center font-medium">
+                <th
+                  key={index}
+                  className={`px-2 py-1.5 text-center font-medium ${attemptColumnClass}`}
+                >
                   {index + 1}
                 </th>
               ))}
@@ -245,7 +271,11 @@ const CompetitorCard = ({
                 key={round.roundWcifId}
                 className="border-b border-line last:border-0"
               >
-                <td className="tabular whitespace-nowrap px-2 py-2 font-mono text-sm font-medium text-foreground">
+                <td
+                  className={`px-2 py-2 text-sm font-medium text-foreground ${
+                    compactOnMobile ? "sm:whitespace-nowrap" : "whitespace-nowrap"
+                  }`}
+                >
                   <span
                     className="inline-flex items-center gap-1.5"
                     title={eventName(round.eventId)}
@@ -254,8 +284,14 @@ const CompetitorCard = ({
                       aria-hidden
                       className={`cubing-icon event-${round.eventId} text-lg leading-none text-foreground`}
                     />
-                    <span className="sr-only">{round.roundWcifId}</span>
-                    <span className="text-xs text-subtle-foreground">
+                    <span
+                      className={
+                        compactOnMobile ? "text-sm sm:sr-only" : "sr-only"
+                      }
+                    >
+                      {eventName(round.eventId)}
+                    </span>
+                    <span className="tabular font-mono text-xs text-subtle-foreground">
                       {round.roundNumber}
                     </span>
                   </span>
@@ -277,6 +313,7 @@ const CompetitorCard = ({
                     <ReadOnlyAttemptCell
                       key={attempt.attemptNumber}
                       attempt={attempt}
+                      className={attemptColumnClass}
                     />
                   ),
                 )}
@@ -286,7 +323,7 @@ const CompetitorCard = ({
                   (_, index) => (
                     <td
                       key={`pad-${index}`}
-                      className="px-2 py-2 text-center text-subtle-foreground"
+                      className={`px-2 py-2 text-center text-subtle-foreground ${attemptColumnClass}`}
                     >
                       —
                     </td>
@@ -323,45 +360,40 @@ const CompetitorSummary = ({ competitor }: { competitor: Competitor }) => {
   }
 
   return (
-    <div className="mt-3 flex flex-col gap-2 border-t border-line pt-3">
+    <div className="mt-3 flex flex-col gap-3 border-t border-line pt-3">
       {competitor.budgets.map((budget) => {
         const exhausted = budget.remainingCs <= 0;
 
         return (
-          <div key={budget.roundWcifIds.join("|")} className="flex flex-col gap-1">
-            <div className="flex items-baseline justify-between gap-3 text-sm">
-              <span className="text-muted-foreground">
-                Maradék
-                <span className="tabular ml-1.5 font-mono text-xs text-subtle-foreground">
-                  / {formatCentiseconds(budget.limitCs)}
-                </span>
-              </span>
-              <span
-                className={`tabular font-mono text-base font-semibold ${
-                  exhausted ? "text-brand-red" : "text-brand-green"
-                }`}
-              >
-                {formatCentiseconds(budget.remainingCs)}
-              </span>
-            </div>
+          <div key={budget.roundWcifIds.join("|")} className="flex flex-col gap-1.5">
+            {competitor.budgets.length > 1 && (
+              <p className="text-xs font-medium text-foreground">
+                {roundLabel(budget.roundWcifIds)}
+              </p>
+            )}
 
-            <div className="flex items-baseline justify-between gap-3 text-xs">
-              <span className="text-subtle-foreground">
-                Felhasznált{" "}
-                <span className="tabular font-mono">
+            <dl className="grid grid-cols-2 gap-3">
+              <div>
+                <dt className="text-xs text-muted-foreground">Felhasznált</dt>
+                <dd className="tabular font-mono text-base font-semibold text-foreground">
                   {formatCentiseconds(budget.usedCs)}
-                </span>
-              </span>
-              {budget.missingDnfCount > 0 && (
-                <span className="text-brand-red">
-                  felső becslés · {budget.missingDnfCount} DNF idő nélkül
-                </span>
-              )}
-            </div>
+                </dd>
+              </div>
+              <div className="text-right">
+                <dt className="text-xs text-muted-foreground">Maradék</dt>
+                <dd
+                  className={`tabular font-mono text-base font-semibold ${
+                    exhausted ? "text-brand-red" : "text-brand-green"
+                  }`}
+                >
+                  {formatCentiseconds(budget.remainingCs)}
+                </dd>
+              </div>
+            </dl>
 
-            {budget.roundWcifIds.length > 1 && (
-              <p className="tabular font-mono text-[11px] text-subtle-foreground">
-                közös keret: {budget.roundWcifIds.join(", ")}
+            {budget.missingDnfCount > 0 && (
+              <p className="text-right text-xs text-brand-red">
+                felső becslés · {budget.missingDnfCount} DNF idő nélkül
               </p>
             )}
           </div>

@@ -78,7 +78,7 @@ speedcubinghungary/
 │   ├── docker/web/Dockerfile         # multi-stage (dev=next dev, prod=standalone)
 │   └── caddy/Caddyfile               # reverse proxy + automatic HTTPS (test/prod)
 ├── .github/workflows/       # ci.yml, deploy-test.yml, deploy-prod.yml
-├── docs/                    # (currently empty)
+├── docs/                    # go-live.md (prod setup), release-ops.md (manual deploy steps)
 ├── README.md                # authoritative run/deploy/branch reference
 └── .env*.example            # per-environment env templates
 ```
@@ -195,6 +195,12 @@ docker compose -f infra/docker-compose.yml -f infra/docker-compose.prod.yml --en
   Environment; add **Required reviewers** to gate prod).
 - Deploy Environments need secrets `SSH_HOST`/`SSH_USER`/`SSH_KEY`/`SSH_PORT` and
   variable `DEPLOY_PATH`.
+
+### Release ops log
+A change that needs a **manual server step** besides the deploy (new or changed
+env var, cron, one-off script, data fix, Caddy, GitHub setting) gets an entry in
+`docs/release-ops.md` **in the same commit**, with a test and a prod checkbox.
+Code and migrations alone need none. First production setup: `docs/go-live.md`.
 
 ### Branch strategy
 `main` (prod, default) ← `test` (staging) ← `develop` (integration). `feature/*`
@@ -1482,6 +1488,26 @@ with search; SSE-driven with a 30s poll only as a fallback. Flow:
   and only then turns the DNF cells into editable inputs. Non-admins see the
   recorded durations as read-only text. The server enforces this independently
   (§8) — the client check is UX only.
+- **Below `sm` the competitor table is compact: category, average, best** — the
+  attempt columns are `hidden sm:table-cell`, and the event name appears next
+  to the icon. ⚠️ **Only without `onRecord`.** The attempt cells are where an
+  admin records DNF durations, so the admin keeps the full table on a phone.
+- **A real Special has ONE limit for all categories, and this module is used
+  for nothing else** (the owner's rule, so don't generalise it). The WCA form
+  can only express that as the same cumulative limit repeated on every event:
+  BudapestSpecial2025 has 35:00.00 on all 8 `*-r1` rounds, each listing all 8
+  in `cumulativeRoundIds`. `buildBudgets` turns that into one budget.
+- **The limit panel (`RoundLimits`) reads the competitors' `budgets`**
+  (`lib/limits.ts`, `collectLimits`), deduplicated — display only, no second
+  A1a3 calculation, and no API field: the report is already narrowed to the
+  selected round. **Only budgets spanning at least two rounds count**, so a
+  normal competition (per-attempt limits, a cumulative limit on one blind event)
+  shows no panel instead of a false "az összes kategóriára együtt". A round
+  without a result isn't in the report, so its limit can't show until the first
+  result arrives.
+- ⚠️ A past Special may not be on WCA Live at all: `BudapestSpecial2025` is a
+  404 there, so the page can't open it and `/special/report` answers 502. Its
+  WCIF still shows the limit setup.
 
 ### Verifying against reality
 
