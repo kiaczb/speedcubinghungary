@@ -1,5 +1,68 @@
 # Speedcubing Hungary
 
+The web platform of the Hungarian speedcubing community: news, an upcoming
+competition calendar sourced from the [World Cube Association](https://www.worldcubeassociation.org/)
+(WCA), login with a WCA account, a weekly competition and records report, and a
+set of tools built for Hungarian competitions.
+
+> **Work in progress.** The platform is under active development. The features
+> below work, but they are still being extended and may change.
+
+## Features
+
+### Certificate builder
+
+![The certificate template editor](docs/images/certificate-editor.png)
+
+An admin tool for printing competition certificates.
+
+- **Visual template editor:** drag-and-drop text, images, the logo, shapes and
+  QR codes on the page, with snapping, layers, undo/redo and an image library.
+- **Data fields** such as the competitor's name, the competition, the date and
+  the result. The editor previews them with sample data or with a real
+  competition's data.
+- **Recipients come from the WCA:** podium finishers (per event, from WCA Live
+  during the competition and from the official results afterwards), everyone
+  who competed, or every registered competitor.
+- **PDF generated in the browser:** one certificate per page in a single file,
+  with the text laid out exactly as on the editor canvas. A CSV export for
+  mail merge is also available.
+
+### Budapest Special
+
+A live leaderboard for "Special"-format competitions, where a competitor's score
+is the sum of their times across every event, all within one shared cumulative
+time limit.
+
+- Results update in real time from [WCA Live](https://live.worldcubeassociation.org/).
+- WCA Live does not record how long a DNF attempt took. That time still counts
+  against the limit, so admins record it at the venue, and the page shows the
+  time each competitor has used and has left.
+- Any competition on WCA Live can be opened, and the selection is kept in a
+  shareable URL.
+
+### Hungarian All-Rounder
+
+Season standings for the Hungarian All-Rounder competition series. Each leg is
+a WCA competition, and competitors earn points for their placings.
+
+- Official WCA results are cached and scored on the server.
+- While a leg is running, its provisional points come live from WCA Live and
+  are merged into the standings.
+- Past seasons can be viewed, and the season is part of the URL.
+
+### Prediction contest (Tippverseny)
+
+Prediction games for upcoming competitions. Admins create a contest with podium
+predictions for chosen events and extra questions (a competitor, a time, a
+number or free text).
+
+> **In development:** creating, listing and deleting contests works, and the
+> prediction form can be filled in. Submitting predictions and scoring them are
+> not built yet.
+
+## Repository layout
+
 Monorepo:
 
 | Path            | Service  | Stack                         |
