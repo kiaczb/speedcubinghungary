@@ -1050,15 +1050,15 @@ nav links in `app/lib/site.ts` if needed. **Read the Next 16 docs first** (§3 w
 - `apps/api/tmp/` (air build output) and `__pycache__/` dirs are build artifacts.
 - No Redis / message queue / object storage in the stack — the only data store is
   Postgres. Don't assume a cache/queue layer exists.
-- ⚠️ **On the current staging host (`server`), the internet-facing Caddy is
+- ⚠️ **On the current staging host, the internet-facing Caddy is
   NOT the compose-managed `caddy` service from `infra/docker-compose.yml`.**
   It's a separate `caddy` container run by its own Compose project `caddy`
   (`~/caddy/docker-compose.yml`, image `caddy:latest`, container
   name literally `caddy`, config bind-mounted as a **single file** from
   `~/caddy/Caddyfile`, certs in `~/caddy/caddy_data`
   — **none of it tracked in this repo**)
-  that also proxies an unrelated `other.example.org` domain (Jellyfin, via
-  `host.docker.internal:8096`), so it
+  that also proxies an unrelated domain (another service on the host, via
+  `host.docker.internal`), so it
   holds :80/:443 and the compose `caddy` can't bind them. ⚠️ **The server's
   `.env.test` must therefore leave `COMPOSE_PROFILES` empty** (not `proxy` as
   in `.env.test.example`): with the profile on, `up -d` starts web/api, then

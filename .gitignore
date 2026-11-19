@@ -23,5 +23,7 @@ Thumbs.db
 .idea/
 
 postgres_data/
+db/dump-*.sql
+*.dump
 
 __pycache__/
